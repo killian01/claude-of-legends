@@ -10,6 +10,7 @@ import { requestGameFullscreen, toggleGameFullscreen } from '../game/fullscreen'
 import { pointOnStage, rectOnStage, stageSizeOf } from '../game/match_stage';
 import type { MatchCover } from '../game/practice_clock';
 import { type LockAnswer, type ScreenRect, turnWallUp, wallFallback } from '../game/rotated_view';
+import { seatCasts } from '../game/seat_casts';
 import { getSettings, updateSettings } from '../game/settings';
 import { playSfx } from '../game/sfx';
 import type { CastTouch } from '../game/touch';
@@ -1569,7 +1570,11 @@ export class Hud {
       slot.style.textShadow = '0 2px 4px #000';
     };
 
-    const slots = el('div', 'hud-slots');
+    // A coach seat's spells are a kit to read (game/seat_casts.ts): a
+    // press arms and aims nothing, the + never shows, and a held slot
+    // reads its tooltip under the thumb too.
+    const casts = seatCasts(guide);
+    const slots = el('div', casts ? 'hud-slots' : 'hud-slots kit');
     // The passive, visible in-game at last: a small round emblem ahead of
     // Q whose tooltip carries the passive's name and what it does. The
     // thumb cluster has no room for a button that casts nothing.
@@ -1619,7 +1624,9 @@ export class Hud {
       // Names live in the tooltip only; labels under the bar collided with
       // the inventory row below. Under the thumb a held slot is an aim,
       // not a read: no tooltip there.
-      if (def && !thumbs) attachTooltip(slot, () => describeAbility(key, def.abilities[key]));
+      if (def && (!thumbs || !casts)) {
+        attachTooltip(slot, () => describeAbility(key, def.abilities[key]));
+      }
       // Touch has no keyboard: a QUICK tap on the slot arms the two-step
       // cast (game/touch.ts). A press held past LONG_PRESS_MS is a read,
       // the tooltip shows while the finger rests (tooltips.ts), and must
@@ -1631,6 +1638,7 @@ export class Hud {
       let downAt = 0;
       let clickDown = false;
       slot.addEventListener('pointerdown', (e) => {
+        if (!casts) return;
         if (e.pointerType !== 'touch') {
           clickDown = e.button === 0 && e.target !== up;
           return;
@@ -1645,12 +1653,13 @@ export class Hud {
         }
       });
       slot.addEventListener('pointermove', (e) => {
-        if (thumbs && e.pointerType === 'touch') {
+        if (casts && thumbs && e.pointerType === 'touch') {
           const p = pointOnStage(slot, e.clientX, e.clientY);
           this.castTouch?.abilityMove(key, p.x, p.y);
         }
       });
       slot.addEventListener('pointerup', (e) => {
+        if (!casts) return;
         if (e.pointerType !== 'touch') {
           if (clickDown && e.button === 0 && e.target !== up) this.slotClick?.(key);
           clickDown = false;
@@ -1666,7 +1675,7 @@ export class Hud {
         this.castTaps?.ability(key);
       });
       slot.addEventListener('pointercancel', (e) => {
-        if (thumbs && e.pointerType === 'touch') this.castTouch?.abilityCancel(key);
+        if (casts && thumbs && e.pointerType === 'touch') this.castTouch?.abilityCancel(key);
       });
       slots.appendChild(slot);
       this.slots.set(key, { root: slot, cd, pips, up, charges });
@@ -1688,7 +1697,7 @@ export class Hud {
       cd.style.display = 'none';
       slot.appendChild(cd);
       slot.dataset.key = keyLabel;
-      if (!thumbs) {
+      if (!thumbs || !casts) {
         attachTooltip(slot, () => {
           const u = this.world.units.get(this.selfId);
           const sigil = u?.sigils[i] ? SIGILS[u.sigils[i]!] : undefined;
@@ -1697,7 +1706,7 @@ export class Hud {
       }
       let sigilDownAt = 0;
       slot.addEventListener('pointerdown', (e) => {
-        if (e.pointerType !== 'touch') return;
+        if (!casts || e.pointerType !== 'touch') return;
         e.preventDefault();
         sigilDownAt = performance.now();
         if (thumbs) {
@@ -1707,13 +1716,13 @@ export class Hud {
         }
       });
       slot.addEventListener('pointermove', (e) => {
-        if (thumbs && e.pointerType === 'touch') {
+        if (casts && thumbs && e.pointerType === 'touch') {
           const p = pointOnStage(slot, e.clientX, e.clientY);
           this.castTouch?.sigilMove(i, p.x, p.y);
         }
       });
       slot.addEventListener('pointerup', (e) => {
-        if (e.pointerType !== 'touch') return;
+        if (!casts || e.pointerType !== 'touch') return;
         if (thumbs) {
           const p = pointOnStage(slot, e.clientX, e.clientY);
           this.castTouch?.sigilUp(i, p.x, p.y);
@@ -1723,7 +1732,7 @@ export class Hud {
         this.castTaps?.sigil(i);
       });
       slot.addEventListener('pointercancel', (e) => {
-        if (thumbs && e.pointerType === 'touch') this.castTouch?.sigilCancel(i);
+        if (casts && thumbs && e.pointerType === 'touch') this.castTouch?.sigilCancel(i);
       });
       slots.appendChild(slot);
       this.sigilSlots.push({ root: slot, cd });
@@ -3493,10 +3502,12 @@ export class Hud {
       if (showCount) setText(slot.charges, String(face.count));
       if (rank <= 0) {
         slot.cd.style.display = 'flex';
-        // R waits on champion level; basics wait on a skill point.
+        // R waits on champion level; basics wait on a skill point, which a
+        // coach seat leaves to its bot (game/seat_casts.ts).
+        const waits = seatCasts(this.guideMode) ? '+' : '';
         setText(
           slot.cd,
-          key === 'R' && u.level < ULT_RANK_LEVELS[0]! ? `Lv${ULT_RANK_LEVELS[0]}` : '+',
+          key === 'R' && u.level < ULT_RANK_LEVELS[0]! ? `Lv${ULT_RANK_LEVELS[0]}` : waits,
         );
       } else if (remaining > 0) {
         slot.cd.style.display = 'flex';
@@ -3517,7 +3528,8 @@ export class Hud {
         (slot.pips.children[i] as HTMLElement).classList.toggle('on', i < rank);
       }
       // The sim's rule for a skill point (ui/slot_tap.ts).
-      slot.up.style.display = rankable(u, key) ? 'block' : 'none';
+      // A coach seat leaves the ranks to its bot (game/seat_casts.ts).
+      slot.up.style.display = seatCasts(this.guideMode) && rankable(u, key) ? 'block' : 'none';
       const cost = def ? def.abilities[key].manaCost : 0;
       slot.root.classList.toggle('nomana', u.mana < cost);
     }

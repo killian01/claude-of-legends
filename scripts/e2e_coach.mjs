@@ -149,6 +149,13 @@ try {
       feedTop: stage ? getComputedStyle(stage).getPropertyValue('--coach-feed-top').trim() : '',
       feed: rect(document.querySelector('.hud-feed')),
       touchBar: [...document.querySelectorAll('.touchbar-btn')].map((b) => b.textContent),
+      kit: document.querySelector('.hud-slots.kit') !== null,
+      // A spell not learned yet shows no + to spend a point on.
+      faces: [...document.querySelectorAll('.hud-slot-cd')]
+        .filter((c) => c.offsetParent !== null)
+        .map((c) => c.textContent),
+      ranks: [...document.querySelectorAll('.hud-slot-up')].filter((u) => u.offsetParent !== null)
+        .length,
     };
   });
   console.log('seat:', JSON.stringify(seat));
@@ -156,6 +163,9 @@ try {
   check(!seat.hints, 'no controls hint in a coach seat');
   check(!shopAtStart, 'no shop opens by itself in a coach seat');
   if (!PHONE) check(!shopOnKey, 'the shop key opens nothing in a coach seat');
+  check(seat.kit, 'the spells are a kit to read in a coach seat');
+  check(!seat.faces.includes('+'), `no + on a spell not learned yet (${seat.faces.join(' ')})`);
+  check(seat.ranks === 0, `no level-up mark in a coach seat (${seat.ranks} shown)`);
   if (PHONE) {
     check(seat.barClass.includes(`touch ${SCHEME}`), `the bar takes the ${SCHEME} layout`);
     check(

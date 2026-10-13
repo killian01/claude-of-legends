@@ -53,6 +53,7 @@ import { startMusic, stopMusic } from './music';
 import { lockLandscape, unlockOrientation } from './orientation';
 import { nearestEnemy, pickEnemyAt, pickEnemyOnScreen, pickUnitOnScreen } from './picking';
 import type { MatchCover } from './practice_clock';
+import { seatCasts, withoutCasts } from './seat_casts';
 import { getSettings, updateSettings } from './settings';
 import { playCastSfx, playSfx, preloadSfx } from './sfx';
 import { aimedPoint, quickPoint } from './thumb_cast';
@@ -686,7 +687,10 @@ export function startPresentation(
     // The pause menu's keyboard, and an end screen's (game/menu_keys.ts).
     isMenuOpen: () => hud.covers().pauseMenu || hud.endScreenUp(),
   };
-  const teardownInput = setupInput(renderer, inputHandlers);
+  // A coach seat casts nothing (game/seat_casts.ts): its keys and the
+  // thumbs' slots raise no aim and sound no denial.
+  const seatHandlers = seatCasts(guide) ? inputHandlers : withoutCasts(inputHandlers);
+  const teardownInput = setupInput(renderer, seatHandlers);
   // In fullscreen the mouse stays on the game (cursor_lock.ts): a second
   // monitor beside it must not take a click mid-fight. It is let go while
   // the pause menu or the end screen stands (their sliders and lists want
@@ -706,7 +710,7 @@ export function startPresentation(
   const moveRing = moveRingWanted(thumbControls, guide === 'play', shownIn);
   if (moveRing) updateSettings({ moveRingMatches: shownIn + 1 });
   const stickView = coarsePointer ? buildThumbStickView(stage.el, { moveRing }) : null;
-  const touch = setupTouchControls(renderer, inputHandlers, {
+  const touch = setupTouchControls(renderer, seatHandlers, {
     onArmedChange: (label) => hud.setArmedSlot(label),
     scheme: () => getSettings().touchScheme,
     ...(stickView ? { stick: stickView } : {}),
