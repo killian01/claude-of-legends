@@ -152,6 +152,8 @@ function materializeUnit(s: SnapUnit): Unit {
     aspect: s.a ?? null,
     ascendant: s.asc === 1,
     campKind: s.ck ?? null,
+    // The Range runs in the tab alone: no Strikepost comes over the wire.
+    postKind: null,
     bitePct: 0,
     voidmaulAttackCount: 0,
     play: null,

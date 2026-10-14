@@ -643,6 +643,20 @@ practice report (PRIVACY.md): the scoreboard, the result and the minutes, nothin
 anyone, the one thing the server learns of a match it never saw run.
 _Avoid_: offline mode, sandbox, training, tutorial
 
+**Range**:
+The Star Orchard with one champion and the Strikeposts in its team's base, and nothing else
+on the move: no waves, no camps, no ring creature, no Warden, no bots, no winner. A place to
+feel a kit out on targets that stand still, run in the browser tab like Practice
+(docs/plan-practice-range.md).
+_Avoid_: training mode, sandbox, target practice
+
+**Strikepost**:
+A standing target of the Range: neutral, it never moves, never strikes back and never falls;
+the hit that would fell it fills it again, and left alone a few seconds it fills and stands
+back on its spot. One stands bare, one plated, so a kit reads against no resistance and
+against a tank's. Pays nothing.
+_Avoid_: dummy, target dummy, training dummy
+
 **Forge queue**:
 The matchmaking queue where forged champions are allowed, alongside roster champions. Every
 other queue is roster-only. Rated on its own rating, separate from the Ranked queue's.

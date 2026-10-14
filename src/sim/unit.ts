@@ -17,6 +17,7 @@ import {
   type CreatureDef,
   type CreatureId,
 } from './content/rings';
+import type { StrikepostDef, StrikepostKind } from './content/strikeposts';
 import type { VoidmaulAttackKind } from './content/voidmaul_slam';
 import { WARDEN_BODY, WARDEN_GOLD_BOUNTY } from './content/warden';
 import type { DashState } from './dashes';
@@ -26,7 +27,15 @@ import { type LurkState, newLurkState } from './lurk';
 import type { LanePreference } from './playbook/types';
 import type { AbilityKey, TeamId, Vec2 } from './types';
 
-export type UnitKind = 'champion' | 'minion' | 'tower' | 'sanctum' | 'warden' | 'camp' | 'creature';
+export type UnitKind =
+  | 'champion'
+  | 'minion'
+  | 'tower'
+  | 'sanctum'
+  | 'warden'
+  | 'camp'
+  | 'creature'
+  | 'post';
 
 export type MinionVariant = 'melee' | 'caster' | 'siege' | 'vanguard';
 
@@ -140,6 +149,9 @@ export interface Unit {
   ascendant: boolean;
   // The kind of camp body this is (content/camps.ts), null on everything else.
   campKind: CampKind | null;
+  // The kind of Strikepost this is (content/strikeposts.ts), null on
+  // everything else.
+  postKind: StrikepostKind | null;
   // The share of the target's max health a strike bites off on top of the
   // attack damage, true damage (content/rings.ts, CreatureBody): the
   // neutral bodies' rule; zero for everyone else.
@@ -312,6 +324,7 @@ function baseUnit(id: number, team: TeamId, kind: UnitKind, pos: Vec2): Unit {
     aspect: null,
     ascendant: false,
     campKind: null,
+    postKind: null,
     bitePct: 0,
     voidmaulAttackCount: 0,
     play: null,
@@ -527,6 +540,22 @@ export function createCamp(id: number, def: CampDef, pos: Vec2, time = 0): Unit 
   growBody(u, def.body, time);
   u.sightRange = 6;
   u.goldBounty = def.goldBounty;
+  return u;
+}
+
+// A Strikepost (content/strikeposts.ts): a neutral standing target of the
+// Range. It never moves and never strikes; it pays nothing, since it never
+// falls (strikeposts.ts).
+export function createStrikepost(id: number, def: StrikepostDef, pos: Vec2): Unit {
+  const u = baseUnit(id, 0, 'post', pos);
+  u.neutral = true;
+  u.postKind = def.id;
+  u.radius = def.radius;
+  u.hp = def.hp;
+  u.maxHp = def.hp;
+  u.stats.armor = def.armor;
+  u.stats.mr = def.mr;
+  u.sightRange = 4;
   return u;
 }
 

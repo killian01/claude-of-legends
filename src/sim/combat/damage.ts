@@ -132,6 +132,9 @@ export function dealDamage(
       ctx.events.push({ type: 'execute', unitId: target.id, killerId: sourceId });
     }
   }
+  // A Strikepost never falls (strikeposts.ts): the hit that would fell it
+  // fills it again.
+  if (target.hp <= 0 && target.kind === 'post') target.hp = target.maxHp;
   if (target.hp <= 0) {
     target.hp = 0;
     ctx.dead.add(target.id);

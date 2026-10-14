@@ -88,6 +88,7 @@ import {
   ULT_MAX_RANK,
   ULT_RANK_LEVELS,
 } from './stats';
+import { createStrikeposts, stepStrikeposts } from './strikeposts';
 import { TeamBuffs } from './team_buffs';
 import { otherTeam, perTeam, TWO_TEAMS, validTeam } from './teams';
 import { stepTowerAi } from './tower_ai';
@@ -176,6 +177,10 @@ export interface SimOptions {
   // the planet's layout. The match then drops, lands, loots and burns
   // under the Dusk; nothing of the 5v5 runs.
   royale?: RoyaleOptions;
+  // The Range (CONTEXT.md; strikeposts.ts): the 5v5's map with the
+  // Strikeposts standing in the team's base and nothing else on the move,
+  // no waves, no camps, no ring creatures, no Warden.
+  range?: { team: TeamId };
 }
 
 // A team's fading memory of one enemy champion (Sim.lastSeen): where it
@@ -270,6 +275,16 @@ export class Sim {
       for (const u of createMapUnits(this.map, () => this.nextId++)) {
         this.units.set(u.id, u);
         this.ground.blockCircle(u.pos, staticFootprint(u));
+      }
+    }
+    if (options.range) {
+      for (const u of createStrikeposts(
+        this.map,
+        this.ground,
+        options.range.team,
+        () => this.nextId++,
+      )) {
+        this.units.set(u.id, u);
       }
     }
     this.royaleMode = options.royale ? new RoyaleMode(this.rng, this.ground, options.royale) : null;
@@ -1098,13 +1113,23 @@ export class Sim {
     runBotDecisions(this, this.policies);
     runRemoteDecisions(this, this.remoteSeats);
 
+    // The Range's posts fill and stand back once left alone; the Range
+    // sends no waves and raises no neutral body.
+    const range = this.options.range;
+    if (range) stepStrikeposts(ctx, this.map, range.team);
     // A map without lanes sends no waves, and one without pits raises no
     // Warden: the planet's creatures are its own mode's (ADR 0031).
-    if (this.twoTeams() && this.winner === null && this.hasLanes && this.time >= this.nextWaveAt) {
+    if (
+      !range &&
+      this.twoTeams() &&
+      this.winner === null &&
+      this.hasLanes &&
+      this.time >= this.nextWaveAt
+    ) {
       spawnWave(ctx, this.map, this.waveCount++, this.options.strictNavigation);
       this.nextWaveAt += WAVE_EVERY;
     }
-    if (this.winner === null) {
+    if (this.winner === null && !range) {
       if (this.map.wardenPits.length > 0) stepObjectives(ctx, this.map, this.objectives);
       stepRings(ctx, this.ringStates);
       stepCamps(ctx, this.campStates);
