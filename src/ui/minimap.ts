@@ -8,6 +8,7 @@ import { pointOnStage, rectOnStage, stageSizeOf } from '../game/match_stage';
 import { getSettings } from '../game/settings';
 import { followUiScale } from '../game/ui_scale';
 import { aspectColor, WRATH_COLOR } from '../render/aspect_colors';
+import { POST_CSS } from '../render/post_look';
 import type { TeamId, Vec2 } from '../sim/types';
 import type { IWorld } from '../world_api';
 import { type LaneGuide, ownCamps } from './lane_guide';
@@ -202,6 +203,12 @@ export class Minimap {
         g.strokeStyle = '#fff3e0';
         g.lineWidth = 1.5;
         g.stroke();
+      } else if (u.kind === 'post') {
+        // A Range's Strikepost: a small pale dot.
+        g.fillStyle = POST_CSS;
+        g.beginPath();
+        g.arc(x, z, 2.2, 0, Math.PI * 2);
+        g.fill();
       } else if (u.kind === 'warden') {
         // The Warden: a violet blotch both teams can track.
         g.fillStyle = '#c06ae8';

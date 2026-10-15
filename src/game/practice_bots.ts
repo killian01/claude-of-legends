@@ -1,6 +1,8 @@
 // Who the opponents' lane seats play in Practice (CONTEXT.md: Practice):
-// Gentle, the Gentle player, a newcomer's fair first fight; or Normal, the
-// house styles drawn from the seed, the bots every other match meets.
+// Gentle, the Gentle player, a newcomer's fair first fight; Normal, the
+// house styles drawn from the seed, the bots every other match meets; or
+// None, the Range (CONTEXT.md: Range): no bots at all, the champion alone
+// in its base with the Strikeposts.
 // Chosen on the practice select, Gentle until the viewer says otherwise,
 // and remembered in the browser with the other settings
 // (src/game/settings.ts). A Forge test drive goes through no select and
@@ -9,30 +11,36 @@
 import { gentleSeats, type HouseSeat } from '../sim/content/bots/house';
 import { GENTLE_FROM_LEVEL, GENTLE_FROM_S } from '../sim/content/playbooks/gentle';
 
-export type PracticeBots = 'gentle' | 'normal';
+export type PracticeBots = 'gentle' | 'normal' | 'range';
 
 // In the order the select shows them.
-export const PRACTICE_BOTS: readonly PracticeBots[] = ['gentle', 'normal'];
+export const PRACTICE_BOTS: readonly PracticeBots[] = ['gentle', 'normal', 'range'];
 
 export const DEFAULT_PRACTICE_BOTS: PracticeBots = 'gentle';
 
 // What the select's row is called.
 export const PRACTICE_BOTS_LABEL = 'Enemy bots';
 
-// Any junk from storage in, one of the two out.
+// Any junk from storage in, one of the three out.
 export function clampPracticeBots(raw: unknown): PracticeBots {
-  return raw === 'normal' ? 'normal' : DEFAULT_PRACTICE_BOTS;
+  return raw === 'normal' || raw === 'range' ? raw : DEFAULT_PRACTICE_BOTS;
 }
 
 // What its button says.
 export function practiceBotsTitle(bots: PracticeBots): string {
-  return bots === 'gentle' ? 'Gentle' : 'Normal';
+  return bots === 'gentle' ? 'Gentle' : bots === 'normal' ? 'Normal' : 'None (Range)';
 }
 
 // What a long look at its button tells, the Gentle player's threshold
 // read off its playbook so the two cannot drift apart.
 export function practiceBotsHint(bots: PracticeBots): string {
   if (bots === 'normal') return 'Normal: the house bots every other match meets.';
+  if (bots === 'range') {
+    return (
+      'None (Range): your champion alone in its base with two Strikeposts, ' +
+      'one bare and one plated, to try a kit on. They never fall.'
+    );
+  }
   const at = `${Math.floor(GENTLE_FROM_S / 60)}:${String(GENTLE_FROM_S % 60).padStart(2, '0')}`;
   return (
     'Gentle: they trade back when hit, never dive a tower, and start no fight ' +
@@ -43,7 +51,8 @@ export function practiceBotsHint(bots: PracticeBots): string {
 // The opponents' seats for one practice match: Gentle puts the Gentle
 // player on every lane seat and keeps the Jungler (gentleSeats); Normal
 // keeps the styles the fill drew. Either way the champions, the lanes and
-// the seed's stream are the fill's.
+// the seed's stream are the fill's. The Range seats nobody.
 export function practiceOpponents(seats: readonly HouseSeat[], bots: PracticeBots): HouseSeat[] {
+  if (bots === 'range') return [];
   return bots === 'gentle' ? gentleSeats(seats) : [...seats];
 }

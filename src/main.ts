@@ -306,14 +306,17 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
     // A new seed every match (src/game/practice_seed.ts): a new lineup,
     // new styles, new rolls.
     const seed = practiceSeed();
-    const sim = orchardSim(loaded.orchard, seed);
+    // None at select is the Range (CONTEXT.md): the champion alone in its
+    // base with the Strikeposts, no bots, no winner and no report.
+    const range = pick.bots === 'range';
+    const sim = orchardSim(loaded.orchard, seed, range ? { team: 0 } : undefined);
     if (pick.forged) sim.addForgedChampion(pick.forged);
     const world: IWorld = sim;
     const self = sim.addChampion(0, undefined, pick.championId, pick.skin);
     self.sigils = [...pick.sigils];
     // The lane chosen at select, the seat's own ask (ADR 0026), as the
     // server seats a person's.
-    if (pick.lane) sim.pickLanes(self.id, [pick.lane]);
+    if (pick.lane && !range) sim.pickLanes(self.id, [pick.lane]);
     // A full 5v5: your four allies and all five opponents are house bots
     // on the fill (src/sim/fill.ts), the roster's lanes completed around
     // your pick and your lane, each on a house style drawn from the seed
@@ -332,9 +335,11 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
       attachBot(sim, unit.id, house.bot);
       champions.push(unit);
     };
-    for (const [i, house] of houseSeats(held, rng).entries()) seat(0, i, house);
-    for (const [i, house] of practiceOpponents(houseSeats([], rng), pick.bots).entries()) {
-      seat(1, i, house);
+    if (!range) {
+      for (const [i, house] of houseSeats(held, rng).entries()) seat(0, i, house);
+      for (const [i, house] of practiceOpponents(houseSeats([], rng), pick.bots).entries()) {
+        seat(1, i, house);
+      }
     }
     // A Forge test drive opens at the level the ultimate unlocks, everyone
     // alike: the creator came to try R too, and the bots meet it on equal
@@ -346,39 +351,44 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
     let stopped = false;
     // How it ended, for the counter (src/net/stats.ts): once, at the first
     // of the winner showing, the walk-out or the tab going away.
-    const ends = matchEndReporter('practice', () => ({
-      winner: world.winner,
-      seconds: world.time,
-    }));
+    // A Range is no match: it reports neither.
+    const ends = range
+      ? null
+      : matchEndReporter('practice', () => ({
+          winner: world.winner,
+          seconds: world.time,
+        }));
     // And the practice report (src/net/practice_report.ts): the scoreboard
     // at that same moment, the one thing the server learns of a match it
     // never saw run, so the bots' strength can be read off what people
     // meet. No name rides with it.
-    const practice = matchEndOnce(
-      () => ({ winner: world.winner, seconds: world.time }),
-      (state) =>
-        sendPracticeReport(
-          buildPracticeReport({
-            rows: world.scoreboard(),
-            selfId: self.id,
-            selfTeam: self.team,
-            winner: state.winner,
-            seconds: state.seconds,
-            forged: pick.forged !== undefined,
-            touch:
-              typeof window.matchMedia === 'function' &&
-              window.matchMedia('(pointer: coarse)').matches,
-            signedIn: !guest,
-          }),
-        ),
-    );
+    const practice = range
+      ? null
+      : matchEndOnce(
+          () => ({ winner: world.winner, seconds: world.time }),
+          (state) =>
+            sendPracticeReport(
+              buildPracticeReport({
+                rows: world.scoreboard(),
+                selfId: self.id,
+                selfTeam: self.team,
+                winner: state.winner,
+                seconds: state.seconds,
+                forged: pick.forged !== undefined,
+                touch:
+                  typeof window.matchMedia === 'function' &&
+                  window.matchMedia('(pointer: coarse)').matches,
+                signedIn: !guest,
+              }),
+            ),
+        );
     const exit = (action: PostMatchAction): void => {
       if (stopped) return;
       stopped = true;
-      ends.report();
-      ends.dispose();
-      practice.report();
-      practice.dispose();
+      ends?.report();
+      ends?.dispose();
+      practice?.report();
+      practice?.dispose();
       pres.dispose();
       layer.closed();
       resolve(action);
@@ -412,6 +422,7 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
       guest,
       // The lane chosen at select, told and walked to (ADR 0026).
       guide: 'play',
+      range,
     });
     const TICK_MS = DT * 1000;
     // The match's clock (src/game/practice_clock.ts): it holds while the
@@ -426,8 +437,8 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
         guarded = false;
         layer.unguard();
         // Played through, whatever happens to the tab from here.
-        ends.report();
-        practice.report();
+        ends?.report();
+        practice?.report();
       }
       const step = advancePracticeClock(clock, now, practiceHeld(pres.covers()), TICK_MS);
       clock = step.clock;

@@ -85,6 +85,8 @@ import { attachGhosts, ghostColor, ghostMaterial } from './planet_ghost';
 import { heartwoodIcon } from './planet_graft_aura';
 import type { PlanetMinimap } from './planet_minimap';
 import { PlanetStage } from './planet_stage';
+import { POST_COLOR } from './post_look';
+import { buildPostMesh } from './post_shapes';
 import { closeRenderer, ProgramKeeper } from './program_keeper';
 import { ProgramWarmup, whenLinked } from './program_warmup';
 import { QualityDial } from './quality_dial';
@@ -1825,6 +1827,12 @@ export class Renderer {
       enableShadows(holder);
       return built;
     }
+    if (kind === 'post') {
+      // A Range's Strikepost (post_shapes.ts): timber, bare or plated.
+      const built = buildPostMesh(u, holder);
+      enableShadows(holder);
+      return built;
+    }
     if (kind === 'creature') {
       // A ring's creature (creature_shapes.ts): its own silhouette, the
       // accent and the beacon in its aspect's color.
@@ -2377,7 +2385,9 @@ export class Renderer {
               ? Math.min(2.2, 1.2 + u.maxHp / 900)
               : u.kind === 'camp'
                 ? campBarWidth(u)
-                : 3.2;
+                : u.kind === 'post'
+                  ? 2.2
+                  : 3.2;
         const overhead = new THREE.Group();
         holder.add(overhead);
         const { fill, back, manaFill } = this.buildHpBar(
@@ -2503,7 +2513,12 @@ export class Renderer {
           this.fct.spawn(`-${Math.round(dhp)}`, '#ff6a5e', u.pos.x, t.barY + 1.4, u.pos.z);
           playSfx('hit');
           if (dhp >= u.maxHp * 0.05) this.addShake(0.28);
-        } else if (u.kind === 'champion' || u.kind === 'warden' || u.kind === 'creature') {
+        } else if (
+          u.kind === 'champion' ||
+          u.kind === 'warden' ||
+          u.kind === 'creature' ||
+          u.kind === 'post'
+        ) {
           this.pendingDamage.push({ unitId: id, amount: dhp });
           playSfx('hit', 0.5 * this.sfxGain(u.pos.x, u.pos.z));
         }
@@ -2589,6 +2604,7 @@ export class Renderer {
       if (u.kind === 'warden') fillColor = 0xc06ae8;
       else if (u.kind === 'creature') fillColor = aspectColor(u.aspect, u.ascendant).hex;
       else if (u.kind === 'camp') fillColor = 0xd8a24f;
+      else if (u.kind === 'post') fillColor = POST_COLOR;
       // Last-hit aid: an enemy minion that one of the player's autos would
       // finish turns its bar gold, like the genre's execute indicators.
       if (u.kind === 'minion' && u.team !== this.viewerTeam) {
@@ -2626,7 +2642,8 @@ export class Renderer {
         u.kind === 'tower' ||
         u.kind === 'sanctum' ||
         u.kind === 'warden' ||
-        u.kind === 'creature'
+        u.kind === 'creature' ||
+        u.kind === 'post'
       ) {
         const showLabel = barVisible && u.hp < u.maxHp - 1;
         const key = showLabel ? String(Math.ceil(u.hp / 10) * 10) : '';

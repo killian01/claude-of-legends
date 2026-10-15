@@ -150,12 +150,15 @@ export interface ReplayRecord {
 
 // A bare Sim on the Star Orchard: a fresh walkability grid over the shared
 // export, strict navigation. buildMatchSim seats a match on it; the
-// practice match (src/main.ts) and the dev showcase seat their own.
-export function orchardSim(orchard: StarOrchard, seed: number): Sim {
+// practice match (src/main.ts) and the dev showcase seat their own. `range`
+// makes it the Range (CONTEXT.md), the Strikeposts standing in that team's
+// base; a Range has no replay, so buildMatchSim never asks for one.
+export function orchardSim(orchard: StarOrchard, seed: number, range?: { team: TeamId }): Sim {
   return new Sim(seed, {
     map: orchard.map,
     nav: new TerrainNavGrid(orchard.navigation),
     strictNavigation: true,
+    ...(range ? { range } : {}),
   });
 }
 

@@ -730,7 +730,7 @@ export function showSelect(container: HTMLElement, opts: SelectOptions): SelectC
     laneButtons.set(lane, btn);
     laneRow.appendChild(btn);
   }
-  // The practice select's enemy bots (src/game/practice_bots.ts): two
+  // The practice select's enemy bots (src/game/practice_bots.ts): three
   // buttons under the lane row, in its style, held once locked in.
   let practiceBots: PracticeBots | null = opts.practiceBots ?? null;
   const botsChoiceRow = el('div', 'menu-choices');

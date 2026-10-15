@@ -28,7 +28,8 @@ export const STRIKEPOST_ORDER: readonly StrikepostKind[] = ['bare', 'plated'];
 // spot, its statuses cleared.
 export const STRIKEPOST_CALM_S = 4;
 // How far from the team's Sanctum toward the map's middle the posts stand,
-// and how far apart: on the Star Orchard, open ground inside the base,
-// short of the mid lane's last tower.
-export const STRIKEPOST_REACH_M = 11;
-export const STRIKEPOST_GAP_M = 5;
+// and how far apart: on the Star Orchard, open ground inside the base, past
+// the Sanctum's two towers (closer, the camera saw one post behind a tower)
+// and short of the mid lane's last tower.
+export const STRIKEPOST_REACH_M = 14;
+export const STRIKEPOST_GAP_M = 6;

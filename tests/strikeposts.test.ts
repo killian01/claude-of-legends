@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { starOrchard } from '../server/star_orchard';
+import { orchardSim } from '../src/net/replay';
 import { mitigationMultiplier } from '../src/sim/combat/damage';
 import { GAME_MAP } from '../src/sim/content/map';
 import { STRIKEPOST_CALM_S, STRIKEPOST_ORDER, STRIKEPOSTS } from '../src/sim/content/strikeposts';
@@ -51,6 +52,14 @@ describe('the Range', () => {
       expect(dist(u.pos, sanctum)).toBeLessThan(dist(u.pos, enemy) / 4);
     }
     expect(dist(standing[0]!.pos, standing[1]!.pos)).toBeGreaterThan(3);
+  });
+
+  it('stands clear of every tower, so none hides a post from the camera', () => {
+    const sim = rangeSim();
+    const towers = [...sim.units.values()].filter((u) => u.kind === 'tower');
+    for (const post of posts(sim)) {
+      for (const t of towers) expect(dist(post.pos, t.pos)).toBeGreaterThan(6);
+    }
   });
 
   it('is absent from every other match', () => {
@@ -104,6 +113,14 @@ describe('the Range', () => {
     const [bare, plated] = posts(rangeSim());
     expect(mitigationMultiplier(bare!, 'physical')).toBe(1);
     expect(mitigationMultiplier(plated!, 'magic')).toBeLessThan(0.6);
+  });
+
+  it("is what the client's Star Orchard sim builds when asked, and only then", () => {
+    const orchard = starOrchard();
+    expect(posts(orchardSim(orchard, 3, { team: 0 })).map((u) => u.postKind)).toEqual([
+      ...STRIKEPOST_ORDER,
+    ]);
+    expect(posts(orchardSim(orchard, 3))).toEqual([]);
   });
 
   it('stands the same on the test map', () => {

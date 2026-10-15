@@ -55,7 +55,13 @@ function pickable(world: IWorld, u: Readonly<Unit>, selfTeam: TeamId): boolean {
 
 function kindPriority(u: Readonly<Unit>): number {
   if (u.kind === 'champion') return 0;
-  if (u.kind === 'minion' || u.kind === 'warden' || u.kind === 'camp' || u.kind === 'creature')
+  if (
+    u.kind === 'minion' ||
+    u.kind === 'warden' ||
+    u.kind === 'camp' ||
+    u.kind === 'creature' ||
+    u.kind === 'post'
+  )
     return 1;
   return 2;
 }
@@ -65,7 +71,7 @@ function kindPriority(u: Readonly<Unit>): number {
 function bodyHeight(u: Readonly<Unit>): number {
   if (u.kind === 'champion') return 1.2;
   if (u.kind === 'minion') return 0.6;
-  if (u.kind === 'warden' || u.kind === 'creature') return 1.4;
+  if (u.kind === 'warden' || u.kind === 'creature' || u.kind === 'post') return 1.4;
   if (u.kind === 'camp') {
     return u.campKind === 'barkmaw' ? 1.3 : u.campKind === 'brackenlings' ? 0.5 : 0.8;
   }

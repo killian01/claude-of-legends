@@ -169,6 +169,8 @@ export function startPresentation(
     // HUD draws the mode's layer and leaves out the shop, the gold, the
     // recall and the lanes.
     royale?: RoyaleVariant;
+    // The Range (CONTEXT.md): the HUD calls no wave, lane or creature.
+    range?: boolean;
   },
 ): Presentation {
   const guide = options.guide ?? 'play';
@@ -199,6 +201,7 @@ export function startPresentation(
     options.mode ?? 'practice',
     guide,
     options.royale ?? null,
+    options.range === true,
   );
   // The thumb controls (CONTEXT.md: Thumb stick): a touchscreen playing
   // by the stick, which moves the minimap and the touch bar out of the

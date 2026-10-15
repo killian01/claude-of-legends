@@ -20,6 +20,7 @@ import { ownGraceFloor, type RoyaleNote } from '../net/royale_client';
 import type { RoyaleResult } from '../net/royale_wire';
 import { aspectColor, WRATH_COLOR } from '../render/aspect_colors';
 import { championPortraitUrl } from '../render/portraits';
+import { POST_CSS } from '../render/post_look';
 import type { Status } from '../sim/combat/status';
 import { CAMPS } from '../sim/content/camps';
 import {
@@ -32,6 +33,7 @@ import {
 } from '../sim/content/items';
 import { ASPECT_IDS, ASPECTS, type AspectId, CREATURES } from '../sim/content/rings';
 import { SIGILS } from '../sim/content/sigils';
+import { STRIKEPOSTS } from '../sim/content/strikeposts';
 import { draughtLeft } from '../sim/draught';
 import type { FavorStacks } from '../sim/favors';
 import { withinFountain } from '../sim/fountain';
@@ -1356,6 +1358,8 @@ export class Hud {
   // the screen, the seat's lane and whether the player got there, and the
   // card that tells it, in the nudge's slot and ahead of it.
   private readonly guideMode: GuideMode;
+  // The Range: the HUD calls no wave, lane or creature in it.
+  private readonly range: boolean;
   private guide: LaneGuide | null = null;
   private laneCard: LaneCardState = LANE_CARD_START;
   private readonly laneCardEl: HTMLElement;
@@ -1426,7 +1430,10 @@ export class Hud {
     guide: GuideMode = 'play',
     // The battle royale's rule set when this match is one (ADR 0031).
     royale: RoyaleVariant | null = null,
+    // The Range (CONTEXT.md): no waves, no lanes, no creatures to call.
+    range = false,
   ) {
+    this.range = range;
     this.world = world;
     this.selfId = selfId;
     this.selfTeam = selfTeam;
@@ -1478,6 +1485,8 @@ export class Hud {
       this.openedOpeningShop = true;
       this.sawBattleBegin = true;
     }
+    // Nor do any in the Range; its shop opens as a match's does.
+    if (range) this.sawBattleBegin = true;
     this.stepsInput = !coarsePointer ? 'mouse' : thumbs ? 'thumbs' : 'tap';
     root.className = coarsePointer ? `hud compact${thumbs ? ' thumbs' : ''} turn-needed` : 'hud';
     if (royale) root.classList.add('royale');
@@ -2450,7 +2459,7 @@ export class Hud {
   // it: the guide starts over and the card comes back), whether the
   // player got there, and the card's words and life. Nothing in a replay.
   private stepLaneGuide(self: { lane: LaneGuide['lane']; pos: Vec2; dead: boolean }): void {
-    if (this.guideMode === 'watch' || this.royale) return;
+    if (this.guideMode === 'watch' || this.royale || this.range) return;
     const prev = this.guide;
     this.guide = stepGuide(
       prev,
@@ -3338,7 +3347,10 @@ export class Hud {
     const wardenUp = objAt === null;
     const rings = this.world.ringClocks();
     const pit = this.world.wardenPit() ?? undefined;
-    setText(this.metaText, `${clock} · ${objectiveLine(rings, objAt, this.world.time, pit)}`);
+    setText(
+      this.metaText,
+      this.range ? clock : `${clock} · ${objectiveLine(rings, objAt, this.world.time, pit)}`,
+    );
     const mineBoon = this.world.teamBuff(this.selfTeam);
     const enemyBoon = this.world.teamBuff(otherTeam(this.selfTeam));
     if (this.lastWardenUp !== null && wardenUp !== this.lastWardenUp) {
@@ -3644,14 +3656,18 @@ export class Hud {
                     ? CREATURES[target.creatureId].name
                     : target.kind === 'camp'
                       ? CAMPS[target.campKind ?? 'spinecrest'].name
-                      : 'Minion';
+                      : target.kind === 'post'
+                        ? STRIKEPOSTS[target.postKind ?? 'bare'].name
+                        : 'Minion';
           const look = aspectColor(target.aspect);
           this.targetPortrait.src =
             target.kind === 'warden'
               ? iconDataUrl('W', '#3d2a5a', '#a06ae8')
               : target.kind === 'creature'
                 ? iconDataUrl(label[0] ?? '?', look.dark, look.css)
-                : iconDataUrl(label[0] ?? '?', '#5a1f1f', '#a04040');
+                : target.kind === 'post'
+                  ? iconDataUrl(label[0] ?? '?', '#4a3a22', POST_CSS)
+                  : iconDataUrl(label[0] ?? '?', '#5a1f1f', '#a04040');
           this.targetName.textContent =
             target.kind === 'creature' && target.aspect
               ? `${label} (${ASPECTS[target.aspect].name})`
@@ -3662,7 +3678,9 @@ export class Hud {
             ? '#d8a6f5'
             : target.kind === 'creature'
               ? aspectColor(target.aspect).css
-              : (TEAM_TEXT_COLORS[this.look(target.team)] ?? '#f5a3a3');
+              : target.kind === 'post'
+                ? POST_CSS
+                : (TEAM_TEXT_COLORS[this.look(target.team)] ?? '#f5a3a3');
       }
       this.targetHpFill.style.transform = `scaleX(${Math.max(0, target.hp / target.maxHp)})`;
       setText(this.targetHpText, `${Math.ceil(target.hp)} / ${Math.round(target.maxHp)}`);

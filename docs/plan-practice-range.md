@@ -14,7 +14,7 @@ default the maintainer can overturn before the phase it belongs to lands.
 | Names | **Range** for the place and **Strikepost** for a target (`CONTEXT.md`). Strikepost is an original compound (strike, post), searched for IP on 2026-10-14 and clean. |
 | Where it runs | In the browser tab only, like Practice: nothing saved, no replay, no points (ADR 0027 scores the classic public queue alone), no practice report. The server never sees it, so no wire message carries a post. |
 | The map | The Star Orchard as every match has it (ADR 0021), towers and Sanctums standing. Nothing else moves: no waves, no camps, no ring creatures, no Warden, no bots, and no winner. |
-| The posts | Two, side by side, 11 m out from the team's Sanctum toward the map's middle and 5 m apart: open ground inside the base, short of the mid lane's last tower, a walk from the fountain. A **Bare Strikepost** (5000 health, no armor, no magic resist) and a **Plated Strikepost** (5000 health, 80 and 80), so a kit reads as it lands on a carry and on a tank. |
+| The posts | Two, side by side, 14 m out from the team's Sanctum toward the map's middle and 6 m apart: open ground inside the base, past the Sanctum's two towers (at 11 m the camera saw one post behind a tower) and short of the mid lane's last tower, a walk from the fountain. A **Bare Strikepost** (5000 health, no armor, no magic resist) and a **Plated Strikepost** (5000 health, 80 and 80), so a kit reads as it lands on a carry and on a tank. |
 | Never falls | The hit that would fell a post fills it again (`combat/damage.ts`), so it is never in the dead, pays no gold or xp, and posts no death. Left alone 4 s it fills, stands back on its spot and drops its statuses (a knockback, a slow, a stun all show on it while it is being hit). |
 | Damage numbers | Already there: the renderer prints the viewer's own hits over any victim (`renderer.ts`, the combat notes' `hits`). The neutral number for other sources lists champions, the Warden and creatures; a post joins that list in phase 2. |
 | Towers | Ignore it: tower and minion AI skip neutral units already (`tower_ai.ts`, `minion_ai.ts`). |
@@ -48,7 +48,7 @@ default the maintainer can overturn before the phase it belongs to lands.
    minutes of a Range raise no wave, camp, creature or Warden; a level 18 champion hitting a
    post for ten seconds fells nothing and earns nothing from it; a left post fills and stands
    back after the calm and not before; the plated one mitigates.
-2. **The way in and the look**. The select's third choice (`src/game/practice_bots.ts`, the
+2. **The way in and the look** (landed 2026-10-15; `src/render/post_shapes.ts`). The select's third choice (`src/game/practice_bots.ts`, the
    menu row), the Range branch in `runOffline`, the post's mesh, its bar, the damage numbers,
    the minimap dot and the target frame. Checked in a browser at 844x390 with touch and on a
    desktop (a held thumb on a post, the cast pad on it). A News entry. One night.
