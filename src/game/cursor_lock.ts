@@ -8,11 +8,14 @@
 // at that position to whatever stands there, so the ground, the HUD and
 // the minimap keep their handlers unchanged. Native pointer events carry
 // frozen coordinates while locked and are stopped before anyone reads
-// them. What a browser does for a real pointer, the lock does by hand:
+// them; Firefox gives the re-dispatched ones the same frozen coordinates,
+// so each carries the virtual point on itself (pinPoint). What a browser
+// does for a real pointer, the lock does by hand:
 // the enter and leave pairs along the ancestors, :hover (the elements
 // under the virtual cursor get a `vhover` class, and every :hover rule of
 // the page's stylesheets is copied onto it), a click at the press and the
-// release's common ancestor, the wheel scrolling the list under it. What
+// release's common ancestor, the right press's contextmenu (Firefox sends
+// none while locked), the wheel scrolling the list under it. What
 // it cannot do (drag a slider, open a select's list, capture the pointer,
 // which a browser refuses while it is locked) is why the cursor is let go
 // while the pause menu or the end screen stands (setFree), and never
@@ -425,6 +428,30 @@ export function installCursorLock(root: HTMLElement, doc: Document = document): 
     pressure: native.buttons ? 0.5 : 0,
   });
 
+  // Firefox reads every mouse event's point off the lock while the pointer
+  // is locked, the page's own events too: Gecko's Event::GetClientCoords
+  // hands back the point where the lock took, whatever the event was made
+  // with. Each synthetic event then said that one frozen point, and every
+  // click on the ground ordered the same walk, a click on the champion
+  // included. The virtual point is written on the event itself, which
+  // stands before the browser's getters. offsetX and layerX are not
+  // written and stay frozen on Firefox: the match reads clientX.
+  const pinPoint = (ev: Event): void => {
+    const x = vx;
+    const y = vy;
+    Object.defineProperties(ev, {
+      clientX: { value: x },
+      clientY: { value: y },
+      x: { value: x },
+      y: { value: y },
+      screenX: { value: x },
+      screenY: { value: y },
+      // Read when asked only: the scroll costs Chromium a layout.
+      pageX: { get: () => x + (win.scrollX || 0) },
+      pageY: { get: () => y + (win.scrollY || 0) },
+    });
+  };
+
   // Dispatches one synthetic event; true unless a handler canceled it.
   const forward = (
     type: string,
@@ -436,6 +463,7 @@ export function installCursorLock(root: HTMLElement, doc: Document = document): 
     const ev = type.startsWith('pointer')
       ? new PointerEv(type, detail)
       : new win.MouseEvent(type, detail);
+    pinPoint(ev);
     synthetic.add(ev);
     return target.dispatchEvent(ev);
   };
@@ -529,6 +557,7 @@ export function installCursorLock(root: HTMLElement, doc: Document = document): 
     // pixel wheel's notch, so a notch zooms as far locked as free.
     const { deltaMode, deltaX, deltaY, deltaZ } = wheelDeltas(w);
     const ev = new win.WheelEvent('wheel', { ...init(w), deltaX, deltaY, deltaZ, deltaMode });
+    pinPoint(ev);
     synthetic.add(ev);
     const go = target.dispatchEvent(ev);
     // Ctrl and the wheel zoom the page, the browser's own to do.
@@ -550,13 +579,18 @@ export function installCursorLock(root: HTMLElement, doc: Document = document): 
     e.preventDefault();
     const type = e.type;
     // The mouse's own press and release: made from the pointer's below.
-    if (type === 'mousedown' || type === 'mouseup') return;
+    // The menu as well: Gecko refuses a contextmenu while the pointer is
+    // locked (EventStateManager::PreHandleEvent), so on Firefox none came
+    // and a right-click on an inventory slot sold nothing. It is made from
+    // the right press, where the cursor is, and a browser's own dropped.
+    if (type === 'mousedown' || type === 'mouseup' || type === 'contextmenu') return;
     const under = targetAt();
     if (type === 'pointerdown') {
       if (!under) return;
       pressedOn = under;
       mouseQuiet = !forward('pointerdown', e, under);
       if (!mouseQuiet) forward('mousedown', e, under);
+      if (e.button === 2) forward('contextmenu', e, under);
       return;
     }
     if (type === 'pointerup') {
@@ -568,10 +602,9 @@ export function installCursorLock(root: HTMLElement, doc: Document = document): 
       return;
     }
     // click, dblclick, auxclick: at the common ancestor of where the press
-    // and the release stood; contextmenu where the cursor is.
+    // and the release stood.
     if (!under) return;
-    const target =
-      type === 'contextmenu' || !pressedOn ? under : (commonAncestor(pressedOn, under) ?? under);
+    const target = pressedOn ? (commonAncestor(pressedOn, under) ?? under) : under;
     forward(type, e, target);
     if (type === 'click' && target === under) {
       const tag = target.tagName;
