@@ -9,6 +9,7 @@ import {
   PRACTICE_BOTS,
   practiceBotsHint,
   practiceBotsTitle,
+  practiceLaneNote,
   practiceOpponents,
 } from '../src/game/practice_bots';
 import { gentleSeats, houseSeats, LANE_STYLES } from '../src/sim/content/bots/house';
@@ -35,6 +36,14 @@ describe('the enemy bots of Practice', () => {
     expect(practiceBotsHint('gentle')).toContain('before 2:00 and level 3');
     expect(practiceBotsHint('normal')).toMatch(/^Normal:/);
     expect(practiceBotsHint('range')).toMatch(/^None \(Range\):.*Strikeposts/);
+  });
+
+  it('holds the lane row in the Range only, and says why', () => {
+    expect(practiceLaneNote('range')).toMatch(/Range has no lanes/);
+    expect(practiceLaneNote('gentle')).toBeNull();
+    expect(practiceLaneNote('normal')).toBeNull();
+    // Online, with no enemy bots row, the lane row works as ever.
+    expect(practiceLaneNote(null)).toBeNull();
   });
 
   it('seats no opponent in the Range', () => {

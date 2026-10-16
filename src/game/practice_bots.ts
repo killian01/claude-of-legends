@@ -56,3 +56,10 @@ export function practiceOpponents(seats: readonly HouseSeat[], bots: PracticeBot
   if (bots === 'range') return [];
   return bots === 'gentle' ? gentleSeats(seats) : [...seats];
 }
+
+// The Range has no lanes: the select holds its lane row, nothing lit, and
+// says why in the row's note. Null for every other choice, whose lane row
+// works as in any match.
+export function practiceLaneNote(bots: PracticeBots | null): string | null {
+  return bots === 'range' ? 'The Range has no lanes: you start in your base.' : null;
+}

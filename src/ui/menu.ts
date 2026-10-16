@@ -14,6 +14,7 @@ import {
   type PracticeBots,
   practiceBotsHint,
   practiceBotsTitle,
+  practiceLaneNote,
 } from '../game/practice_bots';
 import { getSettings } from '../game/settings';
 import { applyUiScale, effectiveUiScale } from '../game/ui_scale';
@@ -678,6 +679,8 @@ export function showSelect(container: HTMLElement, opts: SelectOptions): SelectC
   // The bot card picked, when one is: its playbook's lanes decide.
   let heldBot: { lanes?: readonly LanePreference[] } | null = null;
   let lockedIn = false;
+  // The practice select's enemy bots (rendered under the lane row below).
+  let practiceBots: PracticeBots | null = opts.practiceBots ?? null;
   const beside = (): LanePreference[] => claimsBeside(claims, self);
   let choice: LaneChoice = preselect(null, beside());
   const laneRow = el('div', 'menu-lanes');
@@ -686,17 +689,21 @@ export function showSelect(container: HTMLElement, opts: SelectOptions): SelectC
   const renderLanes = (): void => {
     const taken = beside();
     const shown = heldLane ?? choice.lane;
-    laneRow.classList.toggle('held', heldLane !== null || lockedIn);
+    // The Range (src/game/practice_bots.ts) holds the row with nothing lit.
+    const rangeNote = practiceLaneNote(practiceBots);
+    const held = heldLane !== null || lockedIn || rangeNote !== null;
+    laneRow.classList.toggle('held', held);
     for (const [lane, b] of laneButtons) {
       const full = heldLane === null && lane !== shown && laneFull(taken, lane);
-      b.classList.toggle('picked', lane === shown);
+      b.classList.toggle('picked', rangeNote === null && lane === shown);
       b.classList.toggle('full', full);
-      b.disabled = heldLane !== null || lockedIn || full;
+      b.disabled = held || full;
     }
     laneNote.textContent =
-      heldLane !== null
+      rangeNote ??
+      (heldLane !== null
         ? `Your bot holds ${laneWords(heldLane)}: its lane is set in the Academy.`
-        : (forestWarning(choice.lane, champName, role) ?? '');
+        : (forestWarning(choice.lane, champName, role) ?? ''));
     if (board && roster) {
       board.textContent = '';
       for (const row of laneBoard(claims, roster, self, shown)) {
@@ -719,7 +726,7 @@ export function showSelect(container: HTMLElement, opts: SelectOptions): SelectC
   for (const lane of LANE_CHOICES) {
     const btn = el('button', 'menu-lane', laneTitle(lane)) as HTMLButtonElement;
     btn.addEventListener('click', () => {
-      if (heldLane !== null || lockedIn) return;
+      if (heldLane !== null || lockedIn || practiceLaneNote(practiceBots) !== null) return;
       const already = choice.chosen && choice.lane === lane;
       const next = chooseLane(choice, lane, beside());
       if (next === choice) return;
@@ -732,7 +739,6 @@ export function showSelect(container: HTMLElement, opts: SelectOptions): SelectC
   }
   // The practice select's enemy bots (src/game/practice_bots.ts): three
   // buttons under the lane row, in its style, held once locked in.
-  let practiceBots: PracticeBots | null = opts.practiceBots ?? null;
   const botsChoiceRow = el('div', 'menu-choices');
   const botsChoiceButtons = new Map<PracticeBots, HTMLButtonElement>();
   const renderBotsChoice = (): void => {
@@ -750,6 +756,7 @@ export function showSelect(container: HTMLElement, opts: SelectOptions): SelectC
         if (lockedIn) return;
         practiceBots = option;
         renderBotsChoice();
+        renderLanes();
       });
       botsChoiceButtons.set(option, btn);
       botsChoiceRow.appendChild(btn);
