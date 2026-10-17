@@ -112,6 +112,7 @@ import {
   stepGuide,
   stepLaneCard,
 } from './lane_guide';
+import { openingShop } from './opening_shop';
 import { thumbClusterCss } from './thumb_cluster';
 
 interface ChipLook {
@@ -1485,7 +1486,7 @@ export class Hud {
       this.openedOpeningShop = true;
       this.sawBattleBegin = true;
     }
-    // Nor do any in the Range; its shop opens as a match's does.
+    // Nor do any in the Range, whose shop waits to be asked for.
     if (range) this.sawBattleBegin = true;
     this.stepsInput = !coarsePointer ? 'mouse' : thumbs ? 'thumbs' : 'tap';
     root.className = coarsePointer ? `hud compact${thumbs ? ' thumbs' : ''} turn-needed` : 'hud';
@@ -3281,13 +3282,18 @@ export class Hud {
 
     if (!this.openedOpeningShop) {
       this.openedOpeningShop = true;
-      // Only at the top of a live match: a rejoin or a replay opens to the
-      // game, not to a shop nobody asked for. A coach seat's bot buys its
-      // own kit (coach_bar.ts seatShops).
-      if (this.world.time < 5 && this.world.winner === null && seatShops(this.guideMode)) {
+      // Only at the top of a live match, and not over the Range's posts
+      // (ui/opening_shop.ts).
+      const opening = openingShop({
+        time: this.world.time,
+        finished: this.world.winner !== null,
+        guide: this.guideMode,
+        range: this.range,
+      });
+      if (opening === 'open') {
         this.setShopOpen(true);
         this.openingShopUp = true;
-      } else {
+      } else if (opening === 'late') {
         // The feedback line likewise: the start of a match only.
         this.nudge = { ...this.nudge, done: true };
       }
