@@ -1226,9 +1226,14 @@ and rarity for the grade
 **Seedfall**:
 A seed of the Star Orchard falling on the Wanderseed at a time and place called thirty
 seconds ahead, inside the light, five a match from two minutes after landing (two seeds at
-once in Respawn). Its impact throws up and hurts whoever stands under it. In code, prefer
-seedfall-prefixed names: seed alone is the match's rng seed.
+once in Respawn, which opens with the Opening Seedfall). Its impact throws up and hurts whoever
+stands under it. In code, prefer seedfall-prefixed names: seed alone is the match's rng seed.
 _Avoid_: supply drop, air drop, care package
+
+**Opening Seedfall**:
+Respawn's first Seedfall, a minute after landing and called in the calm, before the five that
+every match has; One life keeps its calm without one.
+_Avoid_: bonus drop, early drop
 
 **Seedfall cache**:
 What a Seedfall leaves where it landed: a cache that takes three seconds to open, any hit
