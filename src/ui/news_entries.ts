@@ -35,6 +35,17 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
+    day: '2026-10-18',
+    title: 'A pointer to your first cache',
+    body: [
+      'Caches hold the pieces of your build on the Wanderseed. Until you open your first one ' +
+        'in a match, a pale blue pointer at the edge of the screen shows the way to the nearest ' +
+        'cache in the light, with how far it is.',
+      'Walk up to it and stand still beside it: the ring fills, and the piece is yours.',
+    ],
+    link: { label: 'Play a match', to: 'play' },
+  },
+  {
     day: '2026-10-15',
     title: 'Crews on the Wanderseed',
     body: [
