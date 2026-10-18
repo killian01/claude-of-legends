@@ -198,11 +198,26 @@ So do not put anything in it you would not hand to a stranger: it is a
 message to one person, not a private channel, and there is no way to take
 it back afterwards. If you want an answer, the Discord is the place.
 
+## Who reads these files
+
+The three files above (the practice scoreboards, the seat lines and the
+feedback box) are read on this machine by the maintainer, and by an
+automated coding session that runs here each night and chooses what to
+work on in the game next. That session runs on Anthropic's Claude, through
+its API. It reads the same name-free reports the maintainer reads
+(`scripts/practice.mjs`, `scripts/seat_report.mjs`), never the files
+themselves. The words typed into the feedback box are first handed to the
+same model in a separate call that can do nothing but answer, which groups
+them into themes with counts; the coding session sees only those themes.
+The reports and the words go to that model for this and to nothing else,
+and none of it is published.
+
 ## What is not counted
 
 No clicks beyond the five events above, no session recordings, no heat
 maps, no fingerprinting, no cross-site anything, no profile, no export to
-anyone, and nothing that follows a browser from one month into the next.
+anyone beyond the model named above, and nothing that follows a browser
+from one month into the next.
 
 ## Logs
 
