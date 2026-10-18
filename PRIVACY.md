@@ -201,16 +201,17 @@ it back afterwards. If you want an answer, the Discord is the place.
 ## Who reads these files
 
 The three files above (the practice scoreboards, the seat lines and the
-feedback box) are read on this machine by the maintainer, and by an
-automated coding session that runs here each night and chooses what to
-work on in the game next. That session runs on Anthropic's Claude, through
-its API. It reads the same name-free reports the maintainer reads
-(`scripts/practice.mjs`, `scripts/seat_report.mjs`), never the files
-themselves. The words typed into the feedback box are first handed to the
-same model in a separate call that can do nothing but answer, which groups
-them into themes with counts; the coding session sees only those themes.
-The reports and the words go to that model for this and to nothing else,
-and none of it is published.
+feedback box) are read on this machine by the maintainer, and by automated
+sessions that run here each night and choose what to work on in the game
+next. They run on Anthropic's Claude, through its API. They read the same
+name-free reports the maintainer reads (`scripts/practice.mjs`,
+`scripts/seat_report.mjs`), never the files themselves. The words typed
+into the feedback box are first handed to the same model in a separate
+call that can do nothing but answer and keeps no transcript, which groups
+them into themes with counts; the sessions see only those themes. A call
+of the same kind reads the reports again a few days after a change lands,
+to say whether it helped. The reports and the words go to that model for
+this and to nothing else, and none of it is published.
 
 ## What is not counted
 
@@ -223,6 +224,11 @@ from one month into the next.
 
 The server prints operational lines to its log: matches starting and
 ending, errors, and refusals such as a rate limit.
+
+Each night a digest of that log, its errors, restarts and timings with
+addresses, emails and Guest names taken out, goes to the same model so a
+session can fix what broke, and a deploy keeps a copy of the replaced
+server's log on this machine for two weeks so its errors are not lost.
 
 The web server in front of it writes an access log, in the ordinary way
 that any web server does: one line per page or API request, holding the
