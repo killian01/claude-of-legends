@@ -617,6 +617,8 @@ royale has a list of its own, under the same rules and the same Hide guide: atta
 enemy champion, open a cache, stay in the light (standing in the Dusk, or about to be overtaken by
 it, takes the card from any other step), what a takedown gives, fly a launch pad, and the ultimate
 ready at level 6. They wait while the win card shows.
+The Range has a short list of its own too: learn a spell, cast it at a Strikepost, and what the
+plated post stands for; it leaves the lane's steps for the first match.
 _Avoid_: tutorial (that is a scripted match), tips, coach (the bot seat's)
 
 **Win card**:

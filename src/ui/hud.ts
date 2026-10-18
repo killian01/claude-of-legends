@@ -80,6 +80,7 @@ import {
   stepNudge,
 } from './feedback_box';
 import {
+  hideGuide,
   hideSteps,
   STEPS_HIDE,
   STEPS_TITLE,
@@ -140,6 +141,13 @@ import {
 } from './objective_line';
 import { fillPauseMenu, settlePauseFocus } from './pause_menu';
 import { firstPointsText, pointsWord, popText } from './points_text';
+import {
+  type RangeStepsState,
+  rangeStepLine,
+  rangeStepsFinished,
+  rangeStepsStart,
+  stepRangeSteps,
+} from './range_steps';
 import { BURR_COLOR, burrWashLine } from './royale_burr';
 import { GoalTrack } from './royale_goal';
 import { type GoalLineView, goalLineView } from './royale_goal_line';
@@ -1394,6 +1402,8 @@ export class Hud {
   // (ui/royale_steps.ts), in a match on the Wanderseed; null in a 5v5.
   private readonly royale: RoyaleHud | null;
   private royaleSteps: RoyaleStepsState | null = null;
+  // The Range's own first steps (ui/range_steps.ts); null in a match.
+  private rangeSteps: RangeStepsState | null = null;
   // Respawn's wash (ui/royale_life.ts): the life that just ended, under
   // the subtitle, and the champions last seen, for the killer's recap.
   private readonly royaleVariant: RoyaleVariant | null;
@@ -1478,8 +1488,11 @@ export class Hud {
     // The battle royale has its own list (ui/royale_steps.ts), under the
     // same Hide guide; the 5v5's stands finished there.
     const guideOff = settingsNow.stepsOff || guide !== 'play';
-    this.steps = stepsStart(guideOff || royale !== null, settingsNow.stepsDone);
+    // So has the Range (ui/range_steps.ts), which leaves the lane's steps
+    // for the first match.
+    this.steps = stepsStart(guideOff || royale !== null || range, settingsNow.stepsDone);
     if (royale) this.royaleSteps = royaleStepsStart(guideOff, settingsNow.royaleStepsDone);
+    if (range) this.rangeSteps = rangeStepsStart(guideOff, settingsNow.stepsDone);
     // No shop opens itself, no minions spawn: a battle royale starts on
     // the drop (ADR 0031).
     if (royale) {
@@ -2541,6 +2554,10 @@ export class Hud {
       this.stepRoyaleFirstSteps(u, this.royale);
       return;
     }
+    if (this.rangeSteps) {
+      this.stepRangeFirstSteps(u, this.rangeSteps);
+      return;
+    }
     if (stepsFinished(this.steps) && !this.stepsEl.classList.contains('on')) return;
     const view = this.stepsView(u);
     const prev = this.steps;
@@ -2589,6 +2606,35 @@ export class Hud {
     const visible = id !== null && !view.covered && !view.dead;
     if (id !== null && visible) {
       const line = royaleStepLine(id, this.stepsInput, getSettings().leftClickMoves);
+      if (this.stepsLineEl.textContent !== line) this.stepsLineEl.textContent = line;
+      this.stepsEl.classList.toggle('below', this.nudgeEl.classList.contains('on'));
+    }
+    this.stepsEl.classList.toggle('on', visible);
+  }
+
+  // The Range's first steps (ui/range_steps.ts), in the same card: only a
+  // learned spell is remembered, with the lane's list, since it is the
+  // same act in a match.
+  private stepRangeFirstSteps(u: Readonly<Unit>, prev: RangeStepsState): void {
+    if (rangeStepsFinished(prev) && !this.stepsEl.classList.contains('on')) return;
+    const time = this.world.time;
+    const view = {
+      time,
+      covered: this.nudgeBlocked(),
+      dead: u.dead,
+      learned: (['Q', 'W', 'E'] as const).some((k) => effectiveRank(u, k) > 0),
+      cast: (['Q', 'W', 'E', 'R'] as const).some((k) => (u.cooldowns[k] ?? 0) > time),
+    };
+    const next = stepRangeSteps(prev, view);
+    this.rangeSteps = next;
+    if (next.done.includes('learn') && !prev.done.includes('learn')) {
+      const done = getSettings().stepsDone;
+      if (!done.includes('learn')) updateSettings({ stepsDone: [...done, 'learn'] });
+    }
+    const id = next.current;
+    const visible = id !== null && !view.covered && !view.dead;
+    if (id !== null && visible) {
+      const line = rangeStepLine(id, this.stepsInput);
       if (this.stepsLineEl.textContent !== line) this.stepsLineEl.textContent = line;
       this.stepsEl.classList.toggle('below', this.nudgeEl.classList.contains('on'));
     }
@@ -2648,6 +2694,7 @@ export class Hud {
   private hideFirstSteps(): void {
     this.steps = hideSteps(this.steps);
     if (this.royaleSteps) this.royaleSteps = hideRoyaleSteps(this.royaleSteps);
+    if (this.rangeSteps) this.rangeSteps = hideGuide(this.rangeSteps);
     this.stepsEl.classList.remove('on');
     updateSettings({ stepsOff: true });
     this.netHooks.sendStep?.('off');
