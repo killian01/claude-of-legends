@@ -25,6 +25,7 @@ import type { TeamId } from '../sim/types';
 import type { IWorld } from '../world_api';
 import { itemIconUrl } from './icons';
 import { BURR_COLOR, burrTarget } from './royale_burr';
+import { CACHE_ARROW_COLOR, cacheTarget } from './royale_cache_arrow';
 import { openCall } from './royale_cards_room';
 import {
   compactRing,
@@ -154,6 +155,10 @@ const CSS = `
 .br-edge[data-kind='burr'] i { background: radial-gradient(circle at 40% 40%, #ffe0e8, ${BURR_COLOR} 60%, #6a0a24);
   box-shadow: 0 0 14px rgba(255, 90, 130, 0.9); }
 .br-edge[data-kind='burr'] b { color: ${BURR_COLOR}; }
+/* The way to a first cache (ui/royale_cache_arrow.ts): the plain chest's glow. */
+.br-edge[data-kind='cache'] i { background: radial-gradient(circle at 40% 40%, #f0f6ff, ${CACHE_ARROW_COLOR} 60%, #2a4a80);
+  box-shadow: 0 0 14px rgba(140, 190, 255, 0.85); }
+.br-edge[data-kind='cache'] b { color: ${CACHE_ARROW_COLOR}; }
 .br-flight { position: absolute; width: 34px; height: 34px; border-radius: 7px; pointer-events: none;
   border: 1px solid #f0c860; box-shadow: 0 0 16px rgba(240, 200, 96, 0.9); z-index: 7; }
 /* A phone: a loot line that says what the piece adds runs long, so it
@@ -675,14 +680,17 @@ export class RoyaleHudMoments {
     const hunted = r ? huntedTargets(r, world.time, selfId, crewmate) : [];
     const standing = this.host.world.units.get(this.host.selfId)?.dead === false;
     const burr = standing ? burrTarget(r, this.host.world.time) : null;
-    const any = (r?.sf?.length ?? 0) > 0 || hunted.length > 0 || burr !== null;
+    const own = world.units.get(selfId);
+    const cache = standing && own ? cacheTarget(r, own.pos, this.openedCache !== null) : null;
+    const pointed = [...hunted, ...(burr ? [burr] : []), ...(cache ? [cache] : [])];
+    const any = (r?.sf?.length ?? 0) > 0 || pointed.length > 0;
     if (r && projector && stage && r.st === 'play' && any) {
       const self = projector.self();
       const time = this.host.world.time;
       const targets: EdgeTarget[] = [];
-      // The Risings called or standing and the marks while shown, and the
-      // own Burr's carrier.
-      for (const h of burr ? [...hunted, burr] : hunted) {
+      // The Risings called or standing and the marks while shown, the own
+      // Burr's carrier, and the way to a first cache.
+      for (const h of pointed) {
         const p = projector.project(h.at, ARROW_LIFT_M);
         if (!p) continue;
         const hidden = p.hidden === true;

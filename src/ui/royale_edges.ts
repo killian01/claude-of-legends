@@ -11,8 +11,9 @@ import { SEEDFALL_AT_S } from '../sim/content/royale_events';
 
 // What an arrow points at, in priority order: a Seedfall before the own
 // Burr's carrier (the viewer's alone, and counting down) before a Rising
-// before the Wrath before the Lodestar before an Ablaze run.
-export type EdgeKind = 'seedfall' | 'burr' | 'rising' | 'wrath' | 'lodestar' | 'ablaze';
+// before the Wrath before the Lodestar before an Ablaze run, and the way to
+// a first cache (ui/royale_cache_arrow.ts) after them all.
+export type EdgeKind = 'seedfall' | 'burr' | 'rising' | 'wrath' | 'lodestar' | 'ablaze' | 'cache';
 export const EDGE_PRIORITY: readonly EdgeKind[] = [
   'seedfall',
   'burr',
@@ -20,6 +21,7 @@ export const EDGE_PRIORITY: readonly EdgeKind[] = [
   'wrath',
   'lodestar',
   'ablaze',
+  'cache',
 ];
 
 // At most this many arrows at once: more is a frame of noise.
@@ -75,9 +77,10 @@ export function distanceLabel(m: number): string {
   return `${Math.max(1, Math.round(m))} m`;
 }
 
-// The arrow's line: the distance, and the seconds left while it counts.
-function arrowLabel(t: Pick<EdgeTarget, 'distance' | 'secondsLeft'>): string {
-  const d = distanceLabel(t.distance);
+// The arrow's line: the distance, and the seconds left while it counts; a
+// cache's says what it points at, since nothing else on the screen does.
+function arrowLabel(t: Pick<EdgeTarget, 'kind' | 'distance' | 'secondsLeft'>): string {
+  const d = t.kind === 'cache' ? `Cache ${distanceLabel(t.distance)}` : distanceLabel(t.distance);
   if (t.secondsLeft === undefined) return d;
   const s = Math.max(0, Math.ceil(t.secondsLeft));
   return `${d} \u00b7 ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;

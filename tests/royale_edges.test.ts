@@ -116,7 +116,15 @@ describe('the arrows', () => {
   });
 
   it('rank a Seedfall over a Rising over the Wrath over the Lodestar over Ablaze', () => {
-    expect(EDGE_PRIORITY).toEqual(['seedfall', 'burr', 'rising', 'wrath', 'lodestar', 'ablaze']);
+    expect(EDGE_PRIORITY).toEqual([
+      'seedfall',
+      'burr',
+      'rising',
+      'wrath',
+      'lodestar',
+      'ablaze',
+      'cache',
+    ]);
     const off = { x: -500, y: 200 };
     const arrows = edgeArrows(
       [
