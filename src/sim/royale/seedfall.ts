@@ -19,7 +19,6 @@ import { dealDamage } from '../combat/damage';
 import { addStatus } from '../combat/status';
 import {
   SEEDFALL_AIRBORNE_S,
-  SEEDFALL_AT_S,
   SEEDFALL_CONTEST_M,
   SEEDFALL_CONTEST_MIN,
   SEEDFALL_DEPTH_M,
@@ -31,6 +30,7 @@ import {
   SEEDFALL_PAIR_M,
   SEEDFALL_PIECES,
   SEEDFALL_SEEDS,
+  SEEDFALL_TIMES,
   SEEDFALL_WARN_S,
 } from '../content/royale_events';
 import { dirTo, dist2, type Vec3 } from '../geo';
@@ -65,7 +65,7 @@ export interface SeedfallCall {
 // same for every seed (only the points are drawn).
 export function seedfallSchedule(variant: RoyaleVariant, landAt: number): SeedfallCall[] {
   const seeds = SEEDFALL_SEEDS[variant];
-  return SEEDFALL_AT_S.map((at, wave) => ({
+  return SEEDFALL_TIMES[variant].map((at, wave) => ({
     wave,
     ids: Array.from({ length: seeds }, (_, j) => wave * seeds + j),
     announceAt: landAt + at - SEEDFALL_WARN_S,
@@ -74,8 +74,8 @@ export function seedfallSchedule(variant: RoyaleVariant, landAt: number): Seedfa
 }
 
 // When the first Seedfall is called: before it nobody has a Seedfall to see.
-export function firstSeedfallCallAt(landAt: number): number {
-  return landAt + (SEEDFALL_AT_S[0] ?? 0) - SEEDFALL_WARN_S;
+export function firstSeedfallCallAt(variant: RoyaleVariant, landAt: number): number {
+  return landAt + (SEEDFALL_TIMES[variant][0] ?? 0) - SEEDFALL_WARN_S;
 }
 
 // The light a seed must land in: the Dusk as it will stand

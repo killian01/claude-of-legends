@@ -36,6 +36,18 @@ export interface NewsEntry {
 export const NEWS: readonly NewsEntry[] = [
   {
     day: '2026-10-18',
+    title: 'The Opening Seedfall',
+    body: [
+      'Respawn on the Wanderseed no longer waits two minutes for its first Seedfall. Thirty ' +
+        'seconds after landing, two seeds are called; a minute in, they hit the ground.',
+      'Each leaves a Seedfall cache: a piece of your build, a full heal and the pick of a Heartwood ' +
+        'Graft for whoever opens it first. The five Seedfalls that follow keep their times, and One ' +
+        'life keeps its calm.',
+    ],
+    link: { label: 'Play a match', to: 'play' },
+  },
+  {
+    day: '2026-10-18',
     title: 'A pointer to your first cache',
     body: [
       'Caches hold the pieces of your build on the Wanderseed. Until you open your first one ' +

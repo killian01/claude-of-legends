@@ -122,7 +122,7 @@ export const graftsBlock: Builder<string[]> = (sim, viewer) => {
 // list once the last is opened, so the mirror lets go of it).
 export const seedfallsBlock: Builder<SnapSeedfall[]> = (sim, viewer) => {
   const r = sim.royale;
-  if (r.seedfalls.length === 0 && sim.time + 1e-9 < firstSeedfallCallAt(r.dropEndsAt)) {
+  if (r.seedfalls.length === 0 && sim.time + 1e-9 < firstSeedfallCallAt(r.variant, r.dropEndsAt)) {
     return undefined;
   }
   const value = r.seedfalls.map(

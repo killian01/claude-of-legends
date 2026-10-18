@@ -7,7 +7,7 @@
 // safe area beside them, and the arrows come out placed and turned. The
 // HUD draws them (ui/royale_hud_moments.ts).
 
-import { SEEDFALL_AT_S } from '../sim/content/royale_events';
+import { SEEDFALL_EVERY_S } from '../sim/content/royale_events';
 
 // What an arrow points at, in priority order: a Seedfall before the own
 // Burr's carrier (the viewer's alone, and counting down) before a Rising
@@ -89,7 +89,7 @@ function arrowLabel(t: Pick<EdgeTarget, 'kind' | 'distance' | 'secondsLeft'>): s
 // A landed Seedfall nobody opened stops being pointed at once the next
 // one is due (an interval after it landed): its column stands, but it no
 // longer holds one of the few arrows.
-export const SEEDFALL_STALE_S = (SEEDFALL_AT_S[1] ?? 200) - (SEEDFALL_AT_S[0] ?? 120);
+export const SEEDFALL_STALE_S = SEEDFALL_EVERY_S;
 
 export function seedfallPointed(landsAt: number, landed: boolean, now: number): boolean {
   return !landed || now - landsAt <= SEEDFALL_STALE_S;

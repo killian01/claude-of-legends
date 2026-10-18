@@ -12,6 +12,17 @@ import { RING_CREATURES_AT_S, type RoyaleVariant, WARDEN_AT_S } from '../royale/
 // matches ended before anyone opened it (86% of the Seedfalls opened over
 // seeds 1 to 40); every 70 s, 92% (the report, tuning round 1, 2026-10-04).
 export const SEEDFALL_AT_S: readonly number[] = [120, 190, 260, 330, 400];
+// Respawn opens with one more, the Opening Seedfall: it lands at 1:00,
+// called at 0:30 in the calm, so the first minute on the planet already
+// has a seed to race for. One life keeps its calm whole: its first call
+// still comes as the calm ends.
+export const SEEDFALL_OPENING_S = 60;
+export const SEEDFALL_TIMES: Readonly<Record<RoyaleVariant, readonly number[]>> = {
+  one_life: SEEDFALL_AT_S,
+  respawn: [SEEDFALL_OPENING_S, ...SEEDFALL_AT_S],
+};
+// The interval between two Seedfalls after the first two minutes.
+export const SEEDFALL_EVERY_S = 70;
 // A Seedfall is called this long before it lands (the announce draws its
 // point and tells everyone). 20 s called seeds 70 to 200 m away that
 // nobody could reach before the impact (the second playtest, 2026-10-04);

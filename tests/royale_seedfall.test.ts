@@ -24,6 +24,7 @@ import {
   SEEDFALL_PAIR_M,
   SEEDFALL_PIECES,
   SEEDFALL_REACH_M,
+  SEEDFALL_TIMES,
   SEEDFALL_WARN_S,
 } from '../src/sim/content/royale_events';
 import { dirTo, dist, type Vec3 } from '../src/sim/geo';
@@ -36,6 +37,7 @@ import { RoyaleMode } from '../src/sim/royale/mode';
 import { royaleLayoutOf } from '../src/sim/royale/planet_map';
 import {
   drawSeedfallPoints,
+  firstSeedfallCallAt,
   seedfallCap,
   seedfallReward,
   seedfallSchedule,
@@ -131,24 +133,30 @@ function combatCtx(sim: Sim): Parameters<typeof dealDamage>[0] {
 }
 
 describe('the schedule', () => {
-  it('calls five Seedfalls from 2:00, every 70 s, 30 s ahead, two seeds each in Respawn', () => {
+  it('calls five Seedfalls from 2:00, every 70 s, 30 s ahead; Respawn opens with one more', () => {
     const land = DROP_S;
     const one = seedfallSchedule('one_life', land);
     expect(SEEDFALL_AT_S).toEqual([120, 190, 260, 330, 400]);
     expect(SEEDFALL_WARN_S).toBe(30);
     expect(one.map((c) => c.landsAt)).toEqual([130, 200, 270, 340, 410]);
     expect(one.map((c) => c.announceAt)).toEqual([100, 170, 240, 310, 380]);
-    // The first is called as the calm ends, never during it.
+    // One life's first is called as the calm ends, never during it.
     expect(one[0]!.announceAt).toBe(land + CALM_S);
+    expect(firstSeedfallCallAt('one_life', land)).toBe(land + CALM_S);
     expect(one.map((c) => c.ids)).toEqual([[0], [1], [2], [3], [4]]);
     const two = seedfallSchedule('respawn', land);
-    expect(two.map((c) => c.landsAt)).toEqual(one.map((c) => c.landsAt));
+    // Respawn's Opening Seedfall lands at 1:00, called at 0:30 in the calm.
+    expect(two.map((c) => c.landsAt)).toEqual([land + 60, ...one.map((c) => c.landsAt)]);
+    expect(two[0]!.announceAt).toBe(land + 30);
+    expect(two[0]!.announceAt).toBeLessThan(land + CALM_S);
+    expect(firstSeedfallCallAt('respawn', land)).toBe(land + 30);
     expect(two.map((c) => c.ids)).toEqual([
       [0, 1],
       [2, 3],
       [4, 5],
       [6, 7],
       [8, 9],
+      [10, 11],
     ]);
   });
 });
@@ -507,7 +515,7 @@ describe('on the wire', () => {
   it('sends the Seedfalls on change and once a second, from the first call on', () => {
     const { sim, snap } = fakeSnap();
     sim.royale.stage = 'play';
-    const callAt = DROP_S + SEEDFALL_AT_S[0]! - SEEDFALL_WARN_S;
+    const callAt = DROP_S + SEEDFALL_TIMES.respawn[0]! - SEEDFALL_WARN_S;
     sim.time = callAt - 1;
     expect(snap().royale).not.toHaveProperty('sf');
     sim.time = callAt;

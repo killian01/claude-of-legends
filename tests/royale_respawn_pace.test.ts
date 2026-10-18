@@ -300,10 +300,11 @@ describe('a whole Respawn match of house bots', () => {
     const mode = sim.royaleMode!;
     while (mode.state.stage !== 'over' && sim.time < DROP_S + PLAY_S + 5) sim.tick();
     const t = mode.tally;
-    expect(t.seedfallsLanded).toBe(10);
+    // Six Seedfalls of two seeds, the Opening Seedfall at 1:00 included.
+    expect(t.seedfallsLanded).toBe(12);
     // Tranche 1, before the held opening: 3 to 6 of 10 opened, 0 to 2
     // fought over (seeds 1 to 3).
-    expect(t.seedfallsOpened).toBeGreaterThanOrEqual(9);
+    expect(t.seedfallsOpened).toBeGreaterThanOrEqual(11);
     expect(t.seedfallsContested).toBeGreaterThanOrEqual(t.seedfallsOpened * 0.6);
     // The field still fights: about ninety takedowns a minute.
     expect(t.takedowns).toBeGreaterThan(600);

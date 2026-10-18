@@ -66,7 +66,7 @@ export const PILLAR_LOOKS: Partial<Record<PillarKind, KindLook>> = {
   ablaze: { color: 0xff8a3c, height: 40, width: 0.7, countdown: 1, reach: 1 },
 };
 
-// At most this many columns of a kind (five Seedfalls a match).
+// At most this many columns of a kind (six Seedfalls a match in Respawn).
 const MAX_PER_KIND = 8;
 // The countdown ring at its widest, as a multiple of the reach.
 const RING_WIDEST = 2.5;
