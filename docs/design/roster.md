@@ -139,6 +139,17 @@ eleventh champion, added after launch (`src/sim/content/champions/nisk.ts`).
 - E, Bittertip: for a few seconds every attack poisons, each hit renewing the one poison instead of stacking another.
 - R, Sourpods: hidden pods from a store of charges, a few on the ground at once for minutes, seen by an enemy only under its own reveal zone, never by walking near; an enemy champion stepping on one bursts it into a cloud of poison that slows.
 
+### Ostrand, the Pledgeblade (Fighter, top), in design
+
+A knight who picks one enemy and will not let go. Not yet in the game; the design and its
+slices are `docs/design/ostrand.md`.
+
+- Passive, Sworn: the first enemy champion he damages is his Sworn for a few seconds: faster toward it, harder on it, a heal and a Lance Drive refresh on its takedown.
+- Q, Lance Drive: a short line thrust that slows, harder on the Sworn.
+- W, Standard: a planted banner zone where allies take less damage from champions and enemies are revealed.
+- E, Gauntlet Throw: a skillshot that names the Sworn; recast to dash to it.
+- R, Oathfield: a closed ring of wall around him; nobody walks or dashes in or out, projectiles fly over.
+
 ## Coverage check
 
 Roles: 2 top (tank, fighter), 3 mid or flex (mage, assassin, battlemage), 3 marksman, 2 support (heal, engage), 1 skirmisher flex. These are the home lanes (`CONTEXT.md`): the fill completes a team by them and the sim seats each champion in its own. Every crowd-control primitive, projectile shape, and zone type is exercised by at least one kit, so the roster doubles as a test matrix for the effect system.

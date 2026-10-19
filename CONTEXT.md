@@ -393,6 +393,20 @@ brush; taking damage restarts the count. Its own side sees it half see-through. 
 Low is the one passive that lurks (src/sim/lurk.ts).
 _Avoid_: invisibility (players read "Hidden", the status chip's word)
 
+**Sworn**:
+The one enemy champion Ostrand's passive has marked: the first he damages, or the one his
+Gauntlet Throw or Oathfield names, for a few seconds renewed by every hit. He walks faster
+toward it and strikes it harder; both teams see the mark. One Sworn at a time.
+In design (docs/design/ostrand.md), not yet in the game.
+_Avoid_: target, marked (a Barbed Mark's word), duel
+
+**Oathfield**:
+Ostrand's ultimate: a closed ring of wall raised around him for a few seconds. Like every
+ability wall it blocks walking, pathing and traveling dashes and lets projectiles and sight
+pass, so whoever is inside stays inside and the fight outside can still shoot in; a blink
+crosses it. In design (docs/design/ostrand.md), not yet in the game.
+_Avoid_: arena, cage, ring (the creature site's word)
+
 **Mastery**:
 A purely cosmetic per-champion rank derived from a player's recorded online matches on that champion (server/mastery.ts thresholds). Shown on the career profile with a title per rank; never affects gameplay, matchmaking, or rating.
 _Avoid_: champion points, grind level
