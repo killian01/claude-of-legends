@@ -17,9 +17,21 @@ import { newsImageUrl } from './news_images';
 // 2026-10-02).
 const CSS = `
 .nw, .nw * { box-sizing: border-box; }
+/* Transparent over the backdrop, which stands beside the scroller rather
+   than in it (openNews): a fixed layer inside it paints over its scrollbar,
+   whatever its z-index. */
 .nw {
-  position: absolute; inset: 0; z-index: 30; overflow-y: auto; background: #0a1120;
+  position: absolute; inset: 0; z-index: 30; overflow-y: auto; background: transparent;
   font-family: system-ui, sans-serif; color: #c9d6ea;
+}
+/* The page's own scrollbar, in its dark and gold rather than the
+   browser's grey, as the ladder page has it. */
+.nw::-webkit-scrollbar { width: 10px; }
+.nw::-webkit-scrollbar-track { background: #070b14; }
+.nw::-webkit-scrollbar-thumb { background: #6b5a2e; border-radius: 5px; border: 2px solid #070b14; }
+.nw::-webkit-scrollbar-thumb:hover { background: #8a7430; }
+@supports not selector(::-webkit-scrollbar) {
+  .nw { scrollbar-width: thin; scrollbar-color: #6b5a2e #070b14; }
 }
 .nw-inner { position: relative; z-index: 1; max-width: 760px; margin: 0 auto;
   padding: 26px 20px 56px; }
@@ -149,8 +161,8 @@ export function openNews(container: HTMLElement, o: NewsOptions = {}): () => voi
   inner.appendChild(head);
   for (const e of orderNews(allNews(), now)) inner.appendChild(buildEntry(e, now, o));
   root.appendChild(inner);
-  const stopBackdrop = startBackdrop(root, inner);
   container.appendChild(root);
+  const stopBackdrop = startBackdrop(container, root);
 
   const close = (): void => {
     window.removeEventListener('keydown', onKey);

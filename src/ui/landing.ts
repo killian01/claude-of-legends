@@ -255,6 +255,13 @@ const CSS = `
    the Play now card and the account card once they stack, so a phone
    reaches it on the second screen rather than after the form. */
 .pg.land .pg-cards > .pg-ladder { order: -1; margin: 0; width: auto; }
+/* Beside the Play now card the grid stretches the ladder's box to that
+   card's height: the rows take all of it and scroll inside it, rather than
+   stopping at their own ceiling over an empty half box. */
+@media (min-width: 1121px) {
+  .pg.land .pg-cards > .pg-ladder { display: flex; flex-direction: column; }
+  .pg.land .pg-cards > .pg-ladder ol { flex: 1 1 0; min-height: 0; max-height: none; }
+}
 /* A phone's card is about 300 wide: one line, at a size that fits it. */
 @media (max-width: 560px) {
   .pg.land .menu-btn.pg-play { font-size: 13.5px; letter-spacing: 0.6px;
@@ -405,6 +412,10 @@ const CSS = `
   letter-spacing: 0.5px; color: #f0dca0; }
 .pg.land .pg-news .pg-news-go { flex: none; font-size: 20px; line-height: 1; color: #c9a84a; }
 .pg-news-host { position: fixed; inset: 0; z-index: 40; }
+/* While the news is open over it, the landing does not scroll: its own
+   scrollbar would stand over the news's at the right edge and scroll the
+   page behind. Its place is kept for when the news closes. */
+.pg.land.pg-news-open { overflow-y: hidden; }
 
 /* The contribution band, under the two ways in. It is the one section
    here that is not about playing, so it is set apart rather than made
@@ -824,6 +835,7 @@ export function showLanding(
       line.addEventListener('click', () => {
         const host = el('div', 'pg-news-host');
         root.appendChild(host);
+        root.classList.add('pg-news-open');
         const stop = openNews(host, {
           onLink: () => {
             remove();
@@ -832,12 +844,14 @@ export function showLanding(
           },
           onClosed: () => {
             host.remove();
+            root.classList.remove('pg-news-open');
             frame.closed();
           },
         });
         const remove = (): void => {
           stop();
           host.remove();
+          root.classList.remove('pg-news-open');
         };
         const frame = appNav().push('news', remove);
       });
