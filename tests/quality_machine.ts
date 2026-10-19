@@ -228,11 +228,12 @@ export function playMatch(m: MatchMachine): Played {
       away = false;
     }
     const before = dial.index;
-    free = Math.max(free, at) + m.workMs(dial.rung, dial.lean, at);
+    const work = m.workMs(dial.rung, dial.lean, at);
+    free = Math.max(free, at) + work;
     const last = at;
     at = shownAt(at, free, refreshMs, m.strict === true);
     if (last >= SETTLE && before > 0) belowMs += at - last;
-    dial.frame(at, 2);
+    dial.frame(at, m.scriptShare === undefined ? 2 : m.scriptShare * work);
     if (dial.index !== before) changes.push({ at, index: dial.index });
     if (ladder.settled !== settled.at(-1)!.index) settled.push({ at, index: ladder.settled });
   }

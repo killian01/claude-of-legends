@@ -22,6 +22,9 @@
 // from, kept when it holds three quarters. A failed step holds the next of
 // its kind back, twice as long after each, never past a ceiling.
 //
+// Far under the target (half of it), the script's share holds no step
+// back: a context drawn in software spends its pixels in the script.
+//
 // A browser hands requestAnimationFrame the refresh's time, so frames that
 // all take two refreshes on a 60 Hz screen read as a 30 Hz screen's would
 // (frame_rate.ts): the rate known before the match stands over a whole
@@ -47,6 +50,7 @@ export const LADDER_RULES = {
   upHoldMs: 20_000, // after a step up undone, doubling
   upHoldMostMs: 300_000,
   scriptShare: 0.75, // frames this much script are not held back by pixels
+  farShare: 0.5, // of the target: under it, the script's share holds nothing back
   topQuantile: 0.9, // the top's share: nine windows in ten at it or under
   walkFastShare: 0.45, // of the target: under it, a fast screen's refreshes walk
 };
@@ -274,14 +278,18 @@ export class QualityLadder {
   }
 
   // Not from the floor, nor from the top in its first seconds, nor for
-  // frames held back by their script, nor while a failed step's hold runs
-  // unless the page has slowed well under that step's before (a new pace).
+  // frames held back by their script unless far under the target, nor
+  // while a failed step's hold runs unless the page has slowed well under
+  // that step's before (a new pace). A context that draws as it is called
+  // (in software, or a driver that waits for the GPU) shows its pixels as
+  // script: far under, only a trial tells the two apart.
   private mayStepDown(rate: number, script: number, at: number): boolean {
     const r = LADDER_RULES;
+    const target = Math.min(r.capHz, this.screenHz ?? r.capHz);
     return (
       this.current < this.floor &&
       (this.current > 0 || this.topMs >= r.startMs) &&
-      script < r.scriptShare &&
+      (script < r.scriptShare || rate < r.farShare * target) &&
       (at >= this.downHeldUntil || rate * r.gain < this.heldBefore)
     );
   }

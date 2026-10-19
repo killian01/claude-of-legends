@@ -25,7 +25,8 @@
 //    and its lean falls a level each five matches, to none.
 // E. A sudden steady drop to 2 to 22 frames a second has a step kept within
 //    60 s, or within the hold of a step undone before it and 60 s, on a 120
-//    or 144 Hz screen waiting for its refresh too.
+//    or 144 Hz screen waiting for its refresh too, and on a context drawn
+//    in software, its pixels all script.
 // F. Matches of 2 to 10 minutes, as when a player joins a running one, hold
 //    all of that.
 
@@ -331,6 +332,26 @@ describe('E. a sudden steady drop', () => {
             expect(steppedAfter(p!, drop), `${fps} at ${drop}`).toBeLessThanOrEqual(60);
           }
         }
+      }
+    }
+  });
+
+  it('has one within 60 s on a context drawn in software, its pixels all script', () => {
+    for (const strict of [false, true]) {
+      for (const fps of [2, 3, 5, 8, 12, 15, 20, 22]) {
+        const drop = 25_000;
+        const weak = fill(1000 / fps, 2);
+        const [p] = series([
+          {
+            refreshHz: 60,
+            strict,
+            top: 2,
+            scriptShare: 0.95,
+            seconds: drop / 1000 + 70,
+            workMs: (r, l, at) => (at < drop ? 9 * (r.ratio / 2) ** 2 : weak(r, l, at)),
+          },
+        ]);
+        expect(steppedAfter(p!, drop), `${fps} ${strict}`).toBeLessThanOrEqual(60);
       }
     }
   });

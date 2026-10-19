@@ -216,6 +216,41 @@ describe('a step down', () => {
     expect(tried(0.74)).toBe(true);
   });
 
+  it('is tried under half the target whatever the script, and kept when the pixels pay', () => {
+    // Every frame's time its script's, as a context drawn in software
+    // shows it: 8 a second at the top and 14 a rung down is kept; 29 is
+    // tried, 31 is not.
+    const slow = exact(
+      ladderFor(),
+      (i) => (i === 0 ? 8 : 14),
+      120,
+      () => 0.97,
+    );
+    expect(slow.settled.map((s) => s.index).slice(0, 2)).toEqual([0, 1]);
+    const tried = (fps: number) =>
+      exact(
+        ladderFor(),
+        () => fps,
+        120,
+        () => 0.97,
+      ).changes.length > 0;
+    expect(tried(29)).toBe(true);
+    expect(tried(31)).toBe(false);
+  });
+
+  it('far under the line and held back by its script, is undone and held as any other', () => {
+    // 8 whatever the rung: each trial undone, the next held back as long
+    // as the holds say, the top stood on between them.
+    const run = exact(
+      ladderFor(),
+      () => 8,
+      600,
+      () => 0.97,
+    );
+    expect(run.settled.at(-1)!.index).toBe(0);
+    expect(downsFromTop(run.changes).length).toBeLessThanOrEqual(5);
+  });
+
   it('is never tried on a 144 Hz screen drawing 46, its target capped at 60', () => {
     const m: Machine = { refreshHz: 144, top: 1.25, workMs: () => 21.7 };
     const l = ladderFor(1.25, 144);
