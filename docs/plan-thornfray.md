@@ -187,6 +187,30 @@ on the tick's `damage` events, plays the whole chain. The battle royale does not
   end the bout by 115 s; the places are the falls' order, a same-tick pair placed by health
   before; no Seedfall, Rising, camp or pad; a replay matches. The end checksum, counts and
   ranking on seed 1 pinned in `tests/thornfray_bout_versions.test.ts`.
+- As built:
+  - `playS` is 120, the most a bout may have: the design gives Lastwick no clock of its own
+    ("about 100 s at the latest"), and every bout stops at its clock, so the clock stands past
+    the dark (92 s, 12 percent a second and more every 10 s, about 100 s from full health) as a
+    backstop. The test checks the bout ends by its rule, not its clock, by 115 s, and that the
+    clock, when it does end one (the champions kept standing by hand), ranks those standing by
+    health.
+  - The kind's `systems` names the Clamors alone. The Reprieve the design turns off has no rule
+    in the sim yet (`RoyaleState.reprieveUsed` is never written), so nothing turns it off.
+  - The kind's `bots` data is `{ errand: null, floor: 0, reach: 0, duskMargin: 0.5, cornered: 8,
+    pace: null }`; nothing reads it until slice 4, and a bout's bots play the planet's brain.
+    With that brain, on seeds 1 to 6 (bout 1 of the match, its region by the ledger's draw over
+    a pool of Lastwick alone) the rule
+    ended the bout at 87, 80, 94, 82, 92 and 85 s, seven takedowns each, five to nine caches
+    opened, the first fall mostly past 60 s (the 14 m light): slice 4's fight on sight moves it.
+  - The pinned bout in `tests/thornfray_bout_versions.test.ts` is the first bout of match seed 1
+    (its seed `boutSeed(1, 0)`, eight house seats from `boutPicks(1)`), its region named in the
+    entry (`'groves'`, that same draw for match seed 1) so a later kind in the registry never
+    moves it; each entry also names the kind's version and the engine's it was captured under.
+  - Its tests also cover the twelve caches inside the Thornyard and never back (every region has
+    16 spots or more within 40 m of its heart) and run no Burr, Last light or Upstart besides the
+    plan's list; the replay loads from the registry's default kinds.
+  - `docs/design/thornfray.md`'s Lastwick section now says the Dusk is drawn forward (slice 1's
+    change) and names its data file; its Adding a bout section points to the guide.
 
 ### 3. Starglean
 

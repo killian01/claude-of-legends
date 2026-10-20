@@ -313,7 +313,7 @@ The last one standing, fast. One life's death: a fall is out for the bout.
 |---|---|
 | Base | One life |
 | Thornyard | Chord radius 40 m (about 5,030 m2, a sixteenth of the planet), any region |
-| Clock | The light goes out 92 s after landing (`lightOutS`); the bout ends when one champion stands, about 100 s at the latest |
+| Clock | The light goes out 92 s after landing (`lightOutS`); the bout ends when one champion stands, about 100 s at the latest; its clock (`playS`) at 120 s only a backstop |
 | Dusk | Calm to 20 s (outside the Thornyard burns 3 percent of maximum health a second). Phase 3 closes to 26 m from 20 to 35 s, holds to 45 (4 percent); phase 4 to 14 m from 45 to 60, holds to 70 (7 percent); phase 5 to 5 m from 70 to 82, holds to 92 (12 percent); then phase 6, dark, 12 percent a second and 12 more every 10 s. Edge speed 1.1 m/s, against the planet's 0.74 |
 | Caches | 12 at landing (the golden spot inside first), never back; every region has at least 16 spots within 40 m of its heart |
 | Off | Seedfalls, Risings, camps, pads, the marks, the Reprieve |
@@ -323,10 +323,11 @@ The last one standing, fast. One life's death: a fall is out for the bout.
 | HUD | "Lastwick · 0:41 · 5 left", win line "Last one standing wins · Bout 2 of 6" |
 | Card | "Last one standing wins", "A fall is out until the next bout", "The light closes fast: keep inside it" |
 
-The Dusk is built backwards from a final point inside the Thornyard as the planet's is
-(`src/sim/royale/dusk.ts`), its first cap the Thornyard itself instead of the whole planet. Each
-closing shrinks about a meter a second; a champion walks 3.7 m/s, so the light is outrun easily
-and fought over always.
+The Dusk's first cap is the Thornyard itself instead of the whole planet, and its caps are drawn
+forward from the Thornyard's heart toward a final point inside it (`src/sim/royale/dusk.ts`
+`drawPlannedDusk`), each slide within what the edge speed allows. Each closing shrinks about a
+meter a second; a champion walks 3.7 m/s, so the light is outrun easily and fought over always.
+Its data is `src/sim/content/bouts/lastwick.ts`.
 
 ## Starglean
 
@@ -454,6 +455,9 @@ by 720, 1366 by 768, 1920 by 1080), then checked with `.dev/phone_measure.mjs` a
 move, one browser at a time.
 
 ## Adding a bout
+
+The guide the creator loop follows, step by step with Lastwick's choices, is
+`docs/adding-a-bout.md`; this is its outline.
 
 A kind built from the engine's pieces (a Dusk plan, the systems and the Risings' times, the goal
 primitives, a scorer over the tick's events) is one night's change for the creator loop: a data
