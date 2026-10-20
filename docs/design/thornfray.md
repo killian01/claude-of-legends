@@ -563,3 +563,13 @@ The bouts the maintainer has named for the weeks after:
   keep, or count a Thornfray's six as one.
 - **Starglean in the Cypress groves**: 10 caches there against 18 in the Ruins, or Starglean
   kept to the regions with room for 18.
+- **Lastwick's length, and a seat that gives no order.** Measured on match seeds 1 to 12
+  (`node scripts/thornfray_report.mjs --standin`), Lastwick ends at 0:51 (median) against the
+  90 to 120 s it was drawn for, and a seat that gives no order places 2.5 there: it lands
+  somewhere quiet, burns once the first closing passes it (about 47 s), and by then the house
+  bots have felled most of each other. Over the released pool it banks 13.4 bushels a match
+  against an even share of 13.1, placing 7.2 in Starglean. A calm nerve or a pace in
+  `LASTWICK_BOTS` would slow the falls by making the bots shy of a fight, which the house bots
+  never are; an errand walking a bot with nobody in sight to the center of the light to come
+  changed no place and shortened the bout. Left to choose: the bout's health, the arc's level,
+  the Dusk's closings.
