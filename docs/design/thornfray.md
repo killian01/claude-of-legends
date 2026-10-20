@@ -147,6 +147,10 @@ pieces, the prize Graft if it won the bout before. The bout runs to its own rule
 (the last one standing, or its clock). The first tick a bout ends the next Lull begins; nothing
 waits between them.
 
+The Dusk's burn reaches health past every shield in a bout. It leaves the clock of the last hit
+alone, as on the planet, so a shield that comes back after a calm (Korrath's Shieldskin) came
+back every tick under it and held it off for good: a Korrath standing in the dark won Lastwick.
+
 ### Bushels
 
 | Place | 1st | 2nd | 3rd | 4th | 5th | 6th to 8th |

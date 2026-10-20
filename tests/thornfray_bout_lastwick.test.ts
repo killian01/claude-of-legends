@@ -30,7 +30,14 @@ import { DROP_S } from '../src/sim/royale/types';
 import type { Sim, SimEvent } from '../src/sim/sim';
 import { DT } from '../src/sim/types';
 import { loadPlanet } from './royale_planet';
-import { type BoutArgs, boutReplay, buildBout, land, playOut } from './thornfray_fixture';
+import {
+  type BoutArgs,
+  boutPicks,
+  boutReplay,
+  buildBout,
+  land,
+  playOut,
+} from './thornfray_fixture';
 
 const planet = loadPlanet();
 const layout = royaleLayoutOf(planet.layout);
@@ -176,6 +183,30 @@ describe('the Lastwick Thornyard', () => {
     for (let i = 1; i < Math.round(1 / DT); i++) burned += burnOf(sim.tick());
     expect(burned).toBeCloseTo(out.maxHp * 0.03, 6);
     expect(inside.hp).toBe(full.inside);
+  });
+
+  it('burns a Korrath left outside it past his Shieldskin, down to his fall', () => {
+    // Korrath's passive shields him after 4 s with no damage taken, and the
+    // burn leaves that clock alone: absorbed, his shield came back every
+    // tick and the burn never reached his health.
+    const picks = boutPicks(1);
+    picks[0] = { ...picks[0]!, championId: 'korrath' };
+    const { sim, unitIds } = buildBout({ kind: LASTWICK, region: 'cliffs', seed: 6, picks });
+    idle(sim, unitIds);
+    land(sim);
+    const korrath = sim.units.get(unitIds[0]!)!;
+    expect(korrath.championId).toBe('korrath');
+    korrath.pos = farFrom('cliffs');
+    korrath.path = [];
+    const full = korrath.hp;
+    // Five calm seconds: his shield is up, and the burn goes past it.
+    for (let i = 0; i < Math.round(5 / DT); i++) sim.tick();
+    expect(korrath.statuses.some((s) => s.kind === 'shield')).toBe(true);
+    expect(full - korrath.hp).toBeGreaterThan(korrath.maxHp * 0.03 * 4);
+    // Left there, he falls to it as anyone would, inside the bout's first
+    // minute.
+    while (!korrath.dead && sim.time < DROP_S + 60) sim.tick();
+    expect(korrath.dead).toBe(true);
   });
 });
 

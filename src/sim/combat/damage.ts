@@ -41,6 +41,9 @@ export function dealDamage(
   amount: number,
   dtype: DamageType,
   via: DamageVia = 'other',
+  // Straight to health, every shield passed by: the Dusk's burn in a
+  // Thornfray's bout (royale/mode.ts stepDusk), nothing else.
+  pastShields = false,
 ): void {
   if (ctx.dead.has(target.id) || target.dead) return;
   // Untargetable units (Fenn's Shadow Flurry) take nothing from anyone.
@@ -78,7 +81,7 @@ export function dealDamage(
   const mitigated = amount * mitigationMultiplier(target, dtype, penFlat, penPct);
   // Shield-absorbed hits still count as taking damage (Shieldskin timing).
   if (mitigated > 0) target.lastDamagedAt = ctx.time;
-  const after = absorbWithShields(target, mitigated, ctx.time);
+  const after = pastShields ? mitigated : absorbWithShields(target, mitigated, ctx.time);
   if (after <= 0) return;
   cancelRecall(target);
   // Aggro memory for the laning rules: towers and minions turn on a

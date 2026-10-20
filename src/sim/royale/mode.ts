@@ -721,6 +721,10 @@ export class RoyaleMode {
   // burn outside it. The burn is no fight: it leaves the out of combat
   // clock and a cache's opening alone, and a kill it makes goes to the
   // last enemy who hit the champion inside the credit window, else nobody.
+  // In a bout it reaches health past every shield: leaving the clock alone,
+  // it let a shield that comes back after a calm (Korrath's Shieldskin)
+  // return every tick and hold the burn off for good, and a Korrath who
+  // stood in the dark won Lastwick.
   stepDusk(ctx: CombatCtx, sim: Sim): void {
     const before = this.state.dusk.phase;
     const d = duskAt(this.schedule, ctx.time);
@@ -731,7 +735,7 @@ export class RoyaleMode {
       if (u.kind !== 'champion' || u.dead || ctx.dead.has(u.id)) continue;
       if (u.pos.y === undefined || insideCap(d.now, u.pos as Vec3)) continue;
       const hitAt = u.lastDamagedAt;
-      dealDamage(ctx, 0, u, u.maxHp * d.burn * DT, 'true');
+      dealDamage(ctx, 0, u, u.maxHp * d.burn * DT, 'true', 'other', this.bout !== null);
       u.lastDamagedAt = hitAt;
       if (ctx.dead.has(u.id)) this.duskHit.add(u.id);
     }
