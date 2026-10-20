@@ -23,7 +23,7 @@ on its own, with its tests green, and changes nothing a player sees until slice 
 | Lastwick | One life; closings as phases 3, 4, 5, the Thornyard closed to 5 m by 82 s, dark (phase 6) at 92 s; 12 caches, never back; places by the order of the falls. |
 | Starglean | Respawn; 105 s; one closing (phase 5), the light held to 120 s; up to 18 caches (the spots inside less six), back after 30 s; Seedfall bursts of three at 25, 55, 85 s called 12 s ahead, read 15 s past the impact, every seed 18 m from every other; a cache 1, golden 2, Seedfall 3, a takedown takes one. |
 | Bots | The house brain with the bout's data; the drop inside the Thornyard; the planet's Respawn errand off; one errand per kind in `BOUT_CALLS`, asked after the fight block; fight on sight in every bout. |
-| Versions | `ROYALE_RULES_VERSION` moves only if the golden checksums move. Each bout record carries its kind's `version`, its computed `boutFingerprint` and `BOUT_ENGINE_VERSION`; each released kind's end checksum, counts and ranking pinned. |
+| Versions | `ROYALE_RULES_VERSION` moves only if the golden checksums move. Each bout record carries its kind's `version`, its computed `boutFingerprint` and `BOUT_ENGINE_VERSION`; each released kind's first bout and Final pinned at their ends, and the engine's shared data. |
 
 ## The build
 

@@ -104,9 +104,11 @@ rests on.
   `BOUT_ENGINE_VERSION` (the seams, the ledger, the shared scorers, the brain's bout branch).
   `royaleReplayPlayable` checks all three. The fingerprint moves by itself with any data change;
   the code it cannot see (functions are left out of `canonical()`) is held by
-  `tests/thornfray_bout_versions.test.ts`, which pins each released kind's end checksum, counts
-  and ranking on seed 1, so any drift fails CI until the right version moves. `REPLAY_VERSION`
-  and the content fingerprint do not move: the 5v5 runs none of this.
+  `tests/thornfray_bout_versions.test.ts`, which pins each released kind's first bout and its
+  Final on seed 1 at their ends (checksum, counts, ranking, bushels, the prize's cards, the
+  prizes left open, the Grafts picked) and the engine's shared data (the rising arc of every
+  bout, the bushels, the prize), so any drift fails CI until the right version moves.
+  `REPLAY_VERSION` and the content fingerprint do not move: the 5v5 runs none of this.
 
 ## Considered and rejected
 

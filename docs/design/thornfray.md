@@ -501,8 +501,8 @@ the work goes:
    goal from the observation alone, asked after the fight block; its numbers in
    `src/sim/content/bots/bout_skills.ts`.
 6. **The gates.** `CORE_ON_THE_PLANET` (`tests/architecture.test.ts`) reads every file under
-   `src/sim/royale/` from the directory, so a new module is guarded with no edit; the kind's end
-   checksum, counts and ranking on seed 1 are pinned in `tests/thornfray_bout_versions.test.ts`.
+   `src/sim/royale/` from the directory, so a new module is guarded with no edit; the ends of the
+   kind's first bout and its Final on seed 1 are pinned in `tests/thornfray_bout_versions.test.ts`.
 7. **The test**, `tests/thornfray_bout_<id>.test.ts`, on the shared bout harness
    (`tests/thornfray_fixture.ts`): eight house bots on seeds 1 to 3 end the bout within its
    clock and fifteen seconds; the ranking is total and follows the count; the count counts what

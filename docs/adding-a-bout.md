@@ -19,7 +19,7 @@ contract and Adding a bout) and the build plan (`docs/plan-thornfray.md`).
 | `src/sim/content/bouts/index.ts` | One import and one entry in `BOUT_KINDS`. |
 | `src/sim/content/bots/bout_skills.ts` | Its bots' numbers, `LASTWICK_BOTS`, the kind's `bots`. |
 | `tests/thornfray_bout_lastwick.test.ts` | The kind's own test. |
-| `tests/thornfray_bout_versions.test.ts` | Its end checksum, length, counts and ranking on match seed 1. |
+| `tests/thornfray_bout_versions.test.ts` | Its first bout's and its Final's ends on match seed 1. |
 | `CONTEXT.md` | Its entry, written with the design before any code. |
 
 No module of its own: its count is the shared survival scorer, it stands no goal, and its bots
@@ -149,9 +149,11 @@ place of the fifty seat tunings: its policy carries them as it carries the seat'
 - `tests/thornfray_bouts.test.ts` reads the registry: the `CONTEXT.md` entry, the `BOUT_CALLS`
   entry (or `errand: null`), the pinned bout, the test file, the rule's length, the card's lines,
   no dash in the words, and data the engine can play. It runs on every kind with no edit.
-- `tests/thornfray_bout_versions.test.ts` pins the kind's first bout of match seed 1: add an
-  entry with the kind's id, `version`, `engine` (`BOUT_ENGINE_VERSION`) and a region it allows,
-  run the file, and copy the checksum, ticks, counts and ranking from the failure.
+- `tests/thornfray_bout_versions.test.ts` pins the kind's first bout and its Final of match
+  seed 1 (the Final with a prize offered fresh to seat 0 and one carried unpicked to seat 3):
+  add two entries with the kind's id, `version`, `engine` (`BOUT_ENGINE_VERSION`), the index (0
+  and `BOUTS - 1`) and a region it allows, run the file, and copy the checksum, ticks, counts,
+  ranking, bushels paid, offered cards, open prizes and picked Grafts from the failure.
 - `CORE_ON_THE_PLANET` (`tests/architecture.test.ts`) reads every file under `src/sim/royale/`,
   so a new module is guarded with no edit.
 
