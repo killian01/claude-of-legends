@@ -17,13 +17,16 @@ Vitest · Biome. No UI framework; tiny dependency set.
 - `docs/adr/`: the decisions and why. `CONTEXT.md`: the glossary; use its terms in code and docs.
 - `docs/plan-48h.md`: the build plan and phase order. `docs/plan-forge.md`: the Forge build plan.
   `docs/plan-bots.md`: the bots build plan (`docs/design/bots.md`, ADR 0013).
+  `docs/plan-thornfray.md`: the Thornfray build plan (`docs/design/thornfray.md`, ADR 0035);
+  `docs/adding-a-bout.md`: the checklist for a new bout kind.
 
 ## Repo map
 
 | Path | What it is |
 |---|---|
 | `src/sim/` | **Deterministic game core, the source of truth.** No DOM/Three/network imports; runs in browser, server, and headless. |
-| `src/sim/content/` | Data-as-code: champions, items, sigils, the map, bots (`content/bots/`, one file per bot), the default playbooks (`content/playbooks/`). |
+| `src/sim/content/` | Data-as-code: champions, items, sigils, the map, bots (`content/bots/`, one file per bot), the default playbooks (`content/playbooks/`), Thornfray's bout kinds (`content/bouts/`, one file per kind). |
+| `src/sim/royale/` | The battle royale on the Wanderseed, and Thornfray's bout engine (`royale/bouts/`). |
 | `src/sim/playbook/` | The playbook interpreter: a bot's decisions as data (ADR 0013), the validator, the patch operations, the play report. |
 | `src/render/` | Three.js top-down renderer. Reads the world; never mutates it. |
 | `src/game/` | Local input and client glue. |
