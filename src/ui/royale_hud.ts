@@ -12,7 +12,15 @@
 import type { PostMatchAction } from '../game/flow';
 import { requestGameFullscreen } from '../game/fullscreen';
 import type { RoyaleNote } from '../net/royale_client';
-import type { RoyaleResult, SnapDusk, SnapRoyale } from '../net/royale_wire';
+import type {
+  BoutStart,
+  RoyaleResult,
+  SnapDusk,
+  SnapRoyale,
+  ThornfrayResult,
+} from '../net/royale_wire';
+import { PRIZE_LASTS } from '../sim/content/bouts/match';
+import type { BoutKind } from '../sim/content/bouts/types';
 import { CAMPS } from '../sim/content/camps';
 import { CHAMPIONS } from '../sim/content/champions';
 import { CREATURES } from '../sim/content/rings';
@@ -21,10 +29,13 @@ import { effectiveRank } from '../sim/stats';
 import type { TeamId } from '../sim/types';
 import type { Unit } from '../sim/unit';
 import type { IWorld } from '../world_api';
+import { boutCardWords } from './bout_card';
 import { setPortrait } from './champion_art';
 import { setClassName, setData, setHidden } from './dom_write';
 import { fillEndScreen } from './end_screen';
 import { goalBar } from './royale_goal_bar';
+import { prizeSubtitle } from './royale_grafts';
+import { RoyaleHudBout } from './royale_hud_bout';
 import { RoyaleHudGrafts } from './royale_hud_grafts';
 import { type MomentDeath, RoyaleHudMoments } from './royale_hud_moments';
 import {
@@ -76,6 +87,7 @@ import {
 } from './royale_text';
 import { RoyaleWinView } from './royale_win_view';
 import type { SeatLine } from './seat_lines';
+import { thornfrayEndParts } from './thornfray_end_view';
 
 // An enemy champion this close counts as near, for the fight and takedown
 // steps.
@@ -312,6 +324,10 @@ export interface RoyaleHudHost {
   // card on the landing is theirs.
   playing?: boolean;
   onExit: (action: PostMatchAction) => void;
+  // A Thornfray's bout (ADR 0035): its kind and the table it started with
+  // (match_start's royale.tf). The layer is built afresh at each bout
+  // (ui/hud.ts setBout), its variant the bout's.
+  bout?: { kind: BoutKind; start: BoutStart };
 }
 
 const el = <K extends keyof HTMLElementTagNameMap>(
@@ -370,6 +386,9 @@ export class RoyaleHud {
   private readonly grafts: RoyaleHudGrafts;
   // The win card and the win line (ui/royale_win_view.ts).
   private readonly win: RoyaleWinView;
+  // A Thornfray's bout: its words, its chips, the Lull's card
+  // (ui/royale_hud_bout.ts); null in a battle royale.
+  private readonly bout: RoyaleHudBout | null;
 
   constructor(host: RoyaleHudHost) {
     this.host = host;
@@ -411,11 +430,32 @@ export class RoyaleHud {
     this.notes = el('div', 'br-notes');
     this.layer.append(top, this.dropEl, this.feed, this.openEl, this.notes);
     host.root.appendChild(this.layer);
+    const bout = host.bout
+      ? new RoyaleHudBout({
+          root: host.root,
+          layer: this.layer,
+          head,
+          sub,
+          touch: host.touch,
+          kind: host.bout.kind,
+          start: host.bout.start,
+          play: (calls) => this.play(calls),
+        })
+      : null;
+    this.bout = bout;
     this.win = new RoyaleWinView({
       layer: this.layer,
       root: host.root,
       variant: host.variant,
       playing: host.playing ?? true,
+      ...(bout
+        ? {
+            bout: {
+              words: boutCardWords(bout.kind, bout.start.b),
+              line: (r, time, compact) => bout.winLine(r, time, compact),
+            },
+          }
+        : {}),
     });
     sub.prepend(this.win.line);
     this.moments = new RoyaleHudMoments({
@@ -437,6 +477,7 @@ export class RoyaleHud {
     this.grafts = new RoyaleHudGrafts({
       layer: this.layer,
       root: host.root,
+      ...(host.bout ? { subtitle: prizeSubtitle(PRIZE_LASTS) } : {}),
       pick: (card) => host.world.pickGraft?.(host.selfId, card),
       notice: (text) => this.notice(text, null, 'graft'),
     });
@@ -477,13 +518,15 @@ export class RoyaleHud {
       sinceLanding(this.landing, r.st, time),
       r.v === 'respawn' && r.st === 'play' && own?.dead === true,
     );
-    const line = duskLine(r, time);
+    const compact = root.classList.contains('compact');
+    const line = duskLine(r, time, compact);
     if (this.duskText.textContent !== line.text) this.duskText.textContent = line.text;
     setClassName(this.duskEl, `br-dusk ${line.tone}`);
-    const compact = root.classList.contains('compact');
-    const count = countLine(r, compact);
+    const bout = this.bout;
+    const count = bout ? bout.topLine(r, time, compact) : countLine(r, compact);
     if (this.countText.textContent !== count) this.countText.textContent = count;
-    const double = doubleBadge(r, time);
+    // In a Thornfray the x2 is the Final's, the Last light never running.
+    const double = bout ? bout.badge(r) : doubleBadge(r, time);
     setHidden(this.doubleEl, double === null);
     if (double !== null && this.doubleEl.textContent !== double) this.doubleEl.textContent = double;
     // The Dusk's turns, said once each as they come.
@@ -512,6 +555,7 @@ export class RoyaleHud {
       const pill = duskPill(r.dusk.b);
       if (this.burnEl.textContent !== pill) this.burnEl.textContent = pill;
     }
+    bout?.update(r, time, badge !== null, outside === true);
     // The win card's clock and the win line, which steps aside for the pill
     // on a desktop (ui/royale_win_line.ts winLineAside).
     this.win.update(
@@ -701,6 +745,10 @@ export class RoyaleHud {
   // (game/crew_watch.ts).
   deathWords(u: Readonly<Unit>): { title: string; sub: string } {
     const r = this.state();
+    // A Thornfray's One life bout: out until the next, its place of eight.
+    if (this.host.variant === 'one_life' && this.bout) {
+      return { title: 'OUT', sub: this.bout.outLine(r?.place) };
+    }
     if (this.host.variant === 'one_life' && r?.cw) {
       return { title: 'OUT', sub: crewOutLine(r.place) };
     }
@@ -739,6 +787,25 @@ export class RoyaleHud {
       head: this.endCard(model, result),
       lead: progress ? [progress] : [],
       table: this.endRank(model),
+      side: extras,
+      foot: null,
+      ladder: null,
+    });
+    this.host.root.appendChild(end);
+    this.endEl = end;
+    this.host.root.classList.add('overlay-open');
+  }
+
+  // A Thornfray's end screen (ui/thornfray_end_view.ts), from the result the
+  // server sends after the Final; `extras` as the battle royale's.
+  showThornfrayResult(result: ThornfrayResult, extras: readonly HTMLElement[] = []): void {
+    this.endEl?.remove();
+    const end = el('div', 'br-end');
+    fillEndScreen(end, 'royale', {
+      ...thornfrayEndParts(result, (action) => {
+        if (action !== 'menu') requestGameFullscreen();
+        this.host.onExit(action);
+      }),
       side: extras,
       foot: null,
       ladder: null,
@@ -825,6 +892,7 @@ export class RoyaleHud {
   }
 
   dispose(): void {
+    this.bout?.dispose();
     this.win.dispose();
     this.grafts.dispose();
     this.moments.dispose();

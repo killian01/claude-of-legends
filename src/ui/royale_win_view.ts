@@ -24,6 +24,7 @@ import {
   WIN_THUMBS_TOP_PX,
   type WinCardState,
   type WinCardType,
+  type WinCardWords,
   winCardStart,
   winCardUp,
   winCardWidthCss,
@@ -110,6 +111,13 @@ export interface WinViewHost {
   variant: RoyaleVariant;
   // A person plays the seat: the card is theirs.
   playing: boolean;
+  // A Thornfray's bout (ADR 0035): the card's words are the kind's
+  // (ui/bout_card.ts) and the line its own (ui/bout_text.ts boutWinLine),
+  // the view built afresh at each bout so the card comes at its landing.
+  bout?: {
+    words: WinCardWords;
+    line: (r: SnapRoyale, time: number, compact: boolean) => string | null;
+  };
 }
 
 const el = <K extends keyof HTMLElementTagNameMap>(
@@ -160,10 +168,11 @@ export class RoyaleWinView {
     host.layer.appendChild(this.card);
   }
 
-  // The card's words, Solo's or the crews' (the first snapshot tells).
+  // The card's words, Solo's or the crews' (the first snapshot tells), or
+  // the bout's.
   private say(crews: boolean): void {
     this.crews = crews;
-    const words = winCardWords(this.host.variant, crews);
+    const words = this.host.bout?.words ?? winCardWords(this.host.variant, crews);
     this.title.textContent = words.title;
     this.list.textContent = '';
     for (const line of words.lines) this.list.appendChild(el('li', '', line));
@@ -191,7 +200,8 @@ export class RoyaleWinView {
     this.state = stepWinCard(this.state, { time, landed: since !== null, covered: aside });
     this.card.classList.toggle('on', winCardUp(this.state, aside));
     const compact = root.classList.contains('compact');
-    const text = winLineAside({ compact, cardsOpen, burning }) ? null : winLine(r, time, compact);
+    const said = this.host.bout ? this.host.bout.line(r, time, compact) : winLine(r, time, compact);
+    const text = winLineAside({ compact, cardsOpen, burning }) ? null : said;
     setHidden(this.line, text === null);
     if (text !== null && this.line.textContent !== text) this.line.textContent = text;
   }

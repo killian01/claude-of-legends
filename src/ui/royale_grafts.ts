@@ -82,6 +82,13 @@ export function graftCards(offer: SnapGraftOffer, me: GraftReader | null): Graft
 // (the maintainer, 2026-10-04: "on comprend pas").
 export const GRAFT_TITLE = 'Choose a Graft';
 export const GRAFT_SUBTITLE = 'A power for the rest of this match. Take your time.';
+// A Thornfray's prize (ADR 0035, PRIZE_LASTS): a power for the bout it
+// leads into, or for the rest of the match.
+export function prizeSubtitle(lasts: 'next' | 'all'): string {
+  return lasts === 'next'
+    ? 'A power for the next bout. Take your time.'
+    : 'A power for the rest of this match. Take your time.';
+}
 export const GRADE_HINTS: Readonly<Record<GraftGrade, string>> = {
   sprout: 'Stat boost, stacks twice',
   bough: 'Changes a rule',

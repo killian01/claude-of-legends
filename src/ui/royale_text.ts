@@ -15,6 +15,9 @@ import { LAST_LIGHT_FACTOR, lastLightOn } from '../sim/royale/last_light';
 import { nextLootPiece, seatBuild } from '../sim/royale/loot';
 import { CACHE_OPEN_S, MARK_SHOWN_S, type MarkKind } from '../sim/royale/types';
 
+// The calm's word while the outside of the light already burns.
+export const OUTSIDE_BURNS = 'Outside burns';
+
 // Seconds as a clock, rounded up so it reads 0:01 until the moment passes.
 export function clockText(seconds: number): string {
   const s = Math.max(0, Math.ceil(seconds));
@@ -25,10 +28,15 @@ export function clockText(seconds: number): string {
 export type DuskTone = 'calm' | 'hold' | 'close' | 'dark';
 
 // The Dusk line: the calm counting down, the light holding, the Dusk
-// closing, and the last light once it is out.
+// closing, and the last light once it is out. A Thornfray's bout burns
+// outside its Thornyard from the first second (ADR 0035), so its calm says
+// so: "Outside burns · Dusk in 0:14" (the battle royale's calm burns
+// nothing, b 0). On a phone (`compact`) the row beside the count has no
+// room for it: the Dusk's pill says the burn to a champion standing in it.
 export function duskLine(
   r: Pick<SnapRoyale, 'st' | 'dusk'>,
   time: number,
+  compact = false,
 ): {
   text: string;
   tone: DuskTone;
@@ -37,7 +45,10 @@ export function duskLine(
   if (r.st === 'over' || d.p >= 6) return { text: 'Last light', tone: 'dark' };
   const left = clockText(d.pe - time);
   // The calm says what it is waiting for: the Dusk, holding off.
-  if (d.p === 0) return { text: `Dusk in ${left}`, tone: 'calm' };
+  if (d.p === 0) {
+    const text = d.b > 0 && !compact ? `${OUTSIDE_BURNS} · Dusk in ${left}` : `Dusk in ${left}`;
+    return { text, tone: 'calm' };
+  }
   if (d.sh === 1) return { text: `The Dusk closes ${left}`, tone: 'close' };
   return { text: `Light holds ${left}`, tone: 'hold' };
 }
@@ -356,13 +367,14 @@ export function seatName(row: { player: string | null; name: string }): string {
 // Whether a point stands outside the lit cap: its chord distance from the
 // cap's center past the cap's radius (src/sim/royale/types.ts). Null when
 // the point carries no height, as on a client world that keeps x and z
-// alone: then nobody can tell.
+// alone: then nobody can tell. The calm lights the whole planet, unless it
+// burns outside its cap (a Thornfray's bout, its Thornyard).
 export function outsideLight(
   pos: { x: number; z: number; y?: number },
-  dusk: Pick<SnapDusk, 'c' | 'r' | 'p'>,
+  dusk: Pick<SnapDusk, 'c' | 'r' | 'p'> & { b?: number },
 ): boolean | null {
   if (typeof pos.y !== 'number' || !Number.isFinite(pos.y)) return null;
-  if (dusk.p === 0) return false;
+  if (dusk.p === 0 && !((dusk.b ?? 0) > 0)) return false;
   const [cx, cy, cz] = dusk.c;
   const d = Math.hypot(pos.x - cx, pos.y - cy, pos.z - cz);
   return d > dusk.r;

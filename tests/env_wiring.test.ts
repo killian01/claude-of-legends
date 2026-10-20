@@ -26,6 +26,9 @@ const DEPLOYMENT_SET = new Set([
   // Never set in production: it swaps the Forge's provider for a keyless
   // pipeline with placeholder assets.
   'GENERATION_PROVIDER',
+  // Never set in production: it opens a Thornfray on the bout kinds still
+  // in progress (server/thornfray_pool.ts).
+  'THORNFRAY_UNRELEASED',
 ]);
 
 // Names .env carries for the containers beside the game rather than for

@@ -16,6 +16,7 @@
 import * as THREE from 'three';
 import { ownGraceUntil } from '../net/royale_client';
 import type { RoyaleView, SnapCache, WirePoint } from '../net/royale_wire';
+import { boutLineOf } from '../net/thornfray_client';
 import { heartwoodOf } from '../sim/content/grafts';
 import { segmentDist, type Vec3 } from '../sim/geo';
 import { DT, type Vec2 } from '../sim/types';
@@ -32,8 +33,10 @@ import {
   RETURN_GLOBE_DOWN,
   RETURN_GLOBE_RIGHT,
   returnOrbitDistance,
+  thornyardFacing,
 } from './planet_drop';
 import { capAngle, DUSK_UNIFORMS, FADE_TARGETS } from './planet_dusk';
+import { goalDots } from './planet_goals';
 import { ownGraceFresh } from './planet_grace';
 import type { HeartwoodNote } from './planet_graft_aura';
 import { PlanetMarks } from './planet_marks';
@@ -129,6 +132,9 @@ export class PlanetStage {
   private readonly history = new Map<number, PlanetChart>();
   // The drop: the orbit the globe is seen from, and the dive's start.
   private orbit: DropOrbit = { azimuth: 0.35, elevation: 0.5, distance: 270 };
+  // The drop's globe faces a Thornfray bout's Thornyard and holds still,
+  // until a drag turns it.
+  private yard: { center: Vec3; radius: number } | null = null;
   // The drop as the last frame drew it (the globe's camera, the dive's
   // start, the fog): a frame's own state. What a click or a tap means is
   // read off the world as it is now (dropNow), never off this: on a slow
@@ -542,7 +548,13 @@ export class PlanetStage {
   // The drop's camera: the whole globe from its orbit, turning slowly
   // while nobody drags it.
   private placeOrbitCamera(dtMs: number): void {
-    if (!this.drag.active) this.orbit.azimuth += dtMs * 0.00006;
+    // Faced again each frame: the chart moves under the globe as the
+    // champion is set down to wait at the Thornyard's heart.
+    const yard = this.yard;
+    if (yard) {
+      const toward = this.shownAt(yard.center, 0).sub(this.center);
+      this.orbit = facingOrbit(toward, returnOrbitDistance(yard.radius));
+    } else if (!this.drag.active) this.orbit.azimuth += dtMs * 0.00006;
     const c = this.center;
     const at = orbitPosition(c, this.orbit);
     this.camera.position.set(at.x, at.y, at.z);
@@ -570,7 +582,10 @@ export class PlanetStage {
     if (royale) this.dropEndsAt = royale.de;
     const wasDropping = this.dropping;
     this.dropping = stage === 'drop';
-    if (this.dropping && !wasDropping) this.diveFrom = null;
+    if (this.dropping && !wasDropping) {
+      this.diveFrom = null;
+      this.faceThornyard(royale);
+    }
     if (!this.dropping && wasDropping) this.beginDive(follow);
     // The Respawn wait's globe: risen to over the fallen champion, dived
     // from to where it comes back.
@@ -624,6 +639,9 @@ export class PlanetStage {
     );
     // The Heartwoods in sight, standing where the renderer draws them.
     this.marks.graftAura.update(royale?.st === 'play' ? this.heartwoods(drawnAt) : [], now);
+    // A Thornfray bout's goals, on the planet and the globe alike.
+    const goals = boutLineOf(royale)?.goals ?? [];
+    this.marks.goals.update(goals, this.picker, now);
     // An own Grace just begun (an Arrival, a Respawn return): the champion
     // has come down, and lands with the drop's dust and thud.
     const graceUntil =
@@ -637,7 +655,7 @@ export class PlanetStage {
       this.landed = true;
       if (this.base.time - this.dropEndsAt < 2) this.pendingLanding = true;
     }
-    this.minimap.paint(now, royale?.dusk ?? null, this.caches);
+    this.minimap.paint(now, royale?.dusk ?? null, this.caches, goalDots(goals, this.picker));
   }
 
   // What the wait's globe marks (ui/royale_return.ts waitMarks): where the
@@ -647,6 +665,13 @@ export class PlanetStage {
     const body = this.picker !== null ? this.base.units.get(this.picker) : undefined;
     const fell = body?.pos.y !== undefined ? (body.pos as Vec3) : null;
     return waitMarks(royale, this.base.time, this.returnPick, fell, this.radius);
+  }
+
+  // A Thornfray's Lull (planet_drop.ts thornyardFacing): the drop's globe
+  // faces the bout's Thornyard and holds still; a battle royale's drop keeps
+  // its turning orbit.
+  private faceThornyard(royale: RoyaleView | null): void {
+    this.yard = royale ? thornyardFacing(royale.dusk, this.radius) : null;
   }
 
   // The wait's globe rises: the orbit faces the light the return comes
@@ -852,6 +877,8 @@ export class PlanetStage {
       this.drag.x = e.clientX;
       this.drag.y = e.clientY;
       this.drag.moved += Math.abs(dx) + Math.abs(dy);
+      // A drag turns the globe for good: the Thornyard is no longer held.
+      if (this.drag.moved > 8) this.yard = null;
       this.orbit.azimuth -= dx * 0.006;
       this.orbit.elevation = Math.max(-1.35, Math.min(1.35, this.orbit.elevation + dy * 0.006));
     };

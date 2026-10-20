@@ -18,6 +18,7 @@ import type { IWorld } from '../world_api';
 import { type ChartView, ChartWindow, ChartWorld } from './chart_world';
 import { type CellDusk, paintCell } from './minimap_cells';
 import { capAngle } from './planet_dusk';
+import type { GoalDot } from './planet_goals';
 import type { PlanetGround } from './planet_terrain';
 
 // Meters the minimap's square spans.
@@ -72,7 +73,12 @@ export class PlanetMinimap {
   }
 
   // Repaints the background when the chart moved or a beat has passed.
-  paint(now: number, dusk: SnapDusk | null, caches: readonly SnapCache[]): void {
+  paint(
+    now: number,
+    dusk: SnapDusk | null,
+    caches: readonly SnapCache[],
+    goals: readonly GoalDot[] = [],
+  ): void {
     const epoch = this.window.view.epoch;
     const royale = this.base.royaleView?.() ?? null;
     const time = this.base.time;
@@ -82,7 +88,8 @@ export class PlanetMinimap {
     const seedfalls = royale?.st === 'play' ? (royale.sf ?? []) : [];
     const icons = minimapIcons(royale, time);
     // Something on it moves: repaint at the quick beat.
-    const lively = clamors.length > 0 || seedfalls.length > 0 || icons.length > 0;
+    const lively =
+      clamors.length > 0 || seedfalls.length > 0 || icons.length > 0 || goals.length > 0;
     if (!lively && epoch === this.paintedEpoch && now - this.paintedAt < REPAINT_MS * 4) return;
     if (now - this.paintedAt < REPAINT_MS) return;
     this.paintedAt = now;
@@ -95,6 +102,30 @@ export class PlanetMinimap {
     }
     out.drawImage(this.terrain, 0, 0);
     this.paintMarks(out, now, time, caches, seedfalls, clamors, icons);
+    this.paintGoals(out, goals);
+  }
+
+  // A Thornfray bout's goals (planet_goals.ts goalDots): a ring of the
+  // goal's own radius for a circle or a target, a dot for a carrier,
+  // clamped to the edge like a Seedfall when they stand beyond the window.
+  private paintGoals(g: CanvasRenderingContext2D, goals: readonly GoalDot[]): void {
+    const k = PX / MINIMAP_WINDOW;
+    for (const goal of goals) {
+      const q = this.window.toLocal(goal.at);
+      const cx = Math.max(6, Math.min(PX - 6, q.x * k));
+      const cy = Math.max(6, Math.min(PX - 6, PX - q.z * k));
+      g.strokeStyle = goal.color;
+      g.fillStyle = goal.color;
+      g.lineWidth = 2;
+      if (goal.ring) {
+        g.beginPath();
+        g.arc(cx, cy, Math.max(4, goal.radius * k), 0, Math.PI * 2);
+        g.stroke();
+      }
+      g.beginPath();
+      g.arc(cx, cy, 3, 0, Math.PI * 2);
+      g.fill();
+    }
   }
 
   // The ground's regions and relief, the night outside the light, the

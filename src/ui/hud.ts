@@ -17,11 +17,12 @@ import type { CastTouch } from '../game/touch';
 import { followThumbScale, followUiScale, SETTINGS_EVENT } from '../game/ui_scale';
 import type { PointsReason } from '../net/protocol';
 import { ownGraceFloor, type RoyaleNote } from '../net/royale_client';
-import type { RoyaleResult } from '../net/royale_wire';
+import type { BoutStart, RoyaleResult, ThornfrayResult } from '../net/royale_wire';
 import { aspectColor, WRATH_COLOR } from '../render/aspect_colors';
 import { championPortraitUrl } from '../render/portraits';
 import { POST_CSS } from '../render/post_look';
 import type { Status } from '../sim/combat/status';
+import type { BoutKind } from '../sim/content/bouts/types';
 import { CAMPS } from '../sim/content/camps';
 import {
   CONSUMABLE_LIST,
@@ -152,7 +153,7 @@ import { BURR_COLOR, burrWashLine } from './royale_burr';
 import { GoalTrack } from './royale_goal';
 import { type GoalLineView, goalLineView } from './royale_goal_line';
 import { goalLine, goalPopNoteOn } from './royale_goal_lines';
-import { RoyaleHud, type RoyaleKill } from './royale_hud';
+import { RoyaleHud, type RoyaleHudHost, type RoyaleKill } from './royale_hud';
 import {
   ANNOUNCE_TOP_PX,
   ANNOUNCE_Z,
@@ -1399,19 +1400,25 @@ export class Hud {
   private readonly stopThumbScale: () => void;
   private readonly styleEl: HTMLStyleElement;
   // The battle royale's layer (ui/royale_hud.ts) and its first steps
-  // (ui/royale_steps.ts), in a match on the Wanderseed; null in a 5v5.
-  private readonly royale: RoyaleHud | null;
+  // (ui/royale_steps.ts), in a match on the Wanderseed; null in a 5v5. A
+  // Thornfray builds it afresh at each bout (setBout).
+  private royale: RoyaleHud | null;
   private royaleSteps: RoyaleStepsState | null = null;
   // The Range's own first steps (ui/range_steps.ts); null in a match.
   private rangeSteps: RangeStepsState | null = null;
   // Respawn's wash (ui/royale_life.ts): the life that just ended, under
-  // the subtitle, and the champions last seen, for the killer's recap.
-  private readonly royaleVariant: RoyaleVariant | null;
-  private readonly royaleLife = new RoyaleLife();
-  private readonly royaleSeen = new SeenChampions();
+  // the subtitle, and the champions last seen, for the killer's recap. A
+  // Thornfray's bouts switch the rule set (setBout).
+  private royaleVariant: RoyaleVariant | null;
+  private royaleLife = new RoyaleLife();
+  private royaleSeen = new SeenChampions();
+  // What the battle royale's layer is built with, kept for a Thornfray's
+  // next bout (setBout).
+  private royaleHost: RoyaleHudHost | null = null;
   private readonly deathLife: HTMLElement;
   // Respawn's wash: where the goal across matches stands
-  // (ui/royale_goal_lines.ts); null outside Respawn.
+  // (ui/royale_goal_lines.ts); null outside the battle royale, shown in
+  // Respawn alone.
   private readonly deathGoal: GoalLineView | null;
   // Who carries the Burr of a Respawn death (ui/royale_burr.ts).
   private readonly deathBurr: HTMLElement;
@@ -2050,7 +2057,7 @@ export class Hud {
     this.deathTitle = el('div', 'hud-overlay-title', 'SLAIN');
     this.deathLife = el('div', 'hud-overlay-life');
     this.deathLife.hidden = true;
-    this.deathGoal = royale === 'respawn' ? goalLineView('hud-overlay-goal') : null;
+    this.deathGoal = royale ? goalLineView('hud-overlay-goal') : null;
     if (this.deathGoal) this.deathGoal.root.hidden = true;
     this.deathHint = el('div', 'hud-overlay-hint');
     this.deathHint.hidden = true;
@@ -2158,8 +2165,8 @@ export class Hud {
       this.escapeOverlay,
     );
     container.appendChild(root);
-    this.royale = royale
-      ? new RoyaleHud({
+    this.royaleHost = royale
+      ? {
           root,
           world,
           selfId,
@@ -2168,11 +2175,31 @@ export class Hud {
           touch: coarsePointer,
           playing: guide === 'play',
           onExit,
-        })
+        }
       : null;
+    this.royale = this.royaleHost ? new RoyaleHud(this.royaleHost) : null;
     this.royale?.setAnnounce((text, color, holdMs, keep) =>
       this.announce(text, color, holdMs, keep),
     );
+  }
+
+  // A Thornfray's next bout (ADR 0035; ui/bout_rules.ts): the battle
+  // royale's layer built afresh on the bout's variant and kind, with the
+  // table it starts with, and the wash's memory of the last bout let go.
+  // The match's layer, the bar and the rest of the HUD stay.
+  setBout(variant: RoyaleVariant, kind: BoutKind, start: BoutStart): void {
+    const host = this.royaleHost;
+    if (!host) return;
+    this.royale?.dispose();
+    this.royaleVariant = variant;
+    this.royaleLife = new RoyaleLife();
+    this.royaleSeen = new SeenChampions();
+    this.deathRecap = '';
+    this.royale = new RoyaleHud({ ...host, variant, bout: { kind, start } });
+    this.royale.setAnnounce((text, color, holdMs, keep) =>
+      this.announce(text, color, holdMs, keep),
+    );
+    this.rootEl.classList.add('thornfray');
   }
 
   setNetHooks(hooks: NetHooks): void {
@@ -2281,6 +2308,30 @@ export class Hud {
     if (!this.endPlayed) {
       this.endPlayed = true;
       const sting = royaleSting(result);
+      if (sting) {
+        playSfx(sting);
+        announceVoice(sting, true);
+      }
+    }
+    this.syncOverlay();
+  }
+
+  // A Thornfray's end screen, after the Final (ui/thornfray_end_view.ts):
+  // the ladder box and the feedback box under it, as the battle royale's.
+  showThornfrayResult(result: ThornfrayResult): void {
+    if (!this.royale) return;
+    if (this.escapeOverlay.classList.contains('open')) this.toggleEscapeMenu();
+    const extras: HTMLElement[] = [];
+    if (this.scores()) {
+      this.endLadder.refresh();
+      extras.push(this.endLadder.root);
+    }
+    extras.push(this.endFeedback.root);
+    this.royale.showThornfrayResult(result, extras);
+    this.deathOverlay.classList.remove('open');
+    if (!this.endPlayed) {
+      this.endPlayed = true;
+      const sting = result.place === 1 ? 'victory' : null;
       if (sting) {
         playSfx(sting);
         announceVoice(sting, true);
@@ -3780,9 +3831,10 @@ export class Hud {
       if (life !== null) setText(this.deathLife, life);
       if (this.deathLife.hidden !== (life === null)) this.deathLife.hidden = life === null;
       // And where the goal across matches stands (ui/royale_goal_lines.ts),
-      // in a match that scores, as the end card shows it.
+      // in a Respawn match that scores, as the end card shows it.
       if (this.deathGoal) {
-        const goal = dead && this.scores() ? this.royaleGoal : null;
+        const respawn = this.royaleVariant === 'respawn';
+        const goal = dead && respawn && this.scores() ? this.royaleGoal : null;
         if (goal) this.deathGoal.draw(goalLine(goal.total()));
         if (this.deathGoal.root.hidden !== !goal) this.deathGoal.root.hidden = !goal;
       }

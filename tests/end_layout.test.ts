@@ -69,6 +69,17 @@ const TEAMS: EndContent = {
   grafts: false,
   ladder: true,
 };
+// A Thornfray's end (ADR 0035): three lines, the eight seats, its bouts
+// under the result on a desktop.
+const THORNFRAY: EndContent = {
+  card: 'royale',
+  lines: 3,
+  rows: 8,
+  goal: false,
+  grafts: false,
+  bouts: true,
+  ladder: true,
+};
 // And lighter: a match that banked nothing (no ladder), a card with no
 // Grafts.
 const CARDS: readonly [string, EndContent][] = [
@@ -78,6 +89,8 @@ const CARDS: readonly [string, EndContent][] = [
   ['a Respawn that banked nothing', { ...RESPAWN, ladder: false }],
   ['a 5v5 that banked nothing', { ...TEAMS, ladder: false }],
   ['One life with no Grafts', { ...ONE_LIFE, grafts: false }],
+  ['a Thornfray', THORNFRAY],
+  ['a Thornfray that banked nothing', { ...THORNFRAY, ladder: false }],
 ];
 
 const inside = (outer: ScreenBox, inner: ScreenBox): boolean =>

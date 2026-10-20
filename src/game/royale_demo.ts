@@ -14,16 +14,24 @@
 // pill, every new block faked), land and land-one (the drop, then the
 // landing in Respawn and in One life: the win card and the win line),
 // and end-teams: the 5v5's end screen over the same match played as two
-// teams of five, every build full.
+// teams of five, every build full. A Thornfray's (ADR 0035): bout (a
+// Starglean bout landing then playing, its card, its top line and its
+// chip), lull (the third Lull: the last bout's end beat, then the card),
+// lull-prize (the viewer took the last bout: the Graft cards open over the
+// globe, the card folded), lull-final (the sixth Lull), and thornfray_end.
 
 import { orchardSim } from '../net/replay';
 import type { RoyaleNote } from '../net/royale_client';
 import type {
+  BoutStart,
+  BoutTableRow,
   RoyaleResult,
   SnapClamor,
   SnapGraftOffer,
   SnapRoyale,
   SnapSeedfall,
+  ThornfrayEndRow,
+  ThornfrayResult,
 } from '../net/royale_wire';
 import { whenChampionModelsReady } from '../render/champions';
 import { setRoyaleProjector } from '../render/royale_cues';
@@ -67,6 +75,65 @@ const ROSTER = [
   'rhoka',
   'nisk',
 ];
+
+// A Thornfray's table for the mock seats: the viewer on seat 0 (unit id
+// `self`), the others on 1 to 7 (`others`), at bout `b`, its kinds
+// alternating, the prize to `prize` when one is offered.
+function boutStart(
+  b: number,
+  self: number,
+  others: readonly number[],
+  prize: number | null,
+): BoutStart {
+  const bushels = [9, 14, 6, 11, 3, 17, 0, 5];
+  const last = [4, 5, 1, 3, 0, 2, 0, 0];
+  const seats = bushels.map((n, seat) => ({ seat, n }));
+  seats.sort((a, c) => c.n - a.n || a.seat - c.seat);
+  const t: BoutTableRow[] = seats.map(({ seat, n }) => [
+    seat,
+    seat === 0 ? self : (others[seat - 1] ?? seat),
+    seat === 0 ? 'Wanderer 4821' : (NAMES[seat - 1] ?? 'Seat'),
+    seat === 0 ? 'ashvyn' : (ROSTER[seat - 1] ?? 'torv'),
+    seat !== 0 && seat % 2 === 1 ? 1 : 0,
+    b === 0 ? 0 : n,
+    b === 0 ? 0 : (last[seat] ?? 0),
+    b === 0 ? 0 : Math.floor(n / 9),
+  ]);
+  return {
+    b,
+    k: ['lastwick', 'starglean', 'lastwick', 'starglean', 'lastwick', 'starglean'],
+    s: 0,
+    t,
+    ...(prize !== null && b > 0 ? { p: prize } : {}),
+  };
+}
+
+function thornfrayResult(): ThornfrayResult {
+  const start = boutStart(5, 1, [2, 3, 4, 5, 6, 7, 8], null);
+  const table = start.t.map(
+    (row, i): ThornfrayEndRow => [row[0], row[2], row[3], row[4], row[5] + (8 - i), row[7]],
+  );
+  const place = table.findIndex((row) => row[0] === 0) + 1;
+  return {
+    t: 'thornfray_result',
+    place,
+    of: 8,
+    seat: 0,
+    bushels: table[place - 1]?.[4] ?? 0,
+    won: table[place - 1]?.[5] ?? 0,
+    points: 75,
+    table,
+    bouts: [
+      { k: 'lastwick', pl: 1, paid: 5 },
+      { k: 'starglean', pl: 4, paid: 2 },
+      { k: 'lastwick', pl: 6, paid: 0 },
+      { k: 'starglean', pl: 2, paid: 4 },
+      { k: 'lastwick', pl: 5, paid: 1 },
+      { k: 'starglean', pl: 3, paid: 6 },
+    ],
+    replays: [11, 12, 13, 14, 15, 16],
+  };
+}
 
 function result(v: RoyaleVariant, place: number, score: number): RoyaleResult {
   return {
@@ -158,18 +225,30 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
     names.set(u.id, { name: NAMES[i] ?? 'Seat', bot: i % 2 === 0 });
   }
 
-  const variant: RoyaleVariant =
-    scene === 'closing' ||
-    scene === 'out' ||
-    scene === 'end-one' ||
-    scene === 'moments' ||
-    scene === 'land-one'
+  // A Thornfray's scenes: the bout shown, its kind's rule set.
+  const tfBout: Record<string, number> = {
+    bout: 3,
+    lull: 2,
+    'lull-prize': 3,
+    'lull-final': 5,
+    thornfray_end: 5,
+  };
+  const tf = tfBout[scene] !== undefined;
+  const variant: RoyaleVariant = tf
+    ? scene === 'lull'
+      ? 'one_life'
+      : 'respawn'
+    : scene === 'closing' ||
+        scene === 'out' ||
+        scene === 'end-one' ||
+        scene === 'moments' ||
+        scene === 'land-one'
       ? 'one_life'
       : 'respawn';
   // The landing: the drop for LAND_AT seconds on the wall clock from the
   // first look at the state (a software renderer steps the sim slower than
   // real time), then play from the match time it came at.
-  const landing = scene === 'land' || scene === 'land-one';
+  const landing = scene === 'land' || scene === 'land-one' || scene === 'bout';
   const LAND_AT = 6;
   let firstLook: number | null = null;
   let landedAt: number | null = null;
@@ -211,6 +290,7 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
     t % 12 < 10 ? { offer: { g, c, u: Math.floor(t / 12) * 12 + 10 } } : {};
   const state = (): SnapRoyale & { caches: [] } => {
     const t = sim.time;
+    if (tf) return boutState((performance.now() - opened) / 1000);
     const base = {
       v: variant,
       de: 0,
@@ -265,8 +345,39 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
       place: scene === 'out' ? 37 : undefined,
     };
   };
+  // A Thornfray's mode block: the Lull (the drop held open, a Graft offer
+  // for the viewer in lull-prize), or the bout landing then playing.
+  const boutState = (t: number): SnapRoyale & { caches: [] } => {
+    const base = { v: variant, end: 999, alive: 8, people: 1, caches: [] as [] };
+    const left = landing && landedAt === null ? dropLeft() : 0;
+    if (landing && landedAt === null && left <= 0) landedAt = t;
+    if (scene !== 'bout' || landedAt === null) {
+      return {
+        ...base,
+        st: 'drop',
+        de: scene === 'bout' ? t + left : t + 7,
+        dusk: { p: 0, c: [0, 80, 0], r: 40, pe: t + 27, sh: 0, b: 0.03 },
+        ...(scene === 'lull-prize'
+          ? { offer: { g: 'bough', c: ['second_breath', 'stoneblood', 'thornhide'], u: 0 } }
+          : {}),
+      };
+    }
+    return {
+      ...base,
+      st: 'play',
+      de: landedAt,
+      end: landedAt + 105,
+      dusk: { p: 0, c: [0, 80, 0], r: 40, pe: landedAt + 60, sh: 0, b: 0.04 },
+      score: 2,
+      tf: { c: 7, pl: 2, bc: 9 },
+    };
+  };
+  // A Thornfray's scenes run on the wall clock: a software renderer steps
+  // the sim far slower than real time, and the Lull's beats are seconds.
+  const opened = performance.now();
   const world = new Proxy(sim, {
     get(target, key) {
+      if (key === 'time' && tf) return (performance.now() - opened) / 1000;
       if (key === 'royaleView') return teams ? undefined : state;
       if (key === 'scoreboard') {
         return (): ScoreRow[] =>
@@ -289,6 +400,22 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
     { terrain, mode: 'online', guest: true, guide: 'play', ...(teams ? {} : { royale: variant }) },
   );
   (window as unknown as { __royaleDemo?: unknown }).__royaleDemo = { pres, sim, self };
+  if (tf) {
+    const b = tfBout[scene] ?? 0;
+    const prize = scene === 'lull-prize' ? 0 : 5;
+    pres.setBout(
+      variant,
+      boutStart(
+        b,
+        self.id,
+        others.map((u) => u.id),
+        prize,
+      ),
+    );
+    if (scene === 'thornfray_end') {
+      window.setTimeout(() => pres.showThornfrayResult(thornfrayResult()), 600);
+    }
+  }
   if (teams) {
     window.setTimeout(() => {
       // Points banked on the line, so the end screen asks for the ladder.

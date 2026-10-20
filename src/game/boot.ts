@@ -8,11 +8,12 @@
 
 import type { PointsReason } from '../net/protocol';
 import type { RoyaleNote } from '../net/royale_client';
-import type { RoyaleResult } from '../net/royale_wire';
+import type { BoutStart, RoyaleResult, ThornfrayResult } from '../net/royale_wire';
 import { schoolColorOf } from '../render/ability_vfx';
 import { aspectColor } from '../render/aspect_colors';
 import { Renderer } from '../render/renderer';
 import type { RenderTerrain } from '../render/terrain';
+import { boutKindOf } from '../sim/content/bouts';
 import { draughtSlot } from '../sim/content/items';
 import { copy, dirTo, dist, onSphere } from '../sim/geo';
 import type { RoyaleVariant } from '../sim/royale/types';
@@ -20,6 +21,7 @@ import { effectiveRank } from '../sim/stats';
 import type { AbilityKey, TeamId, Vec2 } from '../sim/types';
 import { DT } from '../sim/types';
 import type { Unit } from '../sim/unit';
+import { boutRules } from '../ui/bout_rules';
 import { seatShops } from '../ui/coach_bar';
 import { attackCursor, defaultCursor } from '../ui/cursors';
 import { Hud, type NetHooks } from '../ui/hud';
@@ -123,6 +125,12 @@ export interface Presentation {
   // The battle royale's end screen (ui/royale_hud.ts), from the result the
   // server sends this person; nothing in a 5v5.
   showRoyaleResult(result: RoyaleResult): void;
+  // A Thornfray's bout (ADR 0035): its rule set, read from its match_start
+  // (the variant and the table), at every bout's start; the match stays on
+  // screen (ui/bout_rules.ts).
+  setBout(variant: RoyaleVariant, start: BoutStart): void;
+  // A Thornfray's end screen, after the Final (ui/thornfray_end_view.ts).
+  showThornfrayResult(result: ThornfrayResult): void;
   // The pause menu, where Leave match lives: what the browser's Back does
   // mid-match instead of leaving (src/game/nav.ts). Back again resumes.
   toggleEscapeMenu(): void;
@@ -777,11 +785,17 @@ export function startPresentation(
   // The Death beat in Respawn (game/death_beat.ts): while the champion
   // waits to come back, the camera is on whoever took it down when the
   // mirror knows where they stand, and back on the champion at the return.
-  const beat = options.royale === 'respawn' ? new BeatCamera(world, renderer, selfId) : null;
   // One life in Crews (game/crew_watch.ts): a champion out for good
   // watches a crewmate standing; in Solo there is none and it never moves.
-  const crewCam =
-    options.royale === 'one_life' ? new CrewCamera(world, renderer, selfId, selfTeam) : null;
+  // A Thornfray's bouts switch the rule set: each bout builds the camera of
+  // its own (setBout), the other one never running in it.
+  const camerasFor = (
+    variant: RoyaleVariant | undefined,
+  ): { beat: BeatCamera | null; crewCam: CrewCamera | null } => ({
+    beat: variant === 'respawn' ? new BeatCamera(world, renderer, selfId) : null,
+    crewCam: variant === 'one_life' ? new CrewCamera(world, renderer, selfId, selfTeam) : null,
+  });
+  let { beat, crewCam } = camerasFor(options.royale);
 
   let lastTick = performance.now();
   let wardenWasUp = false;
@@ -909,6 +923,19 @@ export function startPresentation(
       hud.setMatchResult(rated, delta, rating, queue, way),
     showPoints: (delta, total, reason) => hud.showPoints(delta, total, reason),
     showRoyaleResult: (result) => hud.showRoyaleResult(result),
+    setBout: (variant, start) => {
+      const kind = boutKindOf(start.k[start.b] ?? '');
+      if (!kind) return;
+      const rules = boutRules(variant, kind);
+      hud.setBout(rules.variant, kind, start);
+      // The last bout's camera lets go: the new one starts on the champion.
+      renderer.watchUnit(null);
+      renderer.recenterCamera();
+      ({ beat, crewCam } = camerasFor(rules.camera === 'beat' ? 'respawn' : 'one_life'));
+      // The score fades with a bout's end and plays again with the next.
+      startMusic();
+    },
+    showThornfrayResult: (result) => hud.showThornfrayResult(result),
     toggleEscapeMenu: () => hud.toggleEscapeMenu(),
     covers: () => hud.covers(),
     stage: stage.el,

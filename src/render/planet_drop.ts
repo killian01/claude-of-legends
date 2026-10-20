@@ -66,3 +66,17 @@ export function returnOrbitDistance(lightRadius: number): number {
 // left of it (ui/royale_return.ts).
 export const RETURN_GLOBE_RIGHT = 0;
 export const RETURN_GLOBE_DOWN = 0.07;
+
+// A Thornfray's Lull (ADR 0035, the next bout's drop): its first cap is the
+// Thornyard, a small cap of the planet, so the globe faces it, near enough
+// for a landing to be tapped inside it, and holds still rather than
+// turning it away. The battle royale's first cap is the whole planet (its
+// chord past the radius): the globe keeps its turning orbit. The cap as
+// the wire tells the Dusk in its calm; null for a whole-planet one.
+export function thornyardFacing(
+  dusk: { p: number; c: readonly [number, number, number]; r: number },
+  planetRadius: number,
+): { center: Point3; radius: number } | null {
+  if (dusk.p !== 0 || !(dusk.r < planetRadius)) return null;
+  return { center: { x: dusk.c[0], y: dusk.c[1], z: dusk.c[2] }, radius: dusk.r };
+}

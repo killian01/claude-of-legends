@@ -510,10 +510,15 @@ export function arcDistance(a: Point, b: Point): number {
 }
 
 // How deep a point stands past the lit cap's edge, in meters (0 inside it,
-// and through the calm); null when the point carries no height.
-export function duskDepth(pos: Point, dusk: Pick<SnapDusk, 'c' | 'r' | 'p'>): number | null {
+// and through a calm that burns nothing); null when the point carries no
+// height. A Thornfray's bout burns outside its Thornyard from the first
+// second (b above nothing in phase 0).
+export function duskDepth(
+  pos: Point,
+  dusk: Pick<SnapDusk, 'c' | 'r' | 'p'> & { b?: number },
+): number | null {
   if (typeof pos.y !== 'number' || !Number.isFinite(pos.y)) return null;
-  if (dusk.p === 0) return 0;
+  if (dusk.p === 0 && !((dusk.b ?? 0) > 0)) return 0;
   const [cx, cy, cz] = dusk.c;
   return Math.max(0, len3(pos.x - cx, pos.y - cy, pos.z - cz) - dusk.r);
 }

@@ -105,6 +105,9 @@ ${cardsRoomCss()}
 `;
 
 export interface GraftsHost {
+  // The line under the title, the battle royale's when absent (a
+  // Thornfray's prize lasts the next bout, ui/royale_grafts.ts).
+  subtitle?: string;
   // The layer the cards are drawn in (the battle royale's own).
   layer: HTMLElement;
   // The HUD's root, whose classes say a phone (compact) and the drop.
@@ -145,7 +148,7 @@ export class RoyaleHudGrafts {
     this.box = el('div', 'br-grafts');
     this.box.hidden = true;
     const title = el('div', 'ttl', GRAFT_TITLE);
-    title.appendChild(el('small', '', GRAFT_SUBTITLE));
+    title.appendChild(el('small', '', host.subtitle ?? GRAFT_SUBTITLE));
     this.row = el('div', 'row');
     const later = el('button', 'later', 'Later');
     later.type = 'button';

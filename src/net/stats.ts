@@ -35,7 +35,8 @@ export type StatsStep = (typeof STATS_STEPS)[number];
 // minutes in, not the time held.
 export const MATCH_ENDS = ['finished', 'left'] as const;
 export type MatchEnd = (typeof MATCH_ENDS)[number];
-export type MatchMode = 'practice' | 'online' | 'royale';
+// A Thornfray (ADR 0035) counts as its own mode: six bouts, one match.
+export type MatchMode = 'practice' | 'online' | 'royale' | 'thornfray';
 
 // A battle royale names its rule set beside the mode.
 export interface MatchKind {

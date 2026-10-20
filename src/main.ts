@@ -10,7 +10,7 @@
 // and closing the tab asks first.
 
 import { attacksFrom } from './game/attack_notes';
-import { type KillNote, type Presentation, startPresentation } from './game/boot';
+import { type KillNote, type Presentation, startPresentation, type WorldNotes } from './game/boot';
 import { creatureNowFrom, riseCreatureNow } from './game/creature_now';
 import { measureMovement } from './game/cursor_lock';
 import { drawnQuality } from './game/drawn_quality';
@@ -41,6 +41,7 @@ import {
   prefetchStarOrchard,
 } from './game/star_orchard';
 import { loadStarOrchard } from './game/star_orchard_records';
+import { boutArrival, thornfrayNext } from './game/thornfray_flow';
 import { voidmaulSlamsFrom } from './game/voidmaul_slam_notes';
 import { buildIdFromMeta, startBuildWatch } from './net/build_watch';
 import { ClientWorld, type PlanetWalk } from './net/client_world';
@@ -58,7 +59,7 @@ import {
   restorePolicies,
 } from './net/replay';
 import { isRoyaleResult, royaleKill, royaleNotes, startRoyale } from './net/royale_client';
-import type { RoyaleResult } from './net/royale_wire';
+import type { BoutStart, RoyaleResult, ThornfrayResult } from './net/royale_wire';
 import {
   installStats,
   type MatchEndReporter,
@@ -68,6 +69,13 @@ import {
   trackAgain,
   trackStep,
 } from './net/stats';
+import {
+  boutStartOf,
+  isThornfrayGather,
+  thornfrayEnterMsg,
+  thornfrayResultOf,
+  thornfrayStartMsg,
+} from './net/thornfray_client';
 import { whenChampionModelsReady } from './render/champions';
 import { loadPlanetTerrain } from './render/planet_terrain';
 import type { RenderTerrain } from './render/terrain';
@@ -126,6 +134,7 @@ import {
   withCrew,
 } from './ui/royale_pick_rules';
 import { seatLine } from './ui/seat_lines';
+import { showThornfrayGathering } from './ui/thornfray_gather';
 import { attachTurnAsk } from './ui/turn_ask';
 import type { IWorld } from './world_api';
 
@@ -1333,11 +1342,42 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
 
 // --- the battle royale (ADR 0031) ---
 
+// A snapshot's events on the planet as the presentation takes them: the
+// deaths with the names a battle royale's carry, the casts, the hits, the
+// misses, the attacks and the mode's own notes. A battle royale's and a
+// Thornfray's bouts alike.
+function planetNotes(events: Extract<ServerMsg, { t: 'snap' }>['events']): WorldNotes {
+  const kills: KillNote[] = [];
+  const casts: { unitId: number; key?: AbilityKey }[] = [];
+  const hits: { targetId: number; amount: number }[] = [];
+  const misses: { unitId: number; targetId: number }[] = [];
+  for (const e of events) {
+    if (e.e === 'death') kills.push(royaleKill(e));
+    else if (e.e === 'cast') casts.push({ unitId: e.unitId, key: e.k });
+    else if (e.e === 'miss') misses.push({ unitId: e.unitId, targetId: e.targetId });
+    else if (e.e === 'dmg') hits.push({ targetId: e.targetId, amount: e.amount });
+  }
+  return {
+    kills,
+    golds: [],
+    casts,
+    hits,
+    attacks: attacksFrom(events),
+    voidmaulSlams: voidmaulSlamsFrom(events),
+    misses,
+    royale: royaleNotes(events),
+  };
+}
+
 // The quick pick (ui/royale_pick.ts), a layer over the page it opened
 // from: the pick last played already chosen, remembered on Play for next
 // time. Null when it is left without a pick: its Back, Escape, or the
 // browser's Back.
-async function pickForRoyale(variant: RoyaleVariant, solo = false): Promise<RoyalePick | null> {
+async function pickForRoyale(
+  variant: RoyaleVariant,
+  solo = false,
+  thornfray = false,
+): Promise<RoyalePick | null> {
   // The map downloads while the person picks, as for every other match.
   prefetchStarOrchard();
   return new Promise((resolve) => {
@@ -1353,16 +1393,20 @@ async function pickForRoyale(variant: RoyaleVariant, solo = false): Promise<Roya
       SIGIL_LIST.map((s) => s.id),
       FIRST_ROYALE_CHAMPION,
     );
-    const initial = solo ? withCrew(remembered, 1) : remembered;
+    const initial = solo || thornfray ? withCrew(remembered, 1) : remembered;
     const picker = showRoyalePick(container, {
       variant,
       initial,
+      thornfray,
       onPlay: (pick) => {
         // Inside the Play click gesture, so the browser grants it.
         requestGameFullscreen();
         picker.remove();
         frame.closed();
-        updateSettings({ royalePick: pick });
+        // A Thornfray's pick keeps the crew the battle royale's had.
+        updateSettings({
+          royalePick: thornfray ? withCrew(pick, remembered.crew ?? 1) : pick,
+        });
         resolve(pick);
       },
       onBack: leave,
@@ -1571,28 +1615,7 @@ async function runRoyale(
         case 'snap': {
           const changed = world.applyServer(msg);
           if (!pres && world.selfUnitId !== 0 && world.units.has(world.selfUnitId)) open();
-          if (changed && pres) {
-            const kills: KillNote[] = [];
-            const casts: { unitId: number; key?: AbilityKey }[] = [];
-            const hits: { targetId: number; amount: number }[] = [];
-            const misses: { unitId: number; targetId: number }[] = [];
-            for (const e of msg.events) {
-              if (e.e === 'death') kills.push(royaleKill(e));
-              else if (e.e === 'cast') casts.push({ unitId: e.unitId, key: e.k });
-              else if (e.e === 'miss') misses.push({ unitId: e.unitId, targetId: e.targetId });
-              else if (e.e === 'dmg') hits.push({ targetId: e.targetId, amount: e.amount });
-            }
-            pres.onWorldTick({
-              kills,
-              golds: [],
-              casts,
-              hits,
-              attacks: attacksFrom(msg.events),
-              voidmaulSlams: voidmaulSlamsFrom(msg.events),
-              misses,
-              royale: royaleNotes(msg.events),
-            });
-          }
+          if (changed && pres) pres.onWorldTick(planetNotes(msg.events));
           break;
         }
         case 'score':
@@ -1654,6 +1677,239 @@ async function runRoyale(
       ).then(() => finish('menu'));
     });
   });
+}
+
+// --- a Thornfray (ADR 0035) ---
+
+// One Thornfray: the gathering (ui/thornfray_gather.ts), then six bouts on
+// one socket and one guarded match layer (game/thornfray_flow.ts): each
+// bout's match_start resets the mirror and switches the screen's rule set
+// to the bout's (Presentation.setBout), the planet and the renderer kept;
+// then the end screen from thornfray_result. Resolves with the exit the end
+// screen or the pause menu gave.
+async function runThornfray(pick: RoyalePick, guest: boolean): Promise<PostMatchAction> {
+  const loaded = await loadRoyaleGround();
+  if (!loaded) return 'menu';
+  return new Promise((resolve) => {
+    const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${proto}://${window.location.host}/ws`);
+    const send = (msg: unknown): void => {
+      if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
+    };
+    const world = new ClientWorld((msg) => send(msg), loaded.map, loaded.walk);
+    let pres: Presentation | null = null;
+    // The unit the match on screen follows, and the bout to switch it to
+    // once it opens.
+    let shownSelf: number | null = null;
+    let bout: { variant: RoyaleVariant; start: BoutStart } | null = null;
+    let ends: MatchEndReporter | null = null;
+    let openedAt = 0;
+    const gathering = showThornfrayGathering(container, {
+      onCancel: () => finish('menu'),
+      onStart: () => send(thornfrayStartMsg()),
+    });
+    let opened = false;
+    let matchEnded = false;
+    let finished = false;
+    let pendingPoints: Extract<ServerMsg, { t: 'points' }> | null = null;
+    let pendingResult: ThornfrayResult | null = null;
+    let shownResult: ThornfrayResult | null = null;
+    const finish = (action: PostMatchAction): void => {
+      if (finished) return;
+      finished = true;
+      ends?.report();
+      ends?.dispose();
+      ends = null;
+      if (action === 'again' && shownResult !== null) trackAgain({ mode: 'thornfray' });
+      gathering.remove();
+      pres?.dispose();
+      pres = null;
+      if (ws.readyState === ws.OPEN) {
+        ws.send(JSON.stringify({ t: 'leave' }));
+        ws.close();
+      }
+      layer.closed();
+      resolve(action);
+    };
+    // One layer across every bout, guarded once the match is on screen:
+    // Back opens the pause menu during a Lull as during a bout. The result
+    // lifts the guard.
+    const layer = appNav().push('session', () => finish('menu'));
+    const open = (): void => {
+      gathering.overMatch();
+      trackStep('played');
+      send({ t: 'loaded' });
+      const opening = startPresentation(
+        container,
+        world,
+        world.selfUnitId,
+        world.selfTeam,
+        finish,
+        {
+          terrain: loaded.terrain,
+          mode: 'online',
+          guest,
+          guide: 'play',
+          royale: bout?.variant ?? 'one_life',
+        },
+      );
+      pres = opening;
+      shownSelf = world.selfUnitId;
+      if (bout) opening.setBout(bout.variant, bout.start);
+      void untilDrawn(opening.drawn, FIRST_FRAME_WAIT_MS, (run, ms) => {
+        const id = window.setTimeout(run, ms);
+        return () => window.clearTimeout(id);
+      }).then(() => gathering.remove());
+      if (ends === null) {
+        openedAt = performance.now();
+        ends = matchEndReporter({ mode: 'thornfray' }, () => ({
+          winner: world.winner,
+          seconds: world.time,
+          held: (performance.now() - openedAt) / 1000,
+          dropIn: false,
+        }));
+      }
+      if (!matchEnded && pendingResult === null) {
+        layer.guard(() => pres?.toggleEscapeMenu());
+      }
+      opening.setNetHooks({
+        sendChat: (text) => send({ t: 'chat', text }),
+        sendPing: (x, z) => send({ t: 'ping', x, z }),
+        sendStep: (id) => send({ t: 'step', id }),
+      });
+      if (pendingPoints) {
+        opening.showPoints(pendingPoints.delta, pendingPoints.total, pendingPoints.reason);
+        pendingPoints = null;
+      }
+      if (pendingResult) {
+        opening.showThornfrayResult(pendingResult);
+        shownResult = pendingResult;
+        pendingResult = null;
+      }
+    };
+    ws.addEventListener('open', () => {
+      opened = true;
+      ws.send(JSON.stringify({ t: 'hello' }));
+      send(thornfrayEnterMsg(pick));
+    });
+    ws.addEventListener('message', (event) => {
+      if (finished) return;
+      let raw: unknown;
+      try {
+        raw = JSON.parse(String(event.data));
+      } catch {
+        return;
+      }
+      if (isThornfrayGather(raw)) {
+        gathering.update(raw);
+        return;
+      }
+      const result = thornfrayResultOf(raw);
+      if (result) {
+        layer.unguard();
+        if (pres) {
+          pres.showThornfrayResult(result);
+          shownResult = result;
+        } else pendingResult = result;
+        ends?.report();
+        return;
+      }
+      const msg = raw as ServerMsg;
+      switch (msg.t) {
+        case 'match_start': {
+          registerForgedFromMatch(msg.forgedAssets);
+          world.applyServer(msg);
+          const start = boutStartOf(msg.royale);
+          if (!msg.royale || !start) break;
+          bout = { variant: msg.royale.v, start };
+          const arrival = boutArrival(shownSelf, msg.selfUnitId);
+          if (arrival === 'switch') pres?.setBout(bout.variant, bout.start);
+          else if (arrival === 'rebuild') {
+            // Another unit to follow: the screen is built again on it at
+            // the next snapshot, under the same layer.
+            pres?.dispose();
+            pres = null;
+            shownSelf = null;
+          }
+          break;
+        }
+        case 'snap': {
+          const changed = world.applyServer(msg);
+          if (!pres && world.selfUnitId !== 0 && world.units.has(world.selfUnitId)) open();
+          if (changed && pres) pres.onWorldTick(planetNotes(msg.events));
+          break;
+        }
+        case 'score':
+          world.applyServer(msg);
+          break;
+        case 'chat':
+          pres?.pushChat(msg.from, msg.team, msg.text);
+          break;
+        case 'ping':
+          pres?.showPing(msg.x, msg.z, msg.from, msg.team);
+          break;
+        case 'probe':
+          send({ t: 'probe', n: msg.n, fps: frameRate(), q: drawnQuality() });
+          break;
+        case 'player_joined':
+        case 'player_back':
+        case 'player_left': {
+          const line = seatLine(msg);
+          if (line) pres?.pushSeatLine(line);
+          break;
+        }
+        case 'points':
+          if (pres) pres.showPoints(msg.delta, msg.total, msg.reason);
+          else pendingPoints = msg;
+          break;
+        case 'match_end':
+          matchEnded = true;
+          layer.unguard();
+          if (!pres) finish('menu');
+          break;
+        case 'error': {
+          console.warn('server:', msg.message);
+          const message = msg.message;
+          if (!pres) {
+            gathering.remove();
+            void showNotice(container, 'Notice', message).then(() => finish('menu'));
+          } else {
+            finish('menu');
+            void showNotice(container, 'Notice', message);
+          }
+          break;
+        }
+        default:
+          break;
+      }
+    });
+    ws.addEventListener('close', () => {
+      buildWatch.poke();
+      if (finished || matchEnded || shownResult !== null || pendingResult !== null) return;
+      gathering.remove();
+      void showNotice(
+        container,
+        opened ? 'Disconnected' : 'Server unreachable',
+        opened
+          ? 'Lost the connection to the Thornfray.'
+          : 'Could not reach the game server. Try again in a moment.',
+      ).then(() => finish('menu'));
+    });
+  });
+}
+
+// Thornfrays back to back (game/thornfray_flow.ts): the quick pick once,
+// without its Crew row, then Play again into a new gathering with the same
+// pick; Battle royale opens the Respawn quick pick. Resolves with the exit
+// that left the loop.
+async function thornfrayLoop(guest: boolean): Promise<PostMatchAction> {
+  const pick = await pickForRoyale('respawn', true, true);
+  if (!pick) return 'menu';
+  for (;;) {
+    const next = thornfrayNext(await runThornfray(pick, guest));
+    if (next.to === 'royale') return royaleLoop(next.variant, guest);
+    if (next.to === 'home') return 'menu';
+  }
 }
 
 // What a Guest plays from the landing (ui/landing_modes.ts LandingPlay):
@@ -1747,6 +2003,11 @@ async function boot(): Promise<void> {
   // A replay opened from the Academy returns there, on the same bot.
   let reopenAcademy: { botId: string } | null = null;
   let lastPick: OfflinePick | null = null;
+  // A Thornfray straight from the address on the dev server (?thornfray),
+  // before slice 7 gives it its door on the landing and the home; a build
+  // never carries it (import.meta.env.DEV is false there).
+  let devThornfray =
+    import.meta.env.DEV && new URLSearchParams(window.location.search).has('thornfray');
   // Who is signed in, or null while only the offline match is reachable.
   // A live session cookie from a previous visit skips the sign-in screen.
   // Decided once per page load and never again: signing in reloads the
@@ -1761,6 +2022,18 @@ async function boot(): Promise<void> {
     // needs an account, so the sign-in screen stands in front of the home
     // screen rather than beside it. An invite code survives the detour and
     // lands in the join field on the other side.
+    if (devThornfray) {
+      devThornfray = false;
+      if (account !== null) {
+        await thornfrayLoop(false);
+        continue;
+      }
+      const guestName = await openGuest();
+      if (guestName !== null) {
+        await thornfrayLoop(true);
+        continue;
+      }
+    }
     if (account === null) {
       const entry = await showLanding(container, discordResult);
       if (entry.kind === 'account') {

@@ -12,6 +12,9 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { MOVE_RING } from '../src/game/move_ring';
 import { thumbScale } from '../src/game/ui_scale';
+import { BOUT_KINDS } from '../src/sim/content/bouts';
+import { BOUTS } from '../src/sim/content/bouts/match';
+import { boutCardWords } from '../src/ui/bout_card';
 import { cardsCoverBox, chipBox } from '../src/ui/royale_grafts';
 import {
   announceBox,
@@ -37,6 +40,7 @@ import { duskPill } from '../src/ui/royale_text';
 import {
   WIN_DESK_TYPE,
   WIN_PHONE_TYPE,
+  type WinCardWords,
   winCardBox,
   winCardWidth,
   winCardWords,
@@ -67,6 +71,21 @@ const [PW, PH] = [844, 390];
 const BOTH = ['respawn', 'one_life'] as const;
 // Each rule set's card in Solo and in Crews (ADR 0034).
 const CARDS = BOTH.flatMap((v) => [[v, false] as const, [v, true] as const]);
+// Every card the screen shows, named: the battle royale's, and a
+// Thornfray's for every registered kind (ADR 0035, ui/bout_card.ts), in a
+// bout and in the Final, where it says what the Final pays.
+const WORDS: readonly [string, WinCardWords][] = [
+  ...CARDS.map(([v, crews]): [string, WinCardWords] => [
+    `${v}${crews ? ' crews' : ''}`,
+    winCardWords(v, crews),
+  ]),
+  ...BOUT_KINDS.flatMap((kind) =>
+    [0, BOUTS - 1].map((b): [string, WinCardWords] => [
+      `${kind.name} bout ${b + 1}`,
+      boutCardWords(kind, b),
+    ]),
+  ),
+];
 
 // The bar with its bars, slots and loot row at the bottom center of a
 // desktop, and the hints at its bottom left.
@@ -133,8 +152,8 @@ const inside = (b: ScreenBox, w: number, h: number): boolean =>
 describe('where the win card stands on a desktop', () => {
   for (const [w, h] of DESKS) {
     it(`stands at the left, off the champion and the HUD's lines, at ${w}x${h}`, () => {
-      for (const [v, crews] of CARDS) {
-        const card = winCardBox(w, false, false, winCardWords(v, crews));
+      for (const [said, words] of WORDS) {
+        const card = winCardBox(w, false, false, words);
         const near: [string, ScreenBox][] = [
           ['champion', championBox(w, h)],
           ['top line', topLineBox(w, false)],
@@ -147,8 +166,7 @@ describe('where the win card stands on a desktop', () => {
           ['map', deskMap(w, h)],
           ['chip', chipBox(w, h, false)],
         ];
-        for (const [name, box] of near)
-          expect(overlaps(card, box), `${v}${crews ? ' crews' : ''} ${name}`).toBe(false);
+        for (const [name, box] of near) expect(overlaps(card, box), `${said} ${name}`).toBe(false);
         expect(inside(card, w, h)).toBe(true);
       }
     });
@@ -159,8 +177,8 @@ describe('where the win card stands on a desktop', () => {
     // The lane fills from its foot: its first two notices.
     const foot = h - NOTES_BOTTOM_PX;
     const twoNotices: ScreenBox = { ...notesLane(w, h), top: foot - 2 * NOTE_H_PX };
-    for (const [v, crews] of CARDS) {
-      const card = winCardBox(w, false, false, winCardWords(v, crews));
+    for (const [said, words] of WORDS) {
+      const card = winCardBox(w, false, false, words);
       const near: [string, ScreenBox][] = [
         ['champion', championBox(w, h)],
         ['top line', topLineBox(w, false)],
@@ -169,8 +187,7 @@ describe('where the win card stands on a desktop', () => {
         ['notices', twoNotices],
         ['bar', bar(w, h)],
       ];
-      for (const [name, box] of near)
-        expect(overlaps(card, box), `${v}${crews ? ' crews' : ''} ${name}`).toBe(false);
+      for (const [name, box] of near) expect(overlaps(card, box), `${said} ${name}`).toBe(false);
     }
   });
 
@@ -180,8 +197,7 @@ describe('where the win card stands on a desktop', () => {
     // close button; the lines at their own widest.
     const t = WIN_DESK_TYPE;
     const w = winCardWidth(1280, false, false);
-    for (const [v, crews] of CARDS) {
-      const words = winCardWords(v, crews);
+    for (const [, words] of WORDS) {
       expect(words.title.length * t.titlePx * 0.61).toBeLessThanOrEqual(
         w - 2 * t.padX - t.border - t.close,
       );
@@ -197,8 +213,8 @@ describe('where the win card stands on a desktop', () => {
 describe('where the win card stands on a phone', () => {
   for (const thumbs of [true, false]) {
     it(`stands left of the champion, clear of the controls, ${thumbs ? 'thumbs' : 'taps'}`, () => {
-      for (const [v, crews] of CARDS) {
-        const card = winCardBox(PW, true, thumbs, winCardWords(v, crews));
+      for (const [said, words] of WORDS) {
+        const card = winCardBox(PW, true, thumbs, words);
         const near: [string, ScreenBox][] = [
           ['champion', championBox(PW, PH)],
           ['top line', topLineBox(PW, true)],
@@ -219,8 +235,7 @@ describe('where the win card stands on a phone', () => {
         } else {
           near.push(['touch bar', tapsBar], ['hints', tapsHints]);
         }
-        for (const [name, box] of near)
-          expect(overlaps(card, box), `${v}${crews ? ' crews' : ''} ${name}`).toBe(false);
+        for (const [name, box] of near) expect(overlaps(card, box), `${said} ${name}`).toBe(false);
         expect(inside(card, PW, PH)).toBe(true);
         // Room for a line at a readable size.
         expect(card.right - card.left).toBeGreaterThanOrEqual(260);

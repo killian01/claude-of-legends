@@ -429,6 +429,8 @@ describe('the Dusk', () => {
     expect(duskDepth({ x: 0, y: 80, z: 10 }, dusk)).toBe(0);
     expect(duskDepth({ x: 0, y: 80, z: 40 }, dusk)).toBeCloseTo(10);
     expect(duskDepth({ x: 0, y: 80, z: 40 }, { ...dusk, p: 0 })).toBe(0);
+    // A Thornfray bout's calm burns outside its Thornyard: its depth counts.
+    expect(duskDepth({ x: 0, y: 80, z: 40 }, { ...dusk, p: 0, b: 0.03 })).toBeCloseTo(10);
   });
 
   it('frosts the edges from the first step out, fully twelve meters in', () => {

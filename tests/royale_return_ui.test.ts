@@ -13,6 +13,7 @@ import {
   RETURN_ORBIT_MAX,
   RETURN_ORBIT_MIN,
   returnOrbitDistance,
+  thornyardFacing,
 } from '../src/render/planet_drop';
 import { PLANET_RADIUS } from '../src/render/planet_ground';
 import { RESPAWN_S } from '../src/sim/royale/types';
@@ -147,6 +148,18 @@ describe('the wait globe orbit', () => {
     expect(returnOrbitDistance(110)).toBe(RETURN_ORBIT_MAX);
     expect(returnOrbitDistance(28)).toBeLessThan(returnOrbitDistance(50));
     expect(returnOrbitDistance(0)).toBe(RETURN_ORBIT_MIN);
+  });
+
+  it("faces a Thornfray Lull's Thornyard, never a battle royale drop's whole planet", () => {
+    // The battle royale's calm cap spans the planet: the drop keeps its orbit.
+    expect(thornyardFacing({ p: 0, c: [0, 80, 0], r: 160 }, PLANET_RADIUS)).toBeNull();
+    // A bout's first cap is its Thornyard, 40 m around a region's heart.
+    expect(thornyardFacing({ p: 0, c: [3, 70, -20], r: 40 }, PLANET_RADIUS)).toEqual({
+      center: { x: 3, y: 70, z: -20 },
+      radius: 40,
+    });
+    // Only the calm's: a closing cap is the light, not the yard.
+    expect(thornyardFacing({ p: 3, c: [3, 70, -20], r: 26 }, PLANET_RADIUS)).toBeNull();
   });
 });
 

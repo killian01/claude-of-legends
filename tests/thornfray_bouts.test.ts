@@ -4,7 +4,9 @@
 // name; its errand in BOUT_CALLS (src/sim/royale/bot/bout_calls.ts) or
 // `errand: null` said in its data; its end checksum, counts and ranking
 // pinned in tests/thornfray_bout_versions.test.ts; its own test file; a
-// rule line under 40 characters and a card of two or three lines; data the
+// rule line under 40 characters and a card of two or three lines (that the
+// card fits the win card at 844 by 390 and on the desktops,
+// tests/royale_win_layout.test.ts checks for every registered kind); data the
 // engine can play (a clock of 90 to 120 s, one to five closings inside its
 // Thornyard in order, tie-breaks ending on the lower seat). The gate runs
 // on the fixtures' test kind too, which carries none of the files, to show

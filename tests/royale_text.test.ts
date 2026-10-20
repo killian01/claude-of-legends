@@ -87,6 +87,24 @@ describe('the Dusk line', () => {
     });
   });
 
+  it("says a Thornfray bout's calm already burns outside its Thornyard", () => {
+    // A bout burns outside its first cap from the first second (b above
+    // nothing in phase 0); the battle royale's calm burns nothing.
+    const burning = snap({ dusk: { ...DUSK, r: 40, b: 0.03 } });
+    expect(duskLine(burning, 35)).toEqual({
+      text: 'Outside burns · Dusk in 1:05',
+      tone: 'calm',
+    });
+    expect(duskLine(snap(), 35).text).toBe('Dusk in 1:05');
+    // A phone's row keeps the clock: the Dusk's pill says the burn to a
+    // champion standing in it.
+    expect(duskLine(burning, 35, true).text).toBe('Dusk in 1:05');
+    // The closing words are the battle royale's.
+    expect(duskLine(snap({ dusk: { ...DUSK, p: 5, pe: 300, sh: 1, b: 0.06 } }), 282).text).toBe(
+      'The Dusk closes 0:18',
+    );
+  });
+
   it('says the last light at the end', () => {
     expect(duskLine(snap({ dusk: { ...DUSK, p: 6 } }), 600).text).toBe('Last light');
     expect(duskLine(snap({ st: 'over' }), 600).text).toBe('Last light');
@@ -355,6 +373,9 @@ describe('the light and its turns', () => {
     expect(outsideLight({ x: 0, z: 0 }, dusk)).toBeNull();
     // The calm burns nobody.
     expect(outsideLight({ x: 0, y: -80, z: 0 }, { ...dusk, p: 0 })).toBe(false);
+    // A Thornfray bout's calm burns outside its Thornyard.
+    expect(outsideLight({ x: 0, y: -80, z: 0 }, { ...dusk, p: 0, b: 0.03 })).toBe(true);
+    expect(outsideLight({ x: 10, y: 79, z: 0 }, { ...dusk, p: 0, b: 0.03 })).toBe(false);
   });
 
   it('announces the calm ending, the light closing and the last of it going out', () => {

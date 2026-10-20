@@ -22,7 +22,6 @@ import {
   stepOnWire,
 } from '../src/net/protocol';
 import { REPLAY_VERSION } from '../src/net/replay';
-import { boutPool } from '../src/sim/content/bouts';
 import { contentFingerprint } from '../src/sim/content/fingerprint';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import { validateForged } from '../src/sim/forge/validate';
@@ -191,6 +190,7 @@ import {
 import { suggestKit } from './suggest';
 import { suggestLook } from './suggest_look';
 import { suggestStats } from './suggest_stats';
+import { thornfrayPool } from './thornfray_pool';
 import { ThornfrayService } from './thornfray_service';
 import { formatTickReport, TickMeter } from './tick_meter';
 import {
@@ -1081,12 +1081,13 @@ const royale = new RoyaleService({
 // Thornfray (ADR 0035, server/thornfray_service.ts): its gathering and its
 // matches beside the battle royale's, each bout a sim built by the same
 // factory, each match weighing one 5v5 match against MAX_MATCHES. Its bouts
-// are drawn from the released kinds alone: with none released, it is closed.
+// are drawn from the released kinds alone: with none released, it is closed
+// (a local stack may open the kinds in progress, server/thornfray_pool.ts).
 const thornfray = new ThornfrayService({
   send,
   client: (id) => clients.get(id),
   factory: royaleFactory,
-  pool: boutPool(),
+  pool: thornfrayPool(process.env),
   newMatchId: () => nextMatchId++,
   newSeed: (id) => (Date.now() % 2_000_000_000) + id,
   capacityLeft: () => MAX_MATCHES - matches.size - royale.load() - thornfray.load(),

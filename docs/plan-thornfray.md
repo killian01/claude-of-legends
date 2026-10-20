@@ -477,6 +477,92 @@ on the tick's `damage` events, plays the whole chain. The battle royale does not
   `scripts/e2e_thornfray.mjs` plays Lastwick then Starglean on one socket and checks the return
   globe shows after a fall in Starglean; before and after screenshots under `docs/screenshots`
   on a seeded state directory.
+- As built:
+  - The pure modules stand as planned: `src/ui/bout_text.ts` (the top line, the win line, the
+    bushels chip, the Final's x2, the end beat's words, the out wash, the gathering's line and
+    the mode's words), `bout_card.ts`, `bout_rules.ts`, `lull_model.ts` (the model, `lullBox`
+    and its sizes), `thornfray_end.ts`, `src/net/thornfray_client.ts` (the enter and Start now
+    messages; `isThornfrayGather`, `boutStartOf`, `boutLineOf` and `thornfrayResultOf`, rows
+    that cannot be read left out) and `src/game/thornfray_flow.ts` (the flow's decisions alone:
+    `boutArrival` and `thornfrayNext`). The views beside them: `src/ui/lull_view.ts`,
+    `src/ui/royale_hud_bout.ts` (the bout's part of the battle royale's layer: its words, the
+    chips, the Lull's card and the end beat), `src/ui/thornfray_end_view.ts`,
+    `src/ui/thornfray_gather.ts` (the gathering's card, in the joining card's dress, beside the
+    quick pick rather than in the flow module) and `src/render/planet_goals.ts` (the
+    primitives as rings and columns on the planet and the globe, `goalDots` on the minimap,
+    colored by holder: the viewer gold, another seat red, nobody pale blue).
+  - One screen across the bouts: the battle royale's layer of the HUD (`RoyaleHud`) is built
+    afresh at each bout (`Hud.setBout`, through `Presentation.setBout` at every bout's
+    `match_start`), on the bout's variant and kind, which also restarts the win card at the
+    landing and lets the feed and the notices of the last bout go; the HUD around it, the
+    renderer and its planet stay. Each bout builds the camera of its rule (`BeatCamera` in
+    Respawn, `CrewCamera` in One life), the last one's let go, rather than both built once.
+    The return globe, the pick and the wash already read the snapshot's variant, the bout's.
+    The music starts again with each bout (a bout's end fades it).
+  - A seat keeps its unit id in every bout (`buildBoutSim` seats the eight in seat order on a
+    map no bout adds a unit to before them; `tests/thornfray_client.test.ts` checks every
+    registered kind on every region), so the screen follows the same champion; a start naming
+    another builds the screen again on it (`boutArrival` 'rebuild').
+  - The Lull: the drop's banner stands down through it (`.br-lull`): the card's head counts the
+    seconds ("Lands in 7", "7 s" on a phone) and its foot asks for the tap ("Tap the globe to
+    land", the prize line taking the phone's one foot line when there is one). From the second
+    Lull the end beat ("STARGLEAN · Wren", "· You" for the viewer) plays as a spotlight call
+    held two seconds, said on the announcement's line while the winner's Graft cards are open,
+    and the card waits for its word to have gone (`br-spotting`), which stands where the card
+    would at 960 by 540, a second past the beat at most (the word's fade runs on the page's
+    clock, which a starved page runs late). The Lull's globe faces the bout's Thornyard, near
+    enough to tap inside it, and holds still until a drag turns it
+    (`render/planet_drop.ts thornyardFacing`, faced again each frame in
+    `render/planet_stage.ts`: the chart moves under the globe as the champion is set down to
+    wait at the Thornyard's heart); a battle royale's drop, whose first cap is the whole
+    planet, keeps its turning orbit. Facing the default orbit, the Thornyard stood at the
+    globe's rim or on its far side. In the Final its line stands in the head and the ask goes,
+    the card no taller. The card folds by a rule of its own, its body `display: none` to its head's
+    first row (16 px on a phone, above the cards' title at 62), not through `CARDS_ASIDE`,
+    whose `visibility` rule would have left an empty card standing. The prize line is short
+    on a phone ("Wren picks a Graft") and may take two lines on a desktop. The Graft cards'
+    line under their title says the prize lasts the next bout (`prizeSubtitle(PRIZE_LASTS)`).
+  - The top line on a phone, measured at 844 by 390: the burning calm's "Outside burns" is a
+    desktop's (on a phone the Dusk's pill says the burn to a champion standing in it), and in
+    play the count drops the bout's name as well as its word ("0:48 · 7, 2nd"): with the
+    closing Dusk's line the name ran the row to 381 px of its 380. The win line on a phone is
+    "Most gleaned wins · 3 of 6" ("· the Final" in the Final), beside the bushels chip, which
+    stands there rather than in the head's row and gives way to the Dusk's pill. The chip is
+    hidden in the first bout, everyone at nothing.
+  - The Final's card at the landing keeps the kind's lines: a fourth line ("The Final: every
+    place pays double") pushed Starglean's card into a phone's notices with the thumbs; the
+    Lull's card, the win line and the x2 pill say what the Final pays.
+  - The end screen is the battle royale's 'royale' card: the result and its three ways on, the
+    seat bout by bout ("2. Starglean 4th +2", two columns of three) under it on a desktop
+    (`EndContent.bouts`, `EndMetrics.boutsH`, none on a phone), the table of eight with each
+    seat's bouts won ("1 won" on a phone, where the champion's name stands down). The match
+    counts as its own mode for the audience counter (`MatchMode` 'thornfray').
+  - Before slice 7 gives it a door, the dev server enters a Thornfray at `/?thornfray` (a
+    Guest when signed out; `import.meta.env.DEV` keeps it out of a build), and a server opens
+    the kinds in progress with `THORNFRAY_UNRELEASED=1` (`server/thornfray_pool.ts`, tested;
+    `.env.example`'s prose and `docs/dev-local.md`), which production never sets: compose
+    never passes it, and `tests/env_wiring.test.ts` counts it among the names a developer
+    sets, beside `GENERATION_PROVIDER`.
+  - Checked in a browser on the local stack, one browser at a time: a whole Thornfray at
+    1280 by 800 and at 844 by 390 with touch (thumbs, and taps on the demo's scenes), the
+    demo's scenes at 1920 by 1080, the measures of the phone's top line taken in Chrome
+    (`tests/bout_text.test.ts` holds them). `.dev/phone_measure.mjs` and
+    `.dev/phone_feedback.mjs` were not run: they measure the landing's Play now and the
+    feedback box, which this slice leaves alone (slice 7 opens the landing's door).
+  - `scripts/e2e_thornfray.mjs` presses Back in a Lull itself (the pause menu opens, a second
+    Back resumes) and leaves `scripts/e2e_nav.mjs` as it was: the nav script runs on any
+    stack, the Thornfray needs the knob until slice 7. On software WebGL the page falls behind
+    the snapshots and a poll from outside missed whole Lulls, so the page records what it
+    shows itself (a `MutationObserver`) and presses Back from inside the moment the first
+    card stands. The stills under `docs/screenshots/thornfray-*.webp` were taken on the local
+    stack with the socket's messages held while a frame was drawn. The demo's scenes `bout`,
+    `lull`, `lull-prize`, `lull-final` and `thornfray_end` run their HUD on the wall clock.
+  - Open: the design's "the fallen watch their killer" in a One life bout. The server sends
+    the killer to watch (`wa`, `server/royale_snapshot_blocks.ts watchBlock`) in Respawn alone,
+    read through the Burr, which a bout leaves off, and the planet's One life sends none
+    either (its `watch` message is answered by nothing yet): a fallen Lastwick seat keeps the
+    view where it fell, nothing in sight (a dead champion sees nothing), under the OUT wash
+    with its place, until the Lull. It needs a One life watch on the server and the wire.
 
 ### 7. The landing, the home, the News
 

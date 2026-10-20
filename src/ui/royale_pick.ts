@@ -15,6 +15,7 @@ import { CHAMPION_LIST, CHAMPIONS } from '../sim/content/champions';
 import { SIGIL_LIST } from '../sim/content/sigils';
 import { SKINS } from '../sim/content/skins';
 import type { RoyaleVariant } from '../sim/royale/types';
+import { THORNFRAY_LABEL, THORNFRAY_LINE, THORNFRAY_TITLE } from './bout_text';
 import { ROLE_COLORS, setPortrait } from './champion_art';
 import { describeSigil } from './describe';
 import { el, screen } from './menu';
@@ -118,6 +119,9 @@ export interface RoyalePickOptions {
   initial: RoyalePick;
   onPlay: (pick: RoyalePick) => void;
   onBack: () => void;
+  // A Thornfray's quick pick (ADR 0035): its own words and no Crew row, a
+  // Thornfray being played Solo.
+  thornfray?: boolean;
 }
 
 export interface RoyalePickController {
@@ -143,9 +147,9 @@ export function showRoyalePick(
   const head = el('div', 'br-pick-head');
   const words = el('div', 'br-pick-words');
   words.append(
-    el('small', '', ROYALE_LABEL),
-    el('h1', 'menu-title', mode.title),
-    el('p', '', mode.line),
+    el('small', '', opts.thornfray ? THORNFRAY_LABEL : ROYALE_LABEL),
+    el('h1', 'menu-title', opts.thornfray ? THORNFRAY_TITLE : mode.title),
+    el('p', '', opts.thornfray ? THORNFRAY_LINE : mode.line),
   );
   head.append(planetEmblem(opts.variant), words);
 
@@ -191,7 +195,7 @@ export function showRoyalePick(
   }
   const crewBox = el('div', 'br-pick-crew');
   crewBox.append(el('small', '', 'Crew'), crewRow, crewLine);
-  head.appendChild(crewBox);
+  if (!opts.thornfray) head.appendChild(crewBox);
   const skinRow = el('div', 'menu-skins');
   const sigilRow = el('div', 'menu-sigils');
   const sigilButtons = new Map<string, HTMLButtonElement>();

@@ -195,6 +195,12 @@ describe('how a match ended', () => {
       dropIn: false,
     });
     expect(matchEndEvent(null, 60, 'royale', 'one_life', { held: Number.NaN }).data.held).toBe(0);
+    // A Thornfray is its own mode, six bouts counted as one match.
+    expect(matchEndEvent(0, 12 * 60, 'thornfray', undefined, { held: 700 }).data).toEqual({
+      minutes: 12,
+      mode: 'thornfray',
+      held: 700,
+    });
     // A match that says neither carries neither.
     expect(matchEndEvent(null, 60, 'online').data).toEqual({ minutes: 1, mode: 'online' });
   });

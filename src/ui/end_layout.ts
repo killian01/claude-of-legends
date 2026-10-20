@@ -63,6 +63,10 @@ export interface EndMetrics {
   // narrow column wraps it to.
   goalH: number;
   graftsH: number;
+  // A Thornfray's seat bout by bout (ui/thornfray_end_view.ts), in the
+  // same box: six lines in two columns of three on a desktop, none on a
+  // phone, which leaves them out.
+  boutsH: number;
   // The ranking: its heading and a row, tall and tightened.
   rankHeadH: number;
   rankRowH: number;
@@ -122,6 +126,7 @@ export const DESKTOP_END: EndMetrics = {
   royalePairFrom: 230,
   goalH: 62,
   graftsH: 34,
+  boutsH: 51,
   rankHeadH: 26,
   rankRowH: 34,
   rankRowShortH: 26,
@@ -164,6 +169,7 @@ export const PHONE_END: EndMetrics = {
   royalePairFrom: 200,
   goalH: 38,
   graftsH: 16,
+  boutsH: 0,
   rankHeadH: 22,
   rankRowH: 28,
   rankRowShortH: 28,
@@ -186,13 +192,16 @@ export const PHONE_END: EndMetrics = {
 
 // What a card holds: its lines under the title (the 5v5: the match time
 // and the rating), its table's rows (the 5v5: both teams), the level bar,
-// the Grafts, and the HUD's boxes that show.
+// the Grafts, a Thornfray's bouts, and the HUD's boxes that show. A
+// Thornfray's end is the battle royale's card (ADR 0035): its lines, its
+// table of eight seats and its bouts under the result.
 export interface EndContent {
   card: EndCard;
   lines: number;
   rows: number;
   goal: boolean;
   grafts: boolean;
+  bouts?: boolean;
   ladder: boolean;
 }
 
@@ -235,11 +244,14 @@ export function headHeight(m: EndMetrics, c: EndContent, width: number): number 
   return frame(m) + kicker + title + m.headGap + lines + buttonsHeight(m, c.card, width);
 }
 
-// The battle royale's box under the result: the level bar and the Grafts.
+// The battle royale's box under the result: the level bar and the Grafts,
+// or a Thornfray's bouts (a desktop's).
 export function progressHeight(m: EndMetrics, c: EndContent): number {
-  if (c.card !== 'royale' || (!c.goal && !c.grafts)) return 0;
-  const gap = c.goal && c.grafts ? m.headGap : 0;
-  return frame(m) + (c.goal ? m.goalH : 0) + gap + (c.grafts ? m.graftsH : 0);
+  const bouts = c.bouts === true && m.boutsH > 0;
+  if (c.card !== 'royale' || (!c.goal && !c.grafts && !bouts)) return 0;
+  const parts = [c.goal ? m.goalH : 0, c.grafts ? m.graftsH : 0, bouts ? m.boutsH : 0];
+  const shown = parts.filter((h) => h > 0);
+  return frame(m) + shown.reduce((a, h) => a + h, 0) + m.headGap * (shown.length - 1);
 }
 
 // The scoreboard is narrow in a box this wide (border included).
