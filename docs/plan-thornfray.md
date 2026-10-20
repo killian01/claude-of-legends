@@ -640,7 +640,10 @@ on the tick's `damage` events, plays the whole chain. The battle royale does not
     slice 6's, unchanged; not run again). In the stills a Lastwick bout's start still showed
     "Three Seedfalls have landed" from the Starglean before it: `Hud.setBout` builds the
     battle royale's layer afresh but leaves the HUD's own announcement line and its queue,
-    which a page behind its snapshots fills in bulk (left open, for slice 6's owner).
+    which a page behind its snapshots fills in bulk. Fixed after the slices: the line and
+    its queue are `ui/announce_line.ts` (`AnnounceLine`, tested in
+    `tests/announce_line.test.ts`), which `Hud.setBout` clears, so a bout starts on an empty
+    line.
     `.dev/phone_measure.mjs` and `.dev/phone_feedback.mjs` were not run: both predate
     the battle royale's Play now (they wait for the 5v5's champion select and its Lock in),
     so the landing was measured by `scripts/e2e_landing.mjs` and a throwaway beside it.

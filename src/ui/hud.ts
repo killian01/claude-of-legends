@@ -54,6 +54,7 @@ import type { AbilityKey, TeamId, Vec2 } from '../sim/types';
 import type { Unit } from '../sim/unit';
 import type { IWorld } from '../world_api';
 import { abilityIconUrl, passiveIconUrl, sigilIconUrl } from './ability_icons';
+import { AnnounceLine } from './announce_line';
 import { chargeFace } from './charge_face';
 import {
   AuraWatch,
@@ -1321,10 +1322,9 @@ export class Hud {
   // A mouse's click on a spell's slot (wired by boot): what it does to a
   // spell not learned yet (ui/slot_tap.ts).
   private slotClick: ((key: AbilityKey) => void) | null = null;
-  private announceUntil = 0;
-  // A line that holds its slot (announce's `keep`), and what waits for it.
-  private announceKept = false;
-  private readonly announceNext: { text: string; color: string; holdMs: number }[] = [];
+  // The line on screen, a line that holds its slot (announce's `keep`), and
+  // what waits for it (ui/announce_line.ts).
+  private readonly announceLine = new AnnounceLine();
   private spotUntil = 0;
   private sawBattleBegin = false;
   private sawFirstBlood = false;
@@ -2191,6 +2191,10 @@ export class Hud {
     const host = this.royaleHost;
     if (!host) return;
     this.royale?.dispose();
+    // The last bout's line and what waited for it go with it: a page behind
+    // its snapshots says a whole bout's end in bulk.
+    this.announceLine.clear();
+    this.hideAnnounce();
     this.royaleVariant = variant;
     this.royaleLife = new RoyaleLife();
     this.royaleSeen = new SeenChampions();
@@ -2936,16 +2940,20 @@ export class Hud {
   // carries `announcing` while a line shows: the battle royale's open
   // Graft cards give it their title's line (ui/royale_cards_room.ts).
   announce(text: string, color = '#f2ffd9', holdMs = 2600, keep = false): void {
-    if (this.announceKept && !keep && performance.now() < this.announceUntil) {
-      if (this.announceNext.length < 3) this.announceNext.push({ text, color, holdMs });
-      return;
-    }
-    this.announceKept = keep;
+    const shown = this.announceLine.say({ text, color, holdMs }, keep, performance.now());
+    if (shown) this.drawAnnounce(shown.text, shown.color);
+  }
+
+  private drawAnnounce(text: string, color: string): void {
     this.announceEl.textContent = text;
     this.announceEl.style.color = color;
     this.announceEl.style.opacity = '1';
     this.rootEl.classList.add('announcing');
-    this.announceUntil = performance.now() + holdMs;
+  }
+
+  private hideAnnounce(): void {
+    this.announceEl.style.opacity = '0';
+    this.rootEl.classList.remove('announcing');
   }
 
   // The two top rungs of the multikill ladder get a moment of their own
@@ -3407,17 +3415,9 @@ export class Hud {
       this.spotUntil = 0;
       this.spotEl.classList.remove('on');
     }
-    if (this.announceUntil !== 0 && performance.now() > this.announceUntil) {
-      this.announceKept = false;
-      const next = this.announceNext.shift();
-      if (next) {
-        this.announce(next.text, next.color, next.holdMs);
-      } else {
-        this.announceEl.style.opacity = '0';
-        this.rootEl.classList.remove('announcing');
-        this.announceUntil = 0;
-      }
-    }
+    const announced = this.announceLine.step(performance.now());
+    if (announced === 'hide') this.hideAnnounce();
+    else if (announced) this.drawAnnounce(announced.text, announced.color);
 
     // Opening countdown and match milestones.
     if (!this.sawBattleBegin) {
