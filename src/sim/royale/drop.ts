@@ -5,8 +5,12 @@
 // walkable point farthest from every pick and every landing already
 // placed, among a sample drawn from the match's stream. Then a house bot
 // or two comes down beside each person (escortLandings).
+//
+// A bout (ADR 0035) lands everyone inside its first cap, the Thornyard: a
+// pick outside it is brought in toward its center (landingIn), and a seat
+// with no pick lands somewhere quiet inside it (quietSpotIn).
 
-import { dist2, norm, settle, type Vec3 } from '../geo';
+import { delta, dist2, norm, settle, unit, type Vec3 } from '../geo';
 import type { Rng } from '../rng';
 import { depthInside, insideCap } from './dusk';
 import {
@@ -66,6 +70,60 @@ export function quietSpot(
     if (taken.length === 0) break;
   }
   return best ?? layout.regions[0]?.heart ?? { x: layout.radius, y: 0, z: 0 };
+}
+
+// How deep inside a bout's first cap a landing brought in from outside it
+// stands, and every quiet spot drawn in it.
+export const LANDING_DEPTH_M = 2;
+
+// A pick as a bout lands it: inside the cap at LANDING_DEPTH_M, brought
+// in toward its center when it stands outside or shallower, then snapped
+// to walkable ground; null when the snap leaves the cap.
+export function landingIn(
+  p: Vec3,
+  cap: DuskCap,
+  layout: RoyaleLayout,
+  ground: RoyaleGround,
+): Vec3 | null {
+  let q = p;
+  if (!insideCap(cap, p) || depthInside(cap, p) < LANDING_DEPTH_M) {
+    const dir = unit(delta(cap.center, p));
+    const reach = Math.max(0, cap.radius - LANDING_DEPTH_M);
+    q = dir ? along(cap.center, dir as Vec3, reach, layout.radius) : cap.center;
+  }
+  const at = snapLanding(q, layout, ground);
+  return at && insideCap(cap, at) ? at : null;
+}
+
+// The quiet spot inside a bout's first cap: among `sample` points drawn
+// uniformly over it at LANDING_DEPTH_M, snapped to walkable ground and
+// still inside it, the farthest from `taken`; the cap's center's nearest
+// ground when none is.
+export function quietSpotIn(
+  rng: Rng,
+  cap: DuskCap,
+  layout: RoyaleLayout,
+  ground: RoyaleGround,
+  taken: readonly Vec3[],
+  sample = QUIET_SAMPLE,
+): Vec3 {
+  const R = layout.radius;
+  const reach = Math.max(0, cap.radius - LANDING_DEPTH_M);
+  let best: Vec3 | null = null;
+  let bestD = -1;
+  for (let i = 0; i < sample; i++) {
+    // Uniform over the disk: the larger of two draws, as arrivalSpot.
+    const s = reach * Math.max(rng.next(), rng.next());
+    const p = snapLanding(along(cap.center, randomHeading(rng, cap.center), s, R), layout, ground);
+    if (!p || !insideCap(cap, p)) continue;
+    const d = taken.length === 0 ? 0 : nearestTo(p, taken);
+    if (d > bestD) {
+      best = p;
+      bestD = d;
+    }
+    if (taken.length === 0) break;
+  }
+  return best ?? snapLanding(cap.center, layout, ground) ?? { ...cap.center };
 }
 
 // An Arrival's spot (grace.ts arrive): somewhere quiet inside the light. A
@@ -204,26 +262,34 @@ export function fairFoeSpot(
 // Every seat's landing, in the order given (the sim passes unit ids
 // ascending): the picks first, each snapped, then the quiet spots for the
 // seats that picked nothing, each away from everything placed before it.
+// In a bout every one inside its first cap (`within`).
 export function resolveLandings(
   seats: readonly number[],
   picks: ReadonlyMap<number, Vec3>,
   rng: Rng,
   layout: RoyaleLayout,
   ground: RoyaleGround,
+  within: DuskCap | null = null,
 ): Map<number, Vec3> {
   const out = new Map<number, Vec3>();
   const taken: Vec3[] = [];
   const unpicked: number[] = [];
   for (const id of seats) {
     const pick = picks.get(id);
-    const at = pick ? snapLanding(pick, layout, ground) : null;
+    const at = !pick
+      ? null
+      : within
+        ? landingIn(pick, within, layout, ground)
+        : snapLanding(pick, layout, ground);
     if (at) {
       out.set(id, at);
       taken.push(at);
     } else unpicked.push(id);
   }
   for (const id of unpicked) {
-    const at = quietSpot(rng, layout, ground, taken);
+    const at = within
+      ? quietSpotIn(rng, within, layout, ground, taken)
+      : quietSpot(rng, layout, ground, taken);
     out.set(id, at);
     taken.push(at);
   }

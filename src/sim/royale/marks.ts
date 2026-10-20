@@ -160,6 +160,7 @@ function addMark(
 // The slayer of a big creature: shown to everyone once, for MARK_SHOWN_S
 // (the mode's onDeath, the creature branch).
 export function markSlayer(mode: RoyaleMode, sim: Sim, u: Unit): void {
+  if (!mode.runs('marks')) return;
   addMark(mode, sim, u, 'slayer', true);
 }
 
@@ -185,7 +186,8 @@ export function markSeats(mode: RoyaleMode, sim: Sim): MarkSeat[] {
 // show ends. Respawn's leader is kept beside it, shown with the Lodestar.
 export function stepMarks(mode: RoyaleMode, sim: Sim): void {
   const s = mode.state;
-  if (s.stage !== 'play') return;
+  // A bout that leaves the marks out shows nobody (ADR 0035, BoutSystems).
+  if (s.stage !== 'play' || !mode.runs('marks')) return;
   const time = sim.time;
   const seats = markSeats(mode, sim);
   if (mode.variant === 'respawn') s.leaderId = leaderOf(seats);

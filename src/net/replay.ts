@@ -8,14 +8,20 @@
 import { parseCoachOrder } from '../sim/coach';
 import { attachBot, botPolicy } from '../sim/content/bots';
 import { attachRoyaleBot, royaleBotPolicy } from '../sim/content/bots/royale';
+import { BOUT_KINDS, boutFingerprint, boutKindOf } from '../sim/content/bouts';
+import { BOUT_ENGINE_VERSION, BOUT_SEATS, BOUTS } from '../sim/content/bouts/match';
+import type { BoutKind } from '../sim/content/bouts/types';
 import { contentMatches } from '../sim/content/fingerprint';
 import type { StarOrchard } from '../sim/content/star_orchard';
 import type { ForgedChampionDef } from '../sim/forge/forged_def';
 import type { Ground } from '../sim/ground';
 import { NavGrid } from '../sim/navgrid';
 import type { LanePreference, PlaybookDef } from '../sim/playbook/types';
+import type { PendingPrize } from '../sim/royale/bouts/ledger';
+import { boutGameMap, thornyardOf } from '../sim/royale/bouts/plan';
 import { crewCount, crewOfSeat } from '../sim/royale/crews';
 import { royaleSeatSkills } from '../sim/royale/fill';
+import type { RegionId } from '../sim/royale/layout';
 import { type PlanetLayoutRecord, planetGameMap, royaleLayoutOf } from '../sim/royale/planet_map';
 import { ROYALE_RULES_VERSION, type RoyaleCrew, type RoyaleVariant } from '../sim/royale/types';
 import { Sim } from '../sim/sim';
@@ -219,6 +225,42 @@ export interface RoyaleRecord {
   newcomers?: number[];
   // Trios or Fives (ADR 0034); absent for Solo, as every record before it.
   crew?: 3 | 5;
+  // A Thornfray's bout (ADR 0035), built by buildBoutSim; absent on every
+  // battle royale. Additive: a record without it plays as it always did.
+  bout?: BoutRecord;
+}
+
+// A bout's own part of its record: the match's seed (the seats' skills are
+// dealt from it, never from the bout's), the bout's index, kind and
+// Thornyard, the seat offered fresh prize cards (the last bout's winner)
+// and the prizes carried unpicked, the Grafts each seat carries in, and the
+// three versions it ran under: its kind's own, its kind's data
+// fingerprint, the engine's.
+export interface BoutRecord {
+  matchSeed: number;
+  index: number;
+  kind: string;
+  thornyard: RegionId;
+  prize?: number;
+  pendingPrize?: PendingPrize[];
+  grafts?: string[][];
+  version: number;
+  fingerprint: string;
+  engine: number;
+}
+
+// A bout's record stamped with its kind's versions and the engine's.
+export function boutRecord(
+  kind: BoutKind,
+  bout: Omit<BoutRecord, 'kind' | 'version' | 'fingerprint' | 'engine'>,
+): BoutRecord {
+  return {
+    ...bout,
+    kind: kind.id,
+    version: kind.version,
+    fingerprint: boutFingerprint(kind),
+    engine: BOUT_ENGINE_VERSION,
+  };
 }
 
 // The one sim construction for a battle royale, live and replayed alike,
@@ -263,14 +305,98 @@ export function buildRoyaleSim(
   return { sim, unitIds };
 }
 
+// The one sim construction for a Thornfray's bout (ADR 0035), live and
+// replayed alike, beside buildRoyaleSim: one team per seat (a bout is
+// Solo), the planet's map with only the camps, the rings and the Warden
+// its kind runs, its ground, the mode's rules under the bout's kind (its
+// base the variant), every seat seated in pick order at the bout's rising
+// arc with the Grafts it carries in, its bot skill dealt from the match's
+// seed (the same in every bout), the house seats' bots attached. The Sim's
+// own seed is the bout's (bouts/ledger.ts boutSeed). Throws on a kind this
+// build does not know.
+export function buildBoutSim(
+  planet: RoyalePlanet,
+  record: Pick<ReplayRecord, 'seed' | 'picks' | 'royale'>,
+  kinds: readonly BoutKind[] = BOUT_KINDS,
+): { sim: Sim; unitIds: number[] } {
+  const royale = record.royale;
+  const bout = royale?.bout;
+  if (!royale || !bout) throw new Error('not a bout record');
+  const kind = boutKindOf(bout.kind, kinds);
+  if (!kind) throw new Error(`no bout kind ${bout.kind}`);
+  const layout = royaleLayoutOf(planet.layout);
+  const thornyard = thornyardOf(layout, bout.thornyard, kind.thornyard.radius);
+  const picks = record.picks;
+  const sim = new Sim(record.seed, {
+    map: boutGameMap(planetGameMap(planet.layout), kind.systems),
+    // The 5v5's own systems never run here; their grid is a token.
+    nav: new NavGrid(1, [], 0),
+    ground: planet.ground(),
+    teamCount: picks.length,
+    separation: ['minion', 'champion'],
+    royale: {
+      variant: kind.base,
+      layout,
+      bout: {
+        kind,
+        index: bout.index,
+        final: bout.index === BOUTS - 1,
+        thornyard,
+        ...(bout.prize !== undefined ? { prize: bout.prize } : {}),
+        ...(bout.pendingPrize ? { pendingPrize: bout.pendingPrize } : {}),
+        ...(bout.grafts ? { grafts: bout.grafts } : {}),
+      },
+    },
+  });
+  const mode = sim.royaleMode!;
+  const seats = Math.max(BOUT_SEATS, picks.length);
+  const skills = royaleSeatSkills(bout.matchSeed, seats, royale.guestsOnly === true);
+  // Where everyone waits while the drop runs (the Lull): no system reads it.
+  const waiting = thornyard.center;
+  const unitIds: number[] = [];
+  picks.forEach((p, i) => {
+    const unit = sim.addChampion(i, { ...waiting }, p.championId, p.skin ?? 0);
+    unit.sigils = [...p.sigils];
+    mode.seat(unit, p.playbook?.kit?.build, skills[i]);
+    unitIds.push(unit.id);
+    if (p.bot !== undefined || p.playbook) attachRoyaleBot(sim, unit.id);
+  });
+  const newcomers = royale.newcomers ?? [];
+  mode.setNewcomers(unitIds.filter((_, i) => newcomers.includes(i)));
+  return { sim, unitIds };
+}
+
 // Whether a battle royale's record still plays out the match it recorded:
 // the version this build speaks and the royale rules it runs (a record
 // without them was made before they were written down, and is refused).
-export function royaleReplayPlayable(record: {
-  version?: unknown;
-  royale?: { variant?: unknown; guestsOnly?: unknown; rules?: unknown } | undefined;
-}): boolean {
-  return record.version === REPLAY_VERSION && record.royale?.rules === ROYALE_RULES_VERSION;
+// A bout's also its kind's own version, its kind's data fingerprint and the
+// engine's version, each as this build has them.
+export function royaleReplayPlayable(
+  record: {
+    version?: unknown;
+    royale?:
+      | {
+          variant?: unknown;
+          guestsOnly?: unknown;
+          rules?: unknown;
+          bout?: Partial<BoutRecord> | undefined;
+        }
+      | undefined;
+  },
+  kinds: readonly BoutKind[] = BOUT_KINDS,
+): boolean {
+  if (record.version !== REPLAY_VERSION || record.royale?.rules !== ROYALE_RULES_VERSION) {
+    return false;
+  }
+  const bout = record.royale.bout;
+  if (bout === undefined) return true;
+  const kind = typeof bout.kind === 'string' ? boutKindOf(bout.kind, kinds) : undefined;
+  return (
+    kind !== undefined &&
+    bout.version === kind.version &&
+    bout.fingerprint === boutFingerprint(kind) &&
+    bout.engine === BOUT_ENGINE_VERSION
+  );
 }
 
 // The royale replay loader: a battle royale's record rebuilt on the
@@ -280,9 +406,12 @@ export function royaleReplayPlayable(record: {
 export function loadRoyaleReplay(
   planet: RoyalePlanet,
   record: Pick<ReplayRecord, 'version' | 'seed' | 'picks' | 'royale'>,
+  kinds: readonly BoutKind[] = BOUT_KINDS,
 ): { sim: Sim; unitIds: number[] } | null {
   const royale = record.royale;
-  if (!royale || !royaleReplayPlayable(record)) return null;
+  if (!royale || !royaleReplayPlayable(record, kinds)) return null;
+  // A Thornfray's bout, rebuilt by its own construction.
+  if (royale.bout) return buildBoutSim(planet, record, kinds);
   return buildRoyaleSim(planet, record.seed, record.picks, royale.variant, {
     guestsOnly: royale.guestsOnly === true,
     ...(royale.newcomers ? { newcomers: royale.newcomers } : {}),

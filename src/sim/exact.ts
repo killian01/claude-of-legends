@@ -14,6 +14,12 @@ export function hypot(x: number, z: number): number {
   return Math.sqrt(x * x + z * z);
 }
 
+// The square root IEEE 754 pins, for a root that is no length on the
+// ground (a length is geo.dist or geo.norm): a sine from its cosine.
+export function root(x: number): number {
+  return Math.sqrt(x);
+}
+
 const TWO_PI = 2 * Math.PI;
 const HALF_PI = Math.PI / 2;
 // Taylor terms on [0, PI/2]: the tail past this many is below the last bit.

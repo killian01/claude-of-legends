@@ -20,7 +20,15 @@
 // the open head a person is reading), the lowest grade, the newest of
 // equals. A pick opens the next head. One life's elimination clears the
 // seat's queue.
+//
+// A bout (ADR 0035) offers no Graft but its prize: no drop Bough, no
+// trigger, no level. The last bout's winner is offered three cards of
+// PRIZE_GRADE at the drop (its Lull), and a prize left unpicked when its
+// bout ended is offered again with its very cards (pendingPrize); a prize
+// offer is exempt from clearOffers, so a winner who falls before picking
+// keeps it open.
 
+import { PRIZE_GRADE } from '../content/bouts/match';
 import {
   GRADE_ORDER,
   GRAFT_LEVELS,
@@ -168,6 +176,12 @@ export function offerGraft(
   return true;
 }
 
+// The grade an event offers in this variant, if any; none in a bout.
+export function graftTrigger(mode: RoyaleMode, trigger: GraftTrigger): GraftGrade | null {
+  if (mode.bout) return null;
+  return GRAFT_TRIGGERS[mode.variant][trigger] ?? null;
+}
+
 // The offer an event makes in this variant, if any.
 export function offerOnTrigger(
   mode: RoyaleMode,
@@ -176,7 +190,7 @@ export function offerOnTrigger(
   trigger: GraftTrigger,
   source: 'cache' | 'camp' | 'takedown' = 'cache',
 ): boolean {
-  const grade = GRAFT_TRIGGERS[mode.variant][trigger];
+  const grade = graftTrigger(mode, trigger);
   if (!grade) return false;
   return offerGraft(mode, sim, unitId, grade, source);
 }
@@ -193,6 +207,7 @@ export function offerDrop(mode: RoyaleMode, sim: Sim, unitId: number): void {
 // The offers of the levels a champion just rose through (levels.ts
 // grantXp's `from` to its level now).
 export function offerOnLevels(mode: RoyaleMode, sim: Sim, u: Unit, from: number): void {
+  if (mode.bout) return;
   const table = GRAFT_LEVELS[mode.variant];
   for (let level = from + 1; level <= u.level; level++) {
     const grade = table[level];
@@ -250,9 +265,49 @@ export function pickGraft(mode: RoyaleMode, sim: Sim, unitId: number, pick: numb
   return true;
 }
 
-// One life's elimination: the seat's queue goes.
+// A bout's prizes (see the header), once, at the drop, in the bout's
+// order: to each seat it names, the cards it left unpicked when there are
+// some, else three drawn now from the match's stream (one piece of loot
+// instead when the draw comes short). How many were offered.
+export function offerPrize(mode: RoyaleMode, sim: Sim): number {
+  const b = mode.state.bout;
+  if (!b || b.prizeOffered) return 0;
+  b.prizeOffered = true;
+  let offered = 0;
+  for (const prize of b.prizes) {
+    const unitId = b.seats[prize.seat];
+    const u = unitId !== undefined ? sim.units.get(unitId) : undefined;
+    if (u?.kind !== 'champion') continue;
+    const queue = mode.state.offers.get(u.id) ?? [];
+    const held = mode.state.grafts.get(u.id) ?? [];
+    const cards =
+      prize.cards !== null
+        ? [...prize.cards]
+        : drawCards(sim.rng, u.championId, PRIZE_GRADE, held, queue, offerCtx(mode, sim));
+    if (cards.length < 3) {
+      mode.lootPieces(sim, u, 1, 'cache');
+      continue;
+    }
+    queue.push({ grade: PRIZE_GRADE, cards, offeredAt: sim.time, prize: true });
+    trimQueue(queue);
+    mode.state.offers.set(u.id, queue);
+    offered++;
+  }
+  return offered;
+}
+
+// One life's elimination: the seat's queue goes, a bout's prize aside.
 export function clearOffers(mode: RoyaleMode, unitId: number): void {
-  mode.state.offers.delete(unitId);
+  const queue = mode.state.offers.get(unitId);
+  const prize = mode.bout ? queue?.filter((o) => o.prize === true) : undefined;
+  if (prize && prize.length > 0) mode.state.offers.set(unitId, prize);
+  else mode.state.offers.delete(unitId);
+}
+
+// The prize offers a seat still has open: what a bout that ends carries to
+// the next (pendingPrize).
+export function openPrizes(mode: RoyaleMode, unitId: number): GraftOffer[] {
+  return (mode.state.offers.get(unitId) ?? []).filter((o) => o.prize === true);
 }
 
 // Whether a seat has an offer open (the bot driver asks a dead seat).

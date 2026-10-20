@@ -102,6 +102,11 @@ const KITS_ON_THE_PLANET = [
   ...readdirSync(join(simDir, 'content', 'champions')).map((f) => `content/champions/${f}`),
 ];
 
+// Every .ts file under a directory, as a path relative to src/sim/.
+function royaleFiles(dir: string): string[] {
+  return simFiles(dir).map((file) => path.relative(simDir, file).split(path.sep).join('/'));
+}
+
 const CORE_ON_THE_PLANET = [
   'attack_move.ts',
   'combat/ally_dash.ts',
@@ -119,27 +124,10 @@ const CORE_ON_THE_PLANET = [
   'vision.ts',
   'walls.ts',
   'zones.ts',
-  // The battle royale's rules and its bot's travel (ADR 0031).
-  'royale/caches.ts',
-  'royale/clamors.ts',
-  'royale/drop.ts',
-  'royale/dusk.ts',
-  'royale/grace.ts',
-  'royale/grafts.ts',
-  'royale/levels.ts',
-  'royale/loot.ts',
-  'royale/marks.ts',
-  'royale/mode.ts',
-  'royale/pads.ts',
-  'royale/risings.ts',
-  'royale/score.ts',
-  'royale/seedfall.ts',
-  'royale/bot/brain.ts',
-  'royale/bot/calls.ts',
-  'royale/bot/drop_pick.ts',
-  'royale/bot/fight.ts',
-  'royale/bot/sense.ts',
-  'royale/bot/travel.ts',
+  // The battle royale's rules, its bouts and its bot (ADR 0031, ADR 0035):
+  // every file under src/sim/royale/, read from the directory, so a new
+  // module is guarded without an edit here.
+  ...royaleFiles(join(simDir, 'royale')),
 ];
 
 const ON_THE_PLANET = [...new Set([...CORE_ON_THE_PLANET, ...KITS_ON_THE_PLANET])];

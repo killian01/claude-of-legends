@@ -10,7 +10,7 @@
 import type { CampKind } from '../content/camps';
 import type { GameMap, RingSite, WallShape } from '../content/map';
 import type { Vec3 } from '../geo';
-import type { RegionId, RoyaleLayout } from './layout';
+import { REGION_IDS, type RegionId, type RoyaleLayout } from './layout';
 
 export interface PlanetPoint {
   x: number;
@@ -33,7 +33,6 @@ export interface PlanetLayoutRecord {
   sightBlockers?: readonly { at: PlanetPoint; r: number }[];
 }
 
-const REGION_IDS: readonly RegionId[] = ['sanctuary', 'open', 'ruins', 'groves', 'lakes', 'cliffs'];
 const CAMP_KINDS: readonly CampKind[] = ['spinecrest', 'brackenlings', 'barkmaw'];
 
 function pt(p: PlanetPoint): Vec3 {

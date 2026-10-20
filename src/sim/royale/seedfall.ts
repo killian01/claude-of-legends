@@ -14,9 +14,18 @@
 // two seeds stand SEEDFALL_PAIR_M apart, or, when the light is too small for
 // that, as far apart as its spots allow. With no spot left, a point drawn
 // within half the cap's radius of its center, moved to the nearest ground.
+//
+// A bout (ADR 0035) brings its own Seedfalls (content/bouts/types.ts
+// BoutSeedfalls): their times, seeds per burst, call, forecast, spacing and
+// depth. A burst of N seeds stands every seed at least `apartM` from every
+// other of the burst (not the first alone, as a Respawn pair is measured):
+// each from the free spots deep enough inside the forecast light, then
+// from walkable ground on a seeded ring inside that light, so a burst
+// never stacks two seeds on one point.
 
 import { dealDamage } from '../combat/damage';
 import { addStatus } from '../combat/status';
+import type { BoutSeedfalls } from '../content/bouts/types';
 import {
   SEEDFALL_AIRBORNE_S,
   SEEDFALL_CONTEST_M,
@@ -33,7 +42,7 @@ import {
   SEEDFALL_TIMES,
   SEEDFALL_WARN_S,
 } from '../content/royale_events';
-import { dirTo, dist2, type Vec3 } from '../geo';
+import { dirTo, dist2, heading, type Vec3 } from '../geo';
 import type { ObsRoyale, ObsSeedfall } from '../policy';
 import type { Rng } from '../rng';
 import type { Sim } from '../sim';
@@ -62,27 +71,48 @@ export interface SeedfallCall {
 }
 
 // The match's Seedfalls, fixed by the variant and the landing time: the
-// same for every seed (only the points are drawn).
-export function seedfallSchedule(variant: RoyaleVariant, landAt: number): SeedfallCall[] {
-  const seeds = SEEDFALL_SEEDS[variant];
-  return SEEDFALL_TIMES[variant].map((at, wave) => ({
+// same for every seed (only the points are drawn). A bout's from its own
+// plan: its times, its seeds per burst, its call; none when it has none.
+export function seedfallSchedule(
+  variant: RoyaleVariant,
+  landAt: number,
+  plan?: BoutSeedfalls | null,
+): SeedfallCall[] {
+  if (plan === null) return [];
+  const seeds = plan ? plan.seeds : SEEDFALL_SEEDS[variant];
+  const warn = plan ? plan.warnS : SEEDFALL_WARN_S;
+  const times = plan ? plan.at : SEEDFALL_TIMES[variant];
+  return times.map((at, wave) => ({
     wave,
     ids: Array.from({ length: seeds }, (_, j) => wave * seeds + j),
-    announceAt: landAt + at - SEEDFALL_WARN_S,
+    announceAt: landAt + at - warn,
     landsAt: landAt + at,
   }));
 }
 
 // When the first Seedfall is called: before it nobody has a Seedfall to see.
-export function firstSeedfallCallAt(variant: RoyaleVariant, landAt: number): number {
+// A bout's from its own plan, never for a bout with none.
+export function firstSeedfallCallAt(
+  variant: RoyaleVariant,
+  landAt: number,
+  plan?: BoutSeedfalls | null,
+): number {
+  if (plan === null) return Number.POSITIVE_INFINITY;
+  if (plan) return landAt + (plan.at[0] ?? Number.POSITIVE_INFINITY) - plan.warnS;
   return landAt + (SEEDFALL_TIMES[variant][0] ?? 0) - SEEDFALL_WARN_S;
 }
 
 // The light a seed must land in: the Dusk as it will stand
-// SEEDFALL_FORECAST_S after the impact, the Hastening's offset applied (the
-// Dusk's clock runs `duskOffset` ahead of the match's).
-export function seedfallCap(schedule: DuskSchedule, landsAt: number, duskOffset: number): DuskCap {
-  const d = duskAt(schedule, landsAt + SEEDFALL_FORECAST_S + duskOffset);
+// SEEDFALL_FORECAST_S after the impact (a bout's own `forecastS`), the
+// Hastening's offset applied (the Dusk's clock runs `duskOffset` ahead of
+// the match's).
+export function seedfallCap(
+  schedule: DuskSchedule,
+  landsAt: number,
+  duskOffset: number,
+  forecastS = SEEDFALL_FORECAST_S,
+): DuskCap {
+  const d = duskAt(schedule, landsAt + forecastS + duskOffset);
   return d.now.radius > 0 ? d.now : { center: { ...schedule.final }, radius: 0 };
 }
 
@@ -185,7 +215,8 @@ function farthestPoint(
 }
 
 // The points of one Seedfall's `count` seeds: see the header. `taken` are
-// the points of the Seedfalls still standing, never drawn again.
+// the points of the Seedfalls still standing, never drawn again. A bout's
+// burst is spread by its own spacing (drawBurst).
 export function drawSeedfallPoints(
   rng: Rng,
   spots: readonly Vec3[],
@@ -194,7 +225,9 @@ export function drawSeedfallPoints(
   layout: RoyaleLayout,
   ground: RoyaleGround,
   taken: readonly Vec3[] = [],
+  spread?: Pick<BoutSeedfalls, 'apartM' | 'depthM'>,
 ): Vec3[] {
+  if (spread) return drawBurst(rng, spots, cap, count, layout, ground, taken, spread);
   const deep = spots.filter((p) => deepEnough(cap, p) && nearest2(p, taken) >= 1);
   const out: Vec3[] = [];
   const pair2 = SEEDFALL_PAIR_M * SEEDFALL_PAIR_M;
@@ -222,6 +255,111 @@ export function drawSeedfallPoints(
     out.push(far ? { ...far } : fallbackPoint(rng, cap, layout, ground));
   }
   return out;
+}
+
+// A bout's seeded ring: RING_HEADINGS headings from a drawn start, at each
+// of RING_SHARES of the deep light's reach.
+const RING_HEADINGS = 24;
+const RING_SHARES: readonly number[] = [1, 0.75, 0.5, 0.25];
+// Greedy draws of a whole burst before keeping the most spread one.
+const BURST_TRIES = 12;
+
+// The walkable points of a bout's seeded ring inside the light, deep
+// enough, away from the poles and from the standing Seedfalls, in ring
+// order.
+function ringPoints(
+  rng: Rng,
+  cap: DuskCap,
+  layout: RoyaleLayout,
+  ground: RoyaleGround,
+  taken: readonly Vec3[],
+  depthM: number,
+): Vec3[] {
+  const R = layout.radius;
+  const reach = cap.radius - depthM;
+  if (reach <= 0) return [];
+  const start = rng.next() * 2 * Math.PI;
+  const out: Vec3[] = [];
+  for (const share of RING_SHARES) {
+    for (let k = 0; k < RING_HEADINGS; k++) {
+      const dir = heading(cap.center, start + (k * 2 * Math.PI) / RING_HEADINGS) as Vec3;
+      const p = along(cap.center, dir, share * reach, R);
+      if (nearPole(p, R) || !ground.walkable(p)) continue;
+      if (cap.radius <= 0 || depthInside(cap, p) < depthM || nearest2(p, taken) < 1) continue;
+      out.push(p);
+    }
+  }
+  return out;
+}
+
+// A bout's burst of `count` seeds: each seed drawn uniformly among the
+// free spots deep enough and at least `apartM` from every seed of the
+// burst before it, else among the ring's points that are; a draw that runs
+// out of both starts again, BURST_TRIES times, and the most spread burst
+// drawn (its two nearest seeds the farthest apart) is kept, each seed then
+// the candidate farthest from the seeds before it. With no candidate at
+// all, the fallback point.
+function drawBurst(
+  rng: Rng,
+  spots: readonly Vec3[],
+  cap: DuskCap,
+  count: number,
+  layout: RoyaleLayout,
+  ground: RoyaleGround,
+  taken: readonly Vec3[],
+  spread: Pick<BoutSeedfalls, 'apartM' | 'depthM'>,
+): Vec3[] {
+  const deep = (p: Vec3): boolean =>
+    cap.radius > 0 && depthInside(cap, p) >= spread.depthM && !nearPole(p, layout.radius);
+  const free = spots.filter((p) => deep(p) && nearest2(p, taken) >= 1);
+  const ring = ringPoints(rng, cap, layout, ground, taken, spread.depthM);
+  const apart2 = spread.apartM * spread.apartM;
+  let best: Vec3[] | null = null;
+  let bestGap = -1;
+  for (let attempt = 0; attempt < BURST_TRIES; attempt++) {
+    const out: Vec3[] = [];
+    for (let j = 0; j < count; j++) {
+      const fromSpots = free.filter((p) => nearest2(p, out) >= apart2);
+      const pool =
+        fromSpots.length > 0 ? fromSpots : ring.filter((p) => nearest2(p, out) >= apart2);
+      if (pool.length === 0) break;
+      out.push({ ...pool[rng.int(pool.length)]! });
+    }
+    if (out.length === count) return out;
+    const gap = out.length < 2 ? Number.POSITIVE_INFINITY : minGap2(out);
+    if (
+      best === null ||
+      out.length > best.length ||
+      (out.length === best.length && gap > bestGap)
+    ) {
+      best = out;
+      bestGap = gap;
+    }
+  }
+  const out = best ?? [];
+  const all = [...free, ...ring];
+  while (out.length < count) {
+    let pick: Vec3 | null = null;
+    let pickD = -1;
+    for (const p of all) {
+      const d = nearest2(p, out);
+      if (d > pickD) {
+        pick = p;
+        pickD = d;
+      }
+    }
+    out.push(pick && pickD >= 1 ? { ...pick } : fallbackPoint(rng, cap, layout, ground));
+  }
+  return out;
+}
+
+// The squared chord between the two nearest of `points`.
+function minGap2(points: readonly Vec3[]): number {
+  let d = Number.POSITIVE_INFINITY;
+  for (let i = 0; i < points.length; i++) {
+    for (let j = i + 1; j < points.length; j++) d = Math.min(d, dist2(points[i]!, points[j]!));
+  }
+  return d;
 }
 
 // Whether a point stands under a seed's impact.
@@ -282,9 +420,10 @@ export function stepSeedfalls(mode: RoyaleMode, sim: Sim): void {
     mode.tally.seedfallsLanded++;
     sim.pushEvent({ type: 'royale_seedfall_land', seedfallId: sf.id, at: { ...sf.pos } });
   }
+  const plan = mode.seedfallPlan;
   for (const call of mode.seedfallCalls) {
     if (!due(time, call.announceAt)) continue;
-    const cap = seedfallCap(mode.schedule, call.landsAt, s.duskOffset);
+    const cap = seedfallCap(mode.schedule, call.landsAt, s.duskOffset, plan?.forecastS);
     const taken = s.seedfalls.map((f) => f.pos);
     const points = drawSeedfallPoints(
       sim.rng,
@@ -294,6 +433,7 @@ export function stepSeedfalls(mode: RoyaleMode, sim: Sim): void {
       mode.layout,
       mode.ground,
       taken,
+      plan ?? undefined,
     );
     call.ids.forEach((id, j) => {
       const pos = points[j]!;

@@ -11,12 +11,21 @@
 //   the Last light, the leader, the end.
 // Everything here moves with the match and is in the world checkpoint
 // (snapshot, restore); the schedule and the layout are fixed at the start.
+//
+// A Thornfray's bout (ADR 0035) is this mode with RoyaleOptions.bout set:
+// its kind's plan read by every seam (the Dusk, the caches, the Seedfalls,
+// the Grafts, the landing, the systems it runs), its seats at the rising
+// arc, its count and goals fed every tick's events after the deaths, its
+// end and ranking (bouts/end.ts). Without it every seam reads exactly
+// what it reads for the battle royale.
 
 import { POLICY_PERIOD_TICKS } from '../bot_driver';
 import { dealDamage } from '../combat/damage';
 import { addStatus, cancelRecall } from '../combat/status';
 import { ROYALE_SKILL_RANK, type RoyaleSkillId } from '../content/bots/royale_skills';
-import { GRAFT_TRIGGERS, recoveryOf, takedownHealOf } from '../content/grafts';
+import type { BoutKind, BoutSeedfalls, BoutSystem } from '../content/bouts/types';
+import { recoveryOf, takedownHealOf } from '../content/grafts';
+import { RING_RISE_AT_S, WARDEN_RISE_AT_S } from '../content/royale_events';
 import { planetTuning } from '../content/royale_tuning';
 import { outOfCombat } from '../favors';
 import { copy, dist2, type Vec3 } from '../geo';
@@ -28,8 +37,14 @@ import type { CombatCtx } from '../sim_context';
 import { DT } from '../types';
 import type { Unit } from '../unit';
 import { payAssists } from './assists';
+import { seatAtBout } from './bouts/arc';
+import { boutOver, boutRanking } from './bouts/end';
+import { startBout, stepBout } from './bouts/goals';
+import type { PendingPrize } from './bouts/ledger';
+import { observeBout } from './bouts/observe';
+import { type BoutPlan, boutPlan, type Thornyard } from './bouts/plan';
 import { burrTakedown, clearBurrs, observeBurr, stepBurrs } from './burr';
-import { drawCacheSpots, openingBy, stepCaches } from './caches';
+import { boutCacheCount, drawCacheSpots, openingBy, stepCaches } from './caches';
 import { noteClamor, observeClamors, stepClamors } from './clamors';
 import {
   besideCrew,
@@ -46,17 +61,19 @@ import { arrive, beginGrace, type Grace, observeGrace, stepGraces } from './grac
 import {
   clearOffers,
   type GraftTally,
+  graftTrigger,
   hasOpenOffer,
   observeGrafts,
   offerCreatureHeartwood,
   offerDrop,
   offerOnLevels,
   offerOnTrigger,
+  offerPrize,
   pickGraft,
   stepGrafts,
   tallyOf,
 } from './grafts';
-import { lastLightFactor, stepLastLight } from './last_light';
+import { lastLightFactorIn, stepLastLight } from './last_light';
 import type { RoyaleGround, RoyaleLayout } from './layout';
 import { creatureXp, grantXp, landingLevels, takedownXp } from './levels';
 import { GOLDEN_PIECES, grantPieces, healShare, manaShare, seatBuild, streakShare } from './loot';
@@ -89,6 +106,7 @@ import {
   seedfallSpots,
   stepSeedfalls,
 } from './seedfall';
+import type { RisingKind } from './types';
 import {
   CACHE_MANA,
   CAMP_BACK_S,
@@ -118,6 +136,24 @@ export interface RoyaleOptions {
   layout: RoyaleLayout;
   // The crew size (crews.ts); Solo when absent.
   crew?: RoyaleCrew;
+  // A Thornfray's bout (ADR 0035): the match runs its kind's rules; a
+  // battle royale when absent. Its variant is the kind's base.
+  bout?: BoutOptions;
+}
+
+// What a bout's Sim is built with (src/net/replay.ts buildBoutSim): its
+// kind, its index in the match (5 the Final), its Thornyard, the seat
+// offered fresh prize cards (the last bout's winner) and the prizes
+// carried unpicked from the bout before, the Grafts each seat carries in.
+// Seats are seat indices: the order the builder seats them in.
+export interface BoutOptions {
+  kind: BoutKind;
+  index: number;
+  final: boolean;
+  thornyard: Thornyard;
+  prize?: number | null;
+  pendingPrize?: readonly PendingPrize[];
+  grafts?: readonly (readonly string[])[];
 }
 
 // What a match measured of itself: the numbers a test reads to tell a fun
@@ -170,6 +206,12 @@ export const NEWCOMER_ESCORT_ORDER: readonly RoyaleSkillId[] = ['gentle', 'norma
 
 export class RoyaleMode {
   readonly variant: RoyaleVariant;
+  // A Thornfray's bout and its plan, null in a battle royale.
+  readonly bout: BoutOptions | null;
+  readonly plan: BoutPlan | null;
+  // The bout's Seedfalls, null in a battle royale (the variant's) and in a
+  // bout with none.
+  readonly seedfallPlan: BoutSeedfalls | null;
   // The crew size (crews.ts): 1 for Solo, each champion its own team.
   readonly crew: RoyaleCrew;
   readonly layout: RoyaleLayout;
@@ -238,14 +280,30 @@ export class RoyaleMode {
   private obsAnchors = new Map<number, number>();
 
   constructor(rng: Rng, ground: Ground, options: RoyaleOptions) {
-    this.variant = options.variant;
-    this.crew = options.crew ?? 1;
+    this.bout = options.bout ?? null;
+    this.variant = this.bout ? this.bout.kind.base : options.variant;
+    this.crew = this.bout ? 1 : (options.crew ?? 1);
     this.layout = options.layout;
     this.ground = royaleGround(ground);
+    this.plan = this.bout ? boutPlan(this.bout.kind, this.bout.thornyard) : null;
+    this.seedfallPlan = this.plan?.seedfalls ?? null;
+    const plan = this.plan;
     const landAt = DROP_S;
-    this.schedule = drawDusk(rng, this.layout, this.ground, landAt);
-    const drawn = drawCacheSpots(this.layout.cacheSpots, rng);
-    this.seedfallCalls = seedfallSchedule(this.variant, landAt);
+    this.schedule = drawDusk(rng, this.layout, this.ground, landAt, plan?.dusk);
+    const drawn = plan
+      ? drawCacheSpots(
+          this.layout.cacheSpots,
+          rng,
+          boutCacheCount(
+            this.layout.cacheSpots,
+            plan.thornyard,
+            plan.caches.count,
+            plan.seedfalls?.seeds ?? 0,
+          ),
+          plan.thornyard,
+        )
+      : drawCacheSpots(this.layout.cacheSpots, rng);
+    this.seedfallCalls = seedfallSchedule(this.variant, landAt, plan ? plan.seedfalls : undefined);
     this.seedfallSpots = seedfallSpots(
       this.layout.cacheSpots,
       drawn.unused,
@@ -257,10 +315,10 @@ export class RoyaleMode {
       crew: this.crew,
       stage: 'drop',
       dropEndsAt: landAt,
-      endsAt: landAt + PLAY_S,
+      endsAt: landAt + (plan ? plan.playS : PLAY_S),
       dusk: duskAt(this.schedule, 0),
       caches: drawn.caches,
-      pads: padSites(this.layout.pads),
+      pads: this.runs('pads') ? padSites(this.layout.pads) : [],
       drops: new Map(),
       scores: new Map(),
       eliminated: [],
@@ -283,6 +341,48 @@ export class RoyaleMode {
       respawnPicks: new Map(),
       arriving: new Set(),
     };
+    if (this.bout) {
+      const b = this.bout;
+      this.state.bout = {
+        kind: b.kind.id,
+        index: b.index,
+        final: b.final,
+        seats: [],
+        counts: [],
+        falls: [],
+        seedfalls: [],
+        reached: [],
+        fellHp: [],
+        goals: [],
+        prizes: [
+          ...(b.pendingPrize ?? []).map((p) => ({ seat: p.seat, cards: [...p.cards] })),
+          ...(b.prize !== undefined && b.prize !== null ? [{ seat: b.prize, cards: null }] : []),
+        ],
+        prizeOffered: false,
+        started: false,
+        ranking: null,
+      };
+    }
+  }
+
+  // Whether one of the planet's systems runs: always in a battle royale, in
+  // a bout only when its kind names it (content/bouts/types.ts BoutSystems).
+  runs(system: BoutSystem): boolean {
+    return this.bout === null || this.bout.kind.systems[system] === true;
+  }
+
+  // When a Rising first rises, seconds after landing (the sim's
+  // constructor sets the clocks from it): the planet's times in a battle
+  // royale, a bout's own from its kind, never when it names none.
+  risingAt(kind: RisingKind): number {
+    if (!this.bout) return kind === 'warden' ? WARDEN_RISE_AT_S[this.variant] : RING_RISE_AT_S;
+    return this.bout.kind.systems.risings?.[kind] ?? Number.POSITIVE_INFINITY;
+  }
+
+  // A champion's health on the tick before this one (One life's placing; a
+  // bout's survival count).
+  hpBeforeTick(unitId: number): number {
+    return this.hpBefore.get(unitId) ?? 0;
   }
 
   // A champion seated for the mode: no gold, the planet's health and
@@ -299,6 +399,20 @@ export class RoyaleMode {
     this.builds.set(u.id, seatBuild(u.championId, kitBuild));
     if (skill) this.skills.set(u.id, skill);
     this.state.scores.set(u.id, 0);
+    const b = this.state.bout;
+    if (this.bout && b) {
+      // A bout's seat (bouts/arc.ts): the arc's level and pieces, and the
+      // Grafts it carries in.
+      const seat = b.seats.length;
+      b.seats.push(u.id);
+      b.counts.push(0);
+      b.falls.push(0);
+      b.seedfalls.push(0);
+      b.reached.push(0);
+      b.fellHp.push(null);
+      const carried = this.bout.grafts?.[seat] ?? [];
+      seatAtBout(this, u, this.builds.get(u.id)!, this.bout.index, carried);
+    }
   }
 
   // The newcomers' unit ids, set once by the builder before the first tick.
@@ -405,7 +519,7 @@ export class RoyaleMode {
   // that can take no offer (out of One life, the match over) is not, and
   // the prize pays a piece in its place (risings.ts risingReward).
   offerHeartwood(sim: Sim, u: Unit): boolean {
-    if (!GRAFT_TRIGGERS[this.variant].creature) return false;
+    if (!graftTrigger(this, 'creature')) return false;
     if (this.state.stage === 'over') return false;
     if (this.variant === 'one_life' && (u.dead || this.state.eliminated.includes(u.id))) {
       return false;
@@ -430,6 +544,8 @@ export class RoyaleMode {
   // around its leader's pick and a crew of house bots beside each crew
   // with a person in it (crewDrop).
   stepDrop(sim: Sim): void {
+    // A bout's prize (grafts.ts offerPrize), on the drop's first tick.
+    if (this.bout) offerPrize(this, sim);
     // The drop's Graft offer (grafts.ts): the tick after a seat's landing
     // pick, in seat order, then at the drop's end for any that made none.
     for (const id of [...this.state.drops.keys()].sort((a, b) => a - b)) offerDrop(this, sim, id);
@@ -445,9 +561,17 @@ export class RoyaleMode {
       this.emit(sim, { type: 'royale_land', unitId: id });
     }
     this.state.stage = 'play';
+    // A bout's count and goals start as everyone lands (bouts/goals.ts).
+    if (this.bout) startBout(this, sim);
   }
 
+  // A bout lands everyone inside its Thornyard, the Dusk's first cap, and
+  // deals no escorts: eight seats in a cap that small find each other.
   private soloDrop(sim: Sim, seats: readonly number[]): Map<number, Vec3> {
+    if (this.bout) {
+      const within = this.schedule.caps[0]!;
+      return resolveLandings(seats, this.state.drops, sim.rng, this.layout, this.ground, within);
+    }
     const at = resolveLandings(seats, this.state.drops, sim.rng, this.layout, this.ground);
     const people = seats.filter((id) => !sim.policies.has(id));
     const bots = seats.filter((id) => sim.policies.has(id));
@@ -655,7 +779,7 @@ export class RoyaleMode {
         healShare(taker, takedownHealOf(taker, TAKEDOWN_HEAL) * share);
         manaShare(taker, TAKEDOWN_MANA * share);
         // Respawn's Last light counts it double (last_light.ts).
-        const score = pay.score * burr.factor * lastLightFactor(this.state, sim.time);
+        const score = pay.score * burr.factor * lastLightFactorIn(this, sim.time);
         this.state.scores.set(taker.id, (this.state.scores.get(taker.id) ?? 0) + score);
         // A crew scores every takedown its champions land (crews.ts).
         if (this.crew > 1) {
@@ -810,7 +934,8 @@ export class RoyaleMode {
         ),
       });
     }
-    for (const o of stepCaches(s.caches, seekers, time, this.variant)) {
+    const backS = this.plan ? this.plan.caches.backS : undefined;
+    for (const o of stepCaches(s.caches, seekers, time, this.variant, DT, backS)) {
       const u = sim.units.get(o.unitId);
       if (!u) continue;
       this.tally.cachesOpened++;
@@ -828,7 +953,7 @@ export class RoyaleMode {
         continue;
       }
       // Respawn's golden cache trades its second piece for a Bough offer.
-      const goldenBough = o.kind === 'golden' && GRAFT_TRIGGERS[this.variant].golden_cache;
+      const goldenBough = o.kind === 'golden' && graftTrigger(this, 'golden_cache') !== null;
       this.lootPieces(sim, u, o.kind === 'golden' && !goldenBough ? GOLDEN_PIECES : 1, 'cache');
       manaShare(u, CACHE_MANA);
       if (goldenBough) offerOnTrigger(this, sim, u.id, 'golden_cache');
@@ -842,6 +967,12 @@ export class RoyaleMode {
     stepClamors(this, sim);
     stepGrafts(this, sim);
     stepLastLight(this, sim);
+    // A bout: its count and goals fed the tick's events, then its own end.
+    if (this.bout) {
+      stepBout(this, sim, sim.tickEvents());
+      if (s.stage === 'play' && boutOver(this, sim)) this.endBout(sim);
+      return;
+    }
     // The end.
     if (s.stage !== 'play') return;
     if (this.variant === 'one_life' && this.crew > 1) {
@@ -902,6 +1033,15 @@ export class RoyaleMode {
     return [...out].sort((a, b) => a - b);
   }
 
+  // A bout's end (bouts/end.ts): its ranking kept, its first the winner.
+  private endBout(sim: Sim): void {
+    const b = this.state.bout!;
+    const ranking = boutRanking(this, sim);
+    b.ranking = ranking;
+    this.state.winnerId = b.seats[ranking[0]!] ?? null;
+    this.finish(sim);
+  }
+
   // The end: in Crews the winner is the winning crew's best champion (the
   // first of it in the ranking), in Solo the winning crew is the winner's.
   private finish(sim: Sim): void {
@@ -953,6 +1093,8 @@ export class RoyaleMode {
   // life (the ones still standing first, by health, when it is cut short).
   // In Crews crew by crew (crewRanking), and within a crew the same way.
   ranking(sim: Sim): number[] {
+    const b = this.state.bout;
+    if (b) return boutRanking(this, sim).map((seat) => b.seats[seat]!);
     if (this.crew > 1) return this.crewMembersRanking(sim);
     if (this.variant === 'respawn') return respawnRanking(this.standings(sim));
     const out = oneLifeRanking(this.state.winnerId, this.state.eliminated);
@@ -1050,6 +1192,7 @@ export class RoyaleMode {
       ...observeClamors(this, sim, u),
       ...observeGrace(this, sim, u),
       ...(this.crew > 1 ? { anchor: this.obsAnchors.get(u.team) ?? null } : {}),
+      ...observeBout(this, sim, u),
     };
   }
 

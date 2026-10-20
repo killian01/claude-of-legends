@@ -3,6 +3,7 @@
 // server's snapshots, the client's HUD, the bots. Types and constants only;
 // the rules live beside this file.
 
+import type { GoalSlot } from '../content/bouts/types';
 import type { Vec3 } from '../geo';
 
 export type RoyaleVariant = 'respawn' | 'one_life';
@@ -165,6 +166,8 @@ export interface GraftOffer {
   grade: GraftGrade;
   cards: string[];
   offeredAt: number;
+  // A bout's prize (grafts.ts offerPrize): kept through One life's fall.
+  prize?: boolean;
 }
 
 // A Seedfall announced (CONTEXT.md: Seedfall): where it falls and when, and
@@ -215,6 +218,39 @@ export interface BurrState {
 export interface ClamorState {
   pos: Vec3;
   at: number;
+}
+
+// A bout's own state (ADR 0035; bouts/goals.ts, bouts/end.ts), present
+// only in a bout, every per-seat list by seat index (the order the seats
+// were seated in, the same in every bout of a Thornfray): plain data, in
+// the world checkpoint with the rest, its counts mixed into Sim.checksum().
+export interface BoutState {
+  kind: string;
+  // The bout's index in its match, 0 to 5 (the Final).
+  index: number;
+  final: boolean;
+  // The seats' unit ids, in seat order.
+  seats: number[];
+  // The kind's count, written by its scorer (BoutScorer).
+  counts: number[];
+  // What the tie-breaks read: falls in the bout, Seedfall caches opened,
+  // the tick each count was last reached, and the health a fallen seat
+  // had on the tick before its fall (null while it stands).
+  falls: number[];
+  seedfalls: number[];
+  reached: number[];
+  fellHp: (number | null)[];
+  // The kind's goals' state, in the kind's order.
+  goals: ({ id: string } & GoalSlot)[];
+  // The prizes offered at the drop, in order: those carried unpicked from
+  // the bout before with their cards, then the last bout's winner's, its
+  // cards drawn then (null).
+  prizes: { seat: number; cards: string[] | null }[];
+  prizeOffered: boolean;
+  // Set at landing, once the goals and the count have started.
+  started: boolean;
+  // The seats best first, once the bout is over.
+  ranking: number[] | null;
 }
 
 // Respawn's Last light as its events tell it (last_light.ts): the double
@@ -283,6 +319,8 @@ export interface RoyaleState {
   // The champions in their Grace (grace.ts): a drop-in's Arrival or a
   // Respawn return, untouchable until it runs out or they act.
   arriving: Set<number>;
+  // A bout's own state (ADR 0035), absent in a battle royale.
+  bout?: BoutState;
 }
 
 // The events the mode adds to the sim's stream.

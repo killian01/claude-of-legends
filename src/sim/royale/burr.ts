@@ -71,8 +71,10 @@ export function burrOnTakedown(
   return paid ? { factor: BURR_SCORE_FACTOR, pieces: BURR_PIECES } : NO_BURR;
 }
 
-// The mode's takedown (onDeath): what the taker's Burr adds to it.
+// The mode's takedown (onDeath): what the taker's Burr adds to it; nothing
+// in a bout that leaves the Burr out (ADR 0035, BoutSystems).
 export function burrTakedown(mode: RoyaleMode, sim: Sim, victim: Unit, taker: Unit): BurrPay {
+  if (!mode.runs('burr')) return NO_BURR;
   return burrOnTakedown(mode.state, victim.id, taker.id, sim.time);
 }
 

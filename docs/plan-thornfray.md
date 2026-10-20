@@ -139,6 +139,40 @@ on the tick's `damage` events, plays the whole chain. The battle royale does not
     both variants), `tests/royale_contract.test.ts`, `tests/royale_rules.test.ts`,
     `tests/royale_dusk.test.ts`, `tests/royale_crews.test.ts`, `tests/fixed_match.test.ts`.
 
+- As built:
+  - The Dusk's caps in a bout are drawn forward, not backwards: the first cap is the
+    Thornyard, fixed on its region's heart, and a backward chain from a final point cannot be
+    made to meet a fixed first cap within the edge speed. The final point is drawn inside the
+    Thornyard within the closings' whole slide budget (walkable, with room, at least
+    `POLE_CLEARANCE_M` from a pole: the Sanctuary's and the Open ground's hearts are the
+    poles), and each closing's center stands on the way from the heart to it, its share of the
+    way its share of the budget, jittered within the rest, so every slide stays within
+    `maxShift` and every cap holds the final point (`dusk.ts drawPlannedDusk`).
+  - `sim.ts` gains one more line than the plan names: `Sim.tickEvents()`, a read of the
+    tick's events so far, which the mode hands the count and the goals after the deaths.
+  - `RoyaleRecord.bout` carries `prize` (the seat offered fresh cards, the last bout's winner)
+    beside `pendingPrize`, and `pendingPrize` is a list: a prize left unpicked and a fresh one
+    can both be open at the next Lull. Its Thornyard is its region (`thornyard`), the radius
+    the kind's. `BoutResult.pendingPrize` and `nextBout` carry the list.
+  - `BoutSystems` names the camps too (Lastwick's "Off: camps"); the caches run by
+    `caches.count`, the Seedfalls by `seedfalls`. The pads are off by the mode seating no site.
+  - A bout deals no escorts: eight seats in a Thornyard find each other. A pick outside the
+    Thornyard is brought toward its heart to 2 m inside the edge (`drop.ts landingIn`).
+  - Every kind's bout ends at its clock (landing plus `playS`), and a bout of One life's death
+    as soon as one champion stands.
+  - A Seedfall burst draws its seeds greedily, free spots first then the seeded ring, starting
+    again up to twelve times, then keeps the most spread draw: it never stacks two seeds.
+  - The ledger's table, before the Final, breaks the last ties on the latest bout's place (the
+    Final's once played), then the lower seat: a Lull's table needs a total order too.
+  - `BOUT_KINDS` is the registry, every kind released or not; `boutPool()` is the pool.
+  - `CORE_ON_THE_PLANET` read from the directory brought `royale/layout.ts` and
+    `royale/return_pick.ts` under the scan: their three square roots go through `geo.norm` and
+    a new `exact.root` (a sine from its cosine), bit for bit as before.
+  - One more test file: `tests/thornfray_count.test.ts` (the shared scorers, the ranking's
+    ties, the observation). The rising arc is tested in `tests/thornfray_seams.test.ts`. The
+    gate's "card lines that fit the win card at 844 by 390" waits for slice 6
+    (`tests/royale_win_layout.test.ts` reads every kind).
+
 ### 2. Lastwick
 
 - `src/sim/content/bouts/lastwick.ts` (the design's numbers, `version: 1`, `released: false`),

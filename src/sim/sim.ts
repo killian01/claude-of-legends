@@ -28,7 +28,7 @@ import { type ChampionDef, DEFAULT_CHAMPION_ID, homeLane } from './content/champ
 import { ITEMS, mayCarryDraught } from './content/items';
 import { GAME_MAP, type GameMap, type LaneId, type WardenPit } from './content/map';
 import { type AspectId, type CreatureId, RING_GOLD_EACH, TIDE_PERIOD_S } from './content/rings';
-import { PLANET_NEUTRAL_SCALE, RING_RISE_AT_S, WARDEN_RISE_AT_S } from './content/royale_events';
+import { PLANET_NEUTRAL_SCALE } from './content/royale_events';
 import { SIGILS } from './content/sigils';
 import { clampSkin } from './content/skins';
 import type { VoidmaulAttackKind } from './content/voidmaul_slam';
@@ -290,9 +290,12 @@ export class Sim {
     this.royaleMode = options.royale ? new RoyaleMode(this.rng, this.ground, options.royale) : null;
     if (this.royaleMode) {
       // The big creatures rise on the mode's clock, counted from landing
-      // (royale/risings.ts keeps it from there).
-      this.objectives.nextSpawnAt = DROP_S + WARDEN_RISE_AT_S[this.royaleMode.variant];
-      for (const ring of this.ringStates) ring.nextRiseAt = DROP_S + RING_RISE_AT_S;
+      // (royale/risings.ts keeps it from there): the planet's times, or a
+      // bout's own (ADR 0035, BoutSystems.risings).
+      this.objectives.nextSpawnAt = DROP_S + this.royaleMode.risingAt('warden');
+      for (const ring of this.ringStates) {
+        ring.nextRiseAt = DROP_S + this.royaleMode.risingAt(ring.creature);
+      }
     }
     this.visibility = computeVisibility(this.map, this.units, 0, undefined, teamCount);
   }
@@ -305,6 +308,12 @@ export class Sim {
   // An event from a mode's step, into this tick's stream.
   pushEvent(e: SimEvent): void {
     this.events.push(e);
+  }
+
+  // The events this tick has emitted so far, the damage included: what a
+  // bout's count reads after the deaths (royale/bouts/goals.ts).
+  tickEvents(): readonly SimEvent[] {
+    return this.events;
   }
 
   // The landing point a seat picks during the battle royale's drop: a point
@@ -598,6 +607,10 @@ export class Sim {
       if (u.pos.y !== undefined) mix(Math.round(u.pos.y * 64));
       mix(Math.round(u.hp));
     }
+    // A bout's counts (ADR 0035), seat by seat: a replay notices a count
+    // drifting. Nothing in any other match.
+    const bout = this.royaleMode?.state.bout;
+    if (bout) for (const c of bout.counts) mix(Math.round(c * 64));
     return h >>> 0;
   }
 

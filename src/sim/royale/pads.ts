@@ -7,6 +7,8 @@
 // across a pad toward somewhere else does not throw: a path a person
 // cannot see must not fling them. A champion just landed is not thrown
 // again before it has moved off.
+// A bout that leaves the pads out (ADR 0035, BoutSystems) stands none:
+// the mode seats no site (mode.ts runs('pads')).
 
 import { dist, dist2, lerp, type Vec3 } from '../geo';
 import type { Vec2 } from '../types';

@@ -17,7 +17,8 @@ import { CLAMOR_S } from './types';
 // takedown rings out, at the victim's feet: a champion the Dusk burned
 // leaves no fight to answer.
 export function noteClamor(mode: RoyaleMode, sim: Sim, victim: Unit, killer: Unit | null): void {
-  if (killer === null) return;
+  // None in a bout that leaves them out (ADR 0035, BoutSystems).
+  if (killer === null || !mode.runs('clamors')) return;
   const p = victim.pos;
   if (p.y === undefined) return;
   mode.state.clamors.push({ pos: { x: p.x, y: p.y, z: p.z }, at: sim.time });

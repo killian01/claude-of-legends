@@ -8,10 +8,20 @@
 
 import type { CampKind } from '../content/camps';
 import type { Vec3 } from '../geo';
-import { dist2, heading, offset, settle } from '../geo';
+import { dist2, heading, norm, offset, settle } from '../geo';
 import type { Rng } from '../rng';
 
 export type RegionId = 'sanctuary' | 'open' | 'ruins' | 'groves' | 'lakes' | 'cliffs';
+
+// The six regions, in the order the layout's reader keeps them.
+export const REGION_IDS: readonly RegionId[] = [
+  'sanctuary',
+  'open',
+  'ruins',
+  'groves',
+  'lakes',
+  'cliffs',
+];
 
 export interface CacheSpot {
   pos: Vec3;
@@ -81,7 +91,7 @@ export function randomSpherePoint(rng: Rng, radius: number): Vec3 {
     const z = rng.next() * 2 - 1;
     const r2 = x * x + y * y + z * z;
     if (r2 > 1 || r2 < 1e-6) continue;
-    const r = Math.sqrt(r2);
+    const r = norm({ x, y, z });
     return { x: (x / r) * radius, y: (y / r) * radius, z: (z / r) * radius };
   }
 }

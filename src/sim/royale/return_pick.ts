@@ -14,7 +14,8 @@
 // without a pick (score.ts edgeOfLight). No draw from the match's stream.
 // The 5 s wait held nothing but a count: it now holds a choice.
 
-import { dist2, dot, heading, unit, type Vec3 } from '../geo';
+import { root } from '../exact';
+import { dist2, dot, heading, norm, unit, type Vec3 } from '../geo';
 import { arrivalDepth, deepInLight, snapLanding } from './drop';
 import { along, nearPole, type RoyaleGround, type RoyaleLayout } from './layout';
 import type { DuskCap, RoyaleStage, RoyaleVariant } from './types';
@@ -43,7 +44,7 @@ export function takesReturnPick(
 export function towardOnCircle(center: Vec3, p: Vec3, d: number, radius: number): Vec3 {
   const r2 = dot(center, center);
   if (r2 <= 0) return center;
-  const r = Math.sqrt(r2);
+  const r = norm(center);
   const n = { x: center.x / r, y: center.y / r, z: center.z / r };
   const along0 = dot(p, n);
   const v = { x: p.x - along0 * n.x, y: p.y - along0 * n.y, z: p.z - along0 * n.z };
@@ -53,7 +54,7 @@ export function towardOnCircle(center: Vec3, p: Vec3, d: number, radius: number)
   if (!t || t.y === undefined) return center;
   // Chord d subtends the angle whose cosine is 1 - d^2 / (2 R^2).
   const c = Math.max(-1, Math.min(1, 1 - (d * d) / (2 * radius * radius)));
-  const s = Math.sqrt(Math.max(0, 1 - c * c));
+  const s = root(Math.max(0, 1 - c * c));
   return {
     x: radius * (c * n.x + s * t.x),
     y: radius * (c * n.y + s * t.y),

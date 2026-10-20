@@ -11,6 +11,11 @@
 // back after CACHE_BACK_S in Respawn, except a Seedfall cache, which never
 // comes back. Pure over a view of the champions, so the rule is tested
 // without a sim; the loot the opening pays lives in loot.ts.
+//
+// A bout (ADR 0035) stands its caches inside its Thornyard only: its
+// golden spots there first, then plain ones drawn, never more than the
+// spots inside allow less those kept free for its Seedfalls, and an opened
+// one comes back after the bout's own time or never (stepCaches' backS).
 
 import {
   SEEDFALL_CALM_S,
@@ -22,6 +27,7 @@ import {
 import { dist2 } from '../geo';
 import type { Rng } from '../rng';
 import { DT, type Vec2 } from '../types';
+import { insideCap } from './dusk';
 import type { CacheSpot } from './layout';
 import {
   CACHE_BACK_S,
@@ -29,6 +35,7 @@ import {
   CACHE_REACH_M,
   type CacheKind,
   type CacheState,
+  type DuskCap,
   type RoyaleVariant,
 } from './types';
 
@@ -52,15 +59,19 @@ export function drawCacheSpots(
   spots: readonly CacheSpot[],
   rng: Rng,
   count = CACHE_COUNT,
+  within: DuskCap | null = null,
 ): { caches: CacheState[]; unused: number[] } {
   const keep = new Array<boolean>(spots.length).fill(false);
   const plain: number[] = [];
   let kept = 0;
   spots.forEach((s, i) => {
-    if (s.golden) {
+    // A bout's draw: only the spots inside its Thornyard, golden first
+    // while the count allows.
+    if (within && !insideCap(within, s.pos)) return;
+    if (s.golden && (!within || kept < count)) {
       keep[i] = true;
       kept++;
-    } else plain.push(i);
+    } else if (!s.golden) plain.push(i);
   });
   // A partial Fisher-Yates over the plain spots: the first draws win.
   for (let k = 0; k < plain.length && kept < count; k++) {
@@ -89,6 +100,20 @@ export function drawCacheSpots(
     });
   });
   return { caches: out, unused };
+}
+
+// How many caches a bout stands (ADR 0035): its own count, never more than
+// the spots inside its Thornyard less two per seed of a Seedfall burst
+// (kept free for the seeds, seedfall.ts), never fewer than none.
+export function boutCacheCount(
+  spots: readonly CacheSpot[],
+  within: DuskCap,
+  count: number,
+  seedsPerBurst: number,
+): number {
+  let inside = 0;
+  for (const s of spots) if (insideCap(within, s.pos)) inside++;
+  return Math.max(0, Math.min(count, inside - 2 * seedsPerBurst));
 }
 
 // How long a cache takes to open, read by its kind: the one place an
@@ -156,12 +181,15 @@ function canOpen(c: CacheState, s: CacheSeeker, time: number): boolean {
 // start later by the share of `dt` it did not count, so `time - openSince`
 // is the time it has counted (what the observation and the snapshot show
 // of it, a bar that slows).
+// A bout says when its caches come back (`backS`: seconds, or null for
+// never); undefined keeps the variant's rule.
 export function stepCaches(
   caches: CacheState[],
   seekers: readonly CacheSeeker[],
   time: number,
   variant: RoyaleVariant,
   dt = DT,
+  backS?: number | null,
 ): CacheOpened[] {
   const opened: CacheOpened[] = [];
   const byId = new Map<number, CacheSeeker>();
@@ -194,7 +222,7 @@ export function stepCaches(
         busy.delete(c.opener);
         c.opener = null;
         c.present = false;
-        c.respawnAt = variant === 'respawn' && c.kind !== 'seedfall' ? time + CACHE_BACK_S : null;
+        c.respawnAt = backAt(c, variant, time, backS);
         continue;
       } else continue;
     }
@@ -216,6 +244,19 @@ export function stepCaches(
     }
   }
   return opened;
+}
+
+// When an opened cache comes back: a Seedfall's never; else the bout's
+// time when it gives one, else Respawn's CACHE_BACK_S and One life's never.
+function backAt(
+  c: CacheState,
+  variant: RoyaleVariant,
+  time: number,
+  backS: number | null | undefined,
+): number | null {
+  if (c.kind === 'seedfall') return null;
+  if (backS !== undefined) return backS === null ? null : time + backS;
+  return variant === 'respawn' ? time + CACHE_BACK_S : null;
 }
 
 // The caches still standing, as everyone's minimap shows them.

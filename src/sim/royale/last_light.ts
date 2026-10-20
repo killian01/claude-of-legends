@@ -39,10 +39,17 @@ export function lastLightFactor(c: LastLightClock, time: number): number {
   return lastLightOn(c, time) ? LAST_LIGHT_FACTOR : 1;
 }
 
+// The mode's factor: none in a bout that leaves the Last light out
+// (ADR 0035, BoutSystems).
+export function lastLightFactorIn(mode: RoyaleMode, time: number): number {
+  return mode.runs('lastLight') ? lastLightFactor(mode.state, time) : 1;
+}
+
 // After the deaths: on the tick it begins, the Last light is told to
 // everyone (the 'double' step). Read off the clock alone, so a restored
 // checkpoint tells it once as well.
 export function stepLastLight(mode: RoyaleMode, sim: Sim): void {
+  if (!mode.runs('lastLight')) return;
   const s = mode.state;
   if (!lastLightOn(s, sim.time) || lastLightOn(s, sim.time - DT)) return;
   sim.pushEvent({ type: 'royale_last_light', step: 'double' });

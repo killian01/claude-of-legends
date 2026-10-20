@@ -27,6 +27,7 @@ import { Sim } from '../src/sim/sim';
 import { fakeSnap, landed, picks, type Snap } from './royale_contract_fixture';
 import { FakeRoyaleSim, fakeFactory, spot } from './royale_fake';
 import { loadPlanet } from './royale_planet';
+import { boutReplay, buildBout, land } from './thornfray_fixture';
 
 // Every optional block on the wire (src/net/royale_wire.ts SnapRoyale).
 const NEW_BLOCK_KEYS = ['offer', 'gr', 'sf', 'ri', 'mk', 'cl', 'rk', 'gap', 'rp', 'ar', 'wa'];
@@ -253,5 +254,53 @@ describe('a royale replay', () => {
       live.tick();
     }
     expect(royale.checksum()).toBe(live.checksum());
+  });
+});
+
+// A Thornfray's bout (ADR 0035) is additive to the contract: absent from a
+// battle royale's state, observation and record, present in a bout's.
+describe('the bout block', () => {
+  it('stays out of a battle royale: no bout state, no bout observed', () => {
+    const { sim, unitIds } = landed('respawn');
+    expect(sim.royale).not.toHaveProperty('bout');
+    expect(sim.royaleMode!.bout).toBeNull();
+    const obs = sim.royaleMode!.observe(sim, sim.units.get(unitIds[0]!)!);
+    expect(obs).not.toHaveProperty('bout');
+  });
+
+  it('is observed by every seat of a bout, its goals by primitive', () => {
+    const { sim, unitIds } = buildBout();
+    land(sim);
+    for (const id of unitIds) {
+      const bout = sim.royaleMode!.observe(sim, sim.units.get(id)!).bout!;
+      expect(Object.keys(bout).sort()).toEqual([
+        'best',
+        'count',
+        'double',
+        'goals',
+        'index',
+        'kind',
+        'of',
+        'place',
+      ]);
+      for (const g of bout.goals!) {
+        expect(Object.keys(g).sort()).toEqual(['holder', 'radius', 'shape', 'x', 'y', 'z']);
+      }
+    }
+  });
+
+  it('records a bout beside the royale record, its versions with it', () => {
+    const royale = boutReplay({ prize: 2 }).royale!;
+    expect(Object.keys(royale).sort()).toEqual(['bout', 'rules', 'variant']);
+    expect(Object.keys(royale.bout!).sort()).toEqual([
+      'engine',
+      'fingerprint',
+      'index',
+      'kind',
+      'matchSeed',
+      'prize',
+      'thornyard',
+      'version',
+    ]);
   });
 });

@@ -39,6 +39,8 @@ export interface Upstart {
 // takedown on its tally, its Upstart begins.
 export function beginUpstart(mode: RoyaleMode, u: Unit, time: number): void {
   if (mode.variant !== 'respawn' || u.kind !== 'champion' || u.kills > 0) return;
+  // None in a bout that leaves it out (ADR 0035, BoutSystems).
+  if (!mode.runs('upstart')) return;
   endUpstart(mode, u);
   mode.upstarts.set(u.id, { until: time + UPSTART_S, base: u.dmgScale });
   u.dmgScale *= 1 + UPSTART_DAMAGE;

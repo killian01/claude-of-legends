@@ -322,6 +322,34 @@ export interface ObsGraftOffer {
   offeredAt: number;
 }
 
+// A goal a bout stands on the planet (additive v0 block, ADR 0035): one of
+// the engine's closed set of primitives, where, how wide, and the champion
+// holding it (its unit id), null when nobody does.
+export interface ObsGoal {
+  shape: 'circle' | 'carrier' | 'target';
+  x: number;
+  y: number;
+  z: number;
+  radius: number;
+  holder: number | null;
+}
+
+// The bout a Thornfray plays (additive v0 block, ADR 0035; present only in
+// a bout): its kind, its index (0 for the first, 5 for the Final) of how
+// many, whether its bushels count double, the seat's own count and place,
+// the best count, and the kind's goals (absent when it stands none).
+// Nothing in it is hidden from a person: the HUD reads the same numbers.
+export interface ObsBout {
+  kind: string;
+  index: number;
+  of: number;
+  double: boolean;
+  count: number;
+  place: number;
+  best: number;
+  goals?: readonly ObsGoal[];
+}
+
 // The battle royale as any player knows it (additive v0 block, present only
 // in a battle royale): the stage and its clocks, the Dusk (drawn on the
 // ground and the globe for everyone), the caches still standing, the
@@ -377,6 +405,9 @@ export interface ObsRoyale {
   // one plays in the crew, the lowest unit id first; this seat itself when
   // it is the one), the bot mark being public; null while none stands.
   anchor?: number | null;
+  // A Thornfray's bout (ADR 0035; additive v0 field, absent in a battle
+  // royale).
+  bout?: ObsBout;
 }
 
 // A ring's clock as the team reads it (additive v0 block, ADR 0022): the
