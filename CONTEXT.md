@@ -108,7 +108,8 @@ _Avoid_: the island, the BR map, the globe (the drop view is a globe; the planet
 **Battle royale**:
 The mode of fifty champions on the Wanderseed, ten minutes under the Dusk (ADR 0031), in two
 variants, Respawn and One life, each played Solo (each for themself) or in Crews of three or
-five (ADR 0034). Every other match is the classic 5v5.
+five (ADR 0034). Every other match is the classic 5v5, or, once it ships, a Thornfray: eight
+champions in short bouts on the same planet.
 _Avoid_: BR in game text, royale alone, free-for-all as the mode's name (a free-for-all is
 how its teams are counted, ADR 0030)
 
@@ -643,6 +644,8 @@ champions for takedowns, open caches for your build, stay in the light. One life
 wins, with its own lines. The **win line** under the top line keeps it said all match, small:
 "Most takedowns wins · 4:12 left · you are 11th", "Last one standing wins · 23 left"; on a
 desktop the Dusk's pill takes its place while the champion stands in the Dusk.
+A Thornfray shows a card of the bout's own at each bout's landing, its win line saying that
+bout's rule.
 _Avoid_: objective (the Warden is the 5v5's), mission, goal (the goal across matches is the levels
 of the points' line), tutorial
 
@@ -1231,8 +1234,9 @@ _Avoid_: drop (the landing), reward, item pickup
 **Graft**:
 A lasting gift a champion chooses on the Wanderseed: one of three cards offered over the
 globe during the drop, then on events (takedowns, caches, a Seedfall cache, a big creature,
-some levels). An offer waits until the champion picks, with no time limit. Each Graft has a
-grade: a **Sprout** raises a raw stat and stacks twice, a **Bough** changes a rule, a
+some levels). In a Thornfray a bout won is the only offer, made over the next Lull's globe and
+held for the next bout. An offer waits until the champion picks, with no time limit. Each Graft
+has a grade: a **Sprout** raises a raw stat and stacks twice, a **Bough** changes a rule, a
 **Heartwood** changes the kit and shows on the champion for everyone to see.
 _Avoid_: augment, boon (the Warden's), perk, upgrade, card alone; tier (a rating's band)
 and rarity for the grade
@@ -1346,3 +1350,54 @@ it holds on where the champion fell when nobody landed the fall or they are down
 globe the Burr's red light shows where they stand, and the camera is back on the champion as
 it returns. No bot's observation reads any of it.
 _Avoid_: kill cam, death recap
+
+**Thornfray**:
+The mode of eight champions on the Wanderseed playing six short bouts in a row, each to a rule
+of its own, the bushels of every bout adding up to the match's winner (ADR 0035). A seat keeps
+its champion, skin and sigils all match; house bots fill the seats people do not take. In
+design (docs/design/thornfray.md), not yet in the game.
+_Avoid_: rounds mode, tournament, series, cup
+
+**Bout**:
+One of a Thornfray's six short contests, 90 to 120 seconds on a Thornyard, its kind drawn from a
+pool: each kind has its own rule, its own Dusk and its own count, and either One life's death
+or Respawn's. Every seat lands fresh at a bout's start, at the level and build the bout's
+number gives, with the prize Graft if it won the bout before, and leaves it with a place.
+_Avoid_: round (the Arena's hourly rounds, a jungler's round of the camps), stage, heat (a
+tower's), trial, game
+
+**Final**:
+A Thornfray's sixth and last bout, drawn like the others, where every place pays double bushels.
+_Avoid_: finale, decider, sudden death
+
+**Bushel**:
+What a seat earns for its place in a bout: five for the first, then four, three, two and one,
+none for the last three; twice as many in the Final. The most bushels after the Final wins the
+Thornfray; more bouts won, then the better place in the Final, settle a tie. Never banked:
+the ladder's points are another thing. Written lowercase in game text ("17 bushels · 2nd").
+_Avoid_: points (the ladder's), score (a bout's own count), placement (a rated subject's first
+matches), mark (the hunted's, a bot's)
+
+**Thornyard**:
+The part of the Wanderseed a bout is played on: a cap around one region's heart, drawn for each
+bout, outside which the Dusk burns from the first second. Every landing and every return comes
+down inside it.
+_Avoid_: arena (the bots' competition), zone (a spell's ground effect), map, ring (the creature
+site's), field, cap alone (the Dusk's)
+
+**Lull**:
+The ten seconds over the globe before each bout: the last bout's end beat, the table of every
+seat's bushels, the next bout's rule in one line, and the landing pick inside its Thornyard; the
+last bout's winner is offered its Graft there. In the sim it is the next bout's drop.
+_Avoid_: interlude, intermission, break, calm (the battle royale's first minute and a half)
+
+**Lastwick**:
+The Thornfray bout where a fall is out for the bout and the last champion standing wins, under a
+Dusk that closes on its Thornyard in a minute and a half; the places are the order of the falls.
+_Avoid_: last standing (the battle royale's award), last man standing, survival round
+
+**Starglean**:
+The Thornfray bout where a fall costs five seconds and the most gleaned when its clock runs out
+wins: a cache opened counts one, a golden cache two, a Seedfall cache three, the Seedfalls
+coming three at once every half minute; a takedown takes one from the fallen.
+_Avoid_: seed race, loot race, collect round
