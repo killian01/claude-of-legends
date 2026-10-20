@@ -275,4 +275,26 @@ describe('a late person', () => {
     recordBout(m.ledger, handResult(m, 1));
     expect(lateSeat(m)).toBeNull();
   });
+
+  it("leaves the prize's cards as they were, whichever bot seat the Lull is built again for", () => {
+    // The prize seat's offer on the Lull's first tick, with `late` (if any)
+    // taken by a person: the server builds the Lull again for a late seat
+    // and replays the picks made, a prize pick by its card's index.
+    const prizeCards = (late: number | null): string[] | undefined => {
+      const m = dealThornfray([], 1, [STARGLEAN]);
+      recordBout(m.ledger, handResult(m, 0));
+      const people: RoyalePerson[] = [];
+      if (late !== null) {
+        const p = person(9, 90);
+        takeSeat(m, late, p);
+        people.push(p);
+      }
+      const { match } = boutMatch(m, people);
+      match.tick();
+      return match.sim.royale.offers.get(match.unitIds[0]!)?.find((o) => o.prize)?.cards;
+    };
+    const bots = prizeCards(null);
+    expect(bots).toHaveLength(3);
+    for (let seat = 1; seat < BOUT_SEATS; seat++) expect(prizeCards(seat)).toEqual(bots);
+  });
 });

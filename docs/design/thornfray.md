@@ -161,8 +161,10 @@ won, then the better place in the Final (always distinct). The most a seat can r
 ### The prize
 
 A bout's winner is offered three Boughs (ADR 0032's draw: distinct, its role's twice as likely,
-never one it holds) over the next Lull's globe. The offer waits until it picks and folds into a
-chip in a fight like every offer. The Graft lasts the next bout only (`PRIZE_LASTS = 'next'` in
+never one it holds) over the next Lull's globe. They are drawn on a stream of their own from the
+bout's seed, so what the seats decide never moves them: a Lull built again for a late person
+offers the same three. The offer waits until it picks and folds into a chip in a fight like
+every offer. The Graft lasts the next bout only (`PRIZE_LASTS = 'next'` in
 `src/sim/content/bouts/match.ts`): the bout after, the seat lands without it, so one Graft at
 most stands among the eight, and a run of wins earns a new edge each time rather than a
 growing one. The Final's winner has no next bout and gets no prize.

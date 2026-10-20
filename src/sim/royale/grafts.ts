@@ -26,7 +26,11 @@
 // PRIZE_GRADE at the drop (its Lull), and a prize left unpicked when its
 // bout ended is offered again with its very cards (pendingPrize); a prize
 // offer is exempt from clearOffers, so a winner who falls before picking
-// keeps it open.
+// keeps it open. The prize's cards come from a stream of their own, seeded
+// from the bout's seed (PRIZE_SALT), never the match's: drawn after the
+// seats' first decisions, on the match's stream they moved with every seat
+// a bot or a person plays, and a Lull built again for a late person dealt
+// the winner other cards under the pick it had made.
 
 import { PRIZE_GRADE } from '../content/bouts/match';
 import {
@@ -44,7 +48,7 @@ import {
   SPROUT_STACKS,
 } from '../content/grafts';
 import type { ObsGraftOffer, ObsRoyale } from '../policy';
-import type { Rng } from '../rng';
+import { Rng } from '../rng';
 import type { Sim } from '../sim';
 import { recalcChampion } from '../stats';
 import type { Unit } from '../unit';
@@ -265,14 +269,18 @@ export function pickGraft(mode: RoyaleMode, sim: Sim, unitId: number, pick: numb
   return true;
 }
 
+// The prize's own stream (offerPrize): the bout's seed on a salt of its own.
+const PRIZE_SALT = 0x9b12e5;
+
 // A bout's prizes (see the header), once, at the drop, in the bout's
 // order: to each seat it names, the cards it left unpicked when there are
-// some, else three drawn now from the match's stream (one piece of loot
-// instead when the draw comes short). How many were offered.
+// some, else three drawn now from the prize's own stream (one piece of
+// loot instead when the draw comes short). How many were offered.
 export function offerPrize(mode: RoyaleMode, sim: Sim): number {
   const b = mode.state.bout;
   if (!b || b.prizeOffered) return 0;
   b.prizeOffered = true;
+  const rng = new Rng((mode.seed ^ PRIZE_SALT) >>> 0);
   let offered = 0;
   for (const prize of b.prizes) {
     const unitId = b.seats[prize.seat];
@@ -283,7 +291,7 @@ export function offerPrize(mode: RoyaleMode, sim: Sim): number {
     const cards =
       prize.cards !== null
         ? [...prize.cards]
-        : drawCards(sim.rng, u.championId, PRIZE_GRADE, held, queue, offerCtx(mode, sim));
+        : drawCards(rng, u.championId, PRIZE_GRADE, held, queue, offerCtx(mode, sim));
     if (cards.length < 3) {
       mode.lootPieces(sim, u, 1, 'cache');
       continue;

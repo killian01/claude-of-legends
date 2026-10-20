@@ -221,6 +221,10 @@ export class RoyaleMode {
   // start like the Dusk's schedule (seedfall.ts).
   readonly seedfallCalls: readonly SeedfallCall[];
   readonly seedfallSpots: readonly Vec3[];
+  // The Sim's own seed, the stream's state before the mode's first draw:
+  // what a bout's prize cards are drawn from (grafts.ts offerPrize), on a
+  // stream of their own, so no seat's decision moves them.
+  readonly seed: number;
   state: RoyaleState;
   // Moving parts beside the public state.
   flights = new Map<number, PadFlight>();
@@ -280,6 +284,7 @@ export class RoyaleMode {
   private obsAnchors = new Map<number, number>();
 
   constructor(rng: Rng, ground: Ground, options: RoyaleOptions) {
+    this.seed = rng.state;
     this.bout = options.bout ?? null;
     this.variant = this.bout ? this.bout.kind.base : options.variant;
     this.crew = this.bout ? 1 : (options.crew ?? 1);
