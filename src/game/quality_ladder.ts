@@ -24,6 +24,10 @@
 //
 // Far under the target (half of it), the script's share holds no step
 // back: a context drawn in software spends its pixels in the script.
+// Under a third of it (20 frames a second), the top does not wait its
+// twenty seconds either, only the eight windows of a median, and no fresh
+// windows are measured: a page that slow from its first frames has nothing
+// to settle, and every second on the top is a second at a few frames.
 //
 // A browser hands requestAnimationFrame the refresh's time, so frames that
 // all take two refreshes on a 60 Hz screen read as a 30 Hz screen's would
@@ -45,12 +49,14 @@ export const LADDER_RULES = {
   gain: 1.15, // a step down kept draws this many times its before
   gainMargin: 0.03, // or its documented gain less this, when that is less
   startMs: 20_000, // judged on the top before a step down from it
+  quickStartMs: 8000, // the same, under the quick share
   downHoldMs: 45_000, // after a step down undone or given back, doubling
   downHoldMostMs: 180_000,
   upHoldMs: 20_000, // after a step up undone, doubling
   upHoldMostMs: 300_000,
   scriptShare: 0.75, // frames this much script are not held back by pixels
   farShare: 0.5, // of the target: under it, the script's share holds nothing back
+  quickShare: 1 / 3, // of the target: under it, the top's start is short and nothing fresh
   topQuantile: 0.9, // the top's share: nine windows in ten at it or under
   walkFastShare: 0.45, // of the target: under it, a fast screen's refreshes walk
 };
@@ -122,6 +128,9 @@ export class QualityLadder {
   // took more refreshes than others, the screen's own, worth remembering.
   judgedMs = 0;
   topMs = 0;
+  // The top left before its twenty seconds, under the quick share: its
+  // shorter time tells as much (quality_memory.ts).
+  quickTop = false;
   refreshRead: number | null = null;
 
   // `costs`: a frame's documented cost on each rung from the top
@@ -267,7 +276,9 @@ export class QualityLadder {
     const now = median(this.recent);
     const step = this.steps.at(-1);
     if (now < line) {
-      if (this.mayStepDown(now, script, at)) this.fresh = [];
+      if (!this.mayStepDown(now, script, at)) return;
+      if (now < r.quickShare * target) this.begin(true, now);
+      else this.fresh = [];
     } else if (
       step &&
       at >= this.upHeldUntil &&
@@ -277,24 +288,26 @@ export class QualityLadder {
     }
   }
 
-  // Not from the floor, nor from the top in its first seconds, nor for
-  // frames held back by their script unless far under the target, nor
-  // while a failed step's hold runs unless the page has slowed well under
-  // that step's before (a new pace). A context that draws as it is called
+  // Not from the floor, nor from the top in its first seconds (fewer under
+  // the quick share), nor for frames held back by their script unless far
+  // under the target, nor while a failed step's hold runs unless the page
+  // has slowed well under that step's before (a new pace). A context that draws as it is called
   // (in software, or a driver that waits for the GPU) shows its pixels as
   // script: far under, only a trial tells the two apart.
   private mayStepDown(rate: number, script: number, at: number): boolean {
     const r = LADDER_RULES;
     const target = Math.min(r.capHz, this.screenHz ?? r.capHz);
+    const quick = rate < r.quickShare * target;
     return (
       this.current < this.floor &&
-      (this.current > 0 || this.topMs >= r.startMs) &&
+      (this.current > 0 || this.topMs >= (quick ? r.quickStartMs : r.startMs)) &&
       (script < r.scriptShare || rate < r.farShare * target) &&
       (at >= this.downHeldUntil || rate * r.gain < this.heldBefore)
     );
   }
 
   private begin(down: boolean, before: number): void {
+    if (down && this.current === 0 && this.topMs < LADDER_RULES.startMs) this.quickTop = true;
     this.trial = { down, from: this.current, before, seen: 0, rates: [], walked: false };
     this.current = down ? this.current + 1 : this.steps.at(-1)!.from;
     this.recent = [];

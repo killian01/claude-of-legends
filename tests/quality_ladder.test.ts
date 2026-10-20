@@ -1,6 +1,7 @@
 // How finely a match is drawn, stepped by the frame rate
 // (src/game/quality_ladder.ts), held to each of its rules at their edges:
-// the top drawn twenty judged seconds first, the line at three quarters of
+// the top drawn twenty judged seconds first (eight windows under a third of
+// the target, with no fresh ones), the line at three quarters of
 // the target, four fresh windows, two windows for a change and eight judged,
 // a gain of 1.15 or the shadows' documented one less a margin, the next step
 // at once while still short, the walk past rungs that take the same
@@ -72,10 +73,25 @@ describe('a step down', () => {
   });
 
   it('closes a window on four frames at least: at 2 a second, two seconds', () => {
-    // The stalls' three seconds, ten windows of the top, four fresh ones.
+    // Under a third of the target: the top's eight windows, nothing fresh.
     const run = exact(ladderFor(), (i) => (i === 0 ? 2 : 2.5), 60);
-    expect(sinceSettle(run.changes[0]!.at)).toBeGreaterThan(30.5);
-    expect(sinceSettle(run.changes[0]!.at)).toBeLessThan(31.5);
+    expect(sinceSettle(run.changes[0]!.at)).toBeGreaterThan(16.5);
+    expect(sinceSettle(run.changes[0]!.at)).toBeLessThan(17.5);
+  });
+
+  it('under a third of the target, waits only for eight windows of the top', () => {
+    // 19 a second: tried 7 to 8 s in, with no fresh windows, and the top
+    // marked as left early; 21 waits its twenty seconds and four fresh.
+    const l = ladderFor();
+    const quick = exact(l, (i) => (i === 0 ? 19 : 30), 120);
+    expect(sinceSettle(quick.changes[0]!.at)).toBeGreaterThan(7);
+    expect(sinceSettle(quick.changes[0]!.at)).toBeLessThan(8.5);
+    expect(quick.settled.map((s) => s.index).slice(0, 2)).toEqual([0, 1]);
+    expect(l.quickTop).toBe(true);
+    const m = ladderFor();
+    const usual = exact(m, (i) => (i === 0 ? 21 : 30), 120);
+    expect(sinceSettle(usual.changes[0]!.at)).toBeGreaterThan(23);
+    expect(m.quickTop).toBe(false);
   });
 
   it('leaves two windows for the change, then judges eight', () => {
