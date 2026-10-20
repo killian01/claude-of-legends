@@ -28,7 +28,9 @@ export function wayStatsOf(records: readonly MatchRecord[], way: Way): Map<numbe
   const out = new Map<number, WayStats>();
   for (const rec of sorted) {
     for (const seat of rec.players) {
-      if (seat.accountId === null || seat.ratingDelta === undefined) continue;
+      // A seat of the oldest records named its owner playerId and has no
+      // accountId at all: it belongs to nobody, like a bot fill seat.
+      if (typeof seat.accountId !== 'number' || seat.ratingDelta === undefined) continue;
       if (seatWay(rec, seat) !== way) continue;
       let s = out.get(seat.accountId);
       if (!s) {
