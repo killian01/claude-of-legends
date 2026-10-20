@@ -576,6 +576,74 @@ on the tick's `damage` events, plays the whole chain. The battle royale does not
 - **Tests.** `tests/landing_modes.test.ts` (four ids, the words, the door), a pure route test
   for every `LandingPlay`, the presence reader's. In a browser: the gold Play now button still on
   the first screen at 844 by 390, the four rows readable, the desktop unchanged.
+- As built:
+  - The landing's ways in: `'thornfray'` among `LandingWay.id`, `{ to: 'thornfray' }` in
+    `LandingPlay`, `WAYS_LABEL` "Four ways to play". The Thornfray's row stands third, after
+    Respawn and One life and before the 5v5: the three on the Wanderseed wear the planet
+    together and the 5v5 keeps its painting at the foot. Its words are the quick pick's
+    (`ui/bout_text.ts`: the kicker "Wanderseed", the name, the line) and its call the new
+    `THORNFRAY_CALL` "Play Thornfray", which the home's tile says too.
+  - The emblem (`ui/planet_emblem.ts`, `PlanetEmblemKind`, `emblemArt`) is made from the
+    pictures the planet already ships, no new file: the globe in the Dusk, the daylight globe
+    cut to a Thornyard cap around its round plaza over it (`THORNYARD_EMBLEM`), the cap's rim
+    burning orange where the Dusk begins and its next closing a thin gold ring inside, as the
+    Lull's globe shows a bout's Thornyard. The drawn planet behind it stays the fallback. The
+    quick pick in a Thornfray and the gathering's card wear it now (they wore Respawn's).
+  - The route: `src/game/guest_route.ts` (`guestLoop`), pure, an exhaustive switch over
+    `LandingPlay` whose default is a compile error and a throw, so no way in falls through to
+    the 5v5's queue; `playAsGuest` in `src/main.ts` runs the loop it names
+    (`thornfrayLoop(true)` for the Thornfray). `tests/guest_route.test.ts` walks every way in.
+  - The home: a third tile in the battle royale's row (`ui/royale_tiles.ts`, `RoyaleWay`), a
+    band across the row under Respawn and One life rather than a third column, which squeezed
+    every name; `HomeChoice.mode` and `GameMode` gain `'thornfray'`, which `src/main.ts` runs
+    as `thornfrayLoop(false)` and `nextStep` sends home once its loop is over, as the battle
+    royale's.
+  - The presence count stands on the Thornfray's own row, not on the line over the gold
+    button, which plays Respawn and never leads to a Thornfray: `thornfrayLine` says the open
+    gathering first ("Gathering now: 3 of 8. Join in."), then the people in one under way ("3
+    people are playing one now."), nothing when nobody is in either, read from the same poll
+    (`mountPresence(presence, thornfrayLive)`); a block it cannot trust is left out. Short
+    enough for one line in a phone's column held upright (a longer first wording left "in."
+    alone on a second line at 390 by 844), and cut with an ellipsis on a short screen, as the
+    5v5's week.
+  - Released: `released: true` on Lastwick and Starglean, so `boutPool()` and a server's pool
+    hold both with no knob (`tests/thornfray_release.test.ts`). Their fingerprints move with
+    the flag, which is data; no bout replay of either was ever kept, and the pinned end
+    checksums do not read it. `THORNFRAY_UNRELEASED` stays, for the kinds in progress the loop
+    lands `released: false`.
+  - The dev server's `/?thornfray` door is gone: the landing and the home are the doors, and
+    `scripts/e2e_thornfray.mjs` enters through the landing's row on any stack.
+    `docs/dev-local.md` says so.
+  - ADR 0031 has its amendment pointing to ADR 0035; the design's status line says the mode is
+    open with its first two bouts. The canonical docs list in `CLAUDE.md` is the maintainer's
+    edit and is left to him. The quick pick keeps the Thornfray as an option of
+    `ui/royale_pick.ts` (its words, its emblem, no Crew row): one card for both modes.
+  - The News: "Thornfray: eight champions, six bouts" on 2026-10-20, its picture the Lull
+    before a second bout (the table of bushels, Starglean's Thornyard on the globe), taken on
+    the local stack from a Thornfray entered through the landing's row
+    (`src/ui/news_art/thornfray.webp`).
+  - In a browser, on a seeded local stack, one browser at a time: the gold button stands where
+    it stood at every size (1280 by 720: 627 to 675 px before and after; 844 by 390 with touch:
+    337 to 385; 390 by 844: 781 to 827), no page scrolls sideways, the four rows whole inside
+    the card at 11.5 px (a phone held sideways) and 12 px, with the gathering's line on one
+    line; `scripts/e2e_landing.mjs` measures the four rows on every state at its three sizes
+    (with `PRESENCE=1`, the Thornfray's count). The home at 1280 by 800, 1920 by 1080 and 844
+    by 390 with touch: the band under the two, nothing clipped; its tile opens the quick pick
+    (the Thornfray's words and emblem, no Crew row) and the gathering, whose Cancel comes back
+    home. A Guest pressed the landing's row, Started now and played three bouts on one
+    socket; `scripts/e2e_thornfray.mjs`, now entering by that row, saw the Lulls before a
+    Lastwick and a Starglean and Back in a Lull resumed, and ran out of time once before a
+    fall in Starglean raised the return globe (the walk out of the light it presses is
+    slice 6's, unchanged; not run again). In the stills a Lastwick bout's start still showed
+    "Three Seedfalls have landed" from the Starglean before it: `Hud.setBout` builds the
+    battle royale's layer afresh but leaves the HUD's own announcement line and its queue,
+    which a page behind its snapshots fills in bulk (left open, for slice 6's owner).
+    `.dev/phone_measure.mjs` and `.dev/phone_feedback.mjs` were not run: both predate
+    the battle royale's Play now (they wait for the 5v5's champion select and its Lock in),
+    so the landing was measured by `scripts/e2e_landing.mjs` and a throwaway beside it.
+    The stills: `docs/screenshots/thornfray-landing-before.webp` and
+    `thornfray-landing.webp` (the ways at 1280 by 720, before and after, a gathering on),
+    `thornfray-landing-phone.webp` (844 by 390) and `thornfray-home.webp` (1280 by 800).
 
 ### 8. The headless report
 

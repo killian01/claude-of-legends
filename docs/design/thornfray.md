@@ -1,9 +1,9 @@
 # Thornfray, eight champions in six bouts
 
-Status: proposed design, not yet in the game. The decision record is ADR 0035; the build is
-`docs/plan-thornfray.md`; the words are in `CONTEXT.md` (Thornfray, Bout, Final, Bushel,
-Thornyard, Lull, Lastwick, Starglean). Every number below is a first pass, measured and tuned by
-the slices that land it.
+Status: built, and opened with its first two bouts, Lastwick and Starglean (slice 7 of the
+plan). The decision record is ADR 0035; the build is `docs/plan-thornfray.md`; the words are in
+`CONTEXT.md` (Thornfray, Bout, Final, Bushel, Thornyard, Lull, Lastwick, Starglean). Every number
+below is a first pass, measured and tuned by the slices that land it.
 
 ## What it is
 

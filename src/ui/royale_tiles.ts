@@ -1,15 +1,19 @@
 // The home's battle royale row (ADR 0031): its two rule sets side by side
 // over the 5v5's tiles, Respawn the wider and in gold since it is what Play
-// now launches. A tile is the button: a view of the Wanderseed's ground
-// behind it, fading into the words on the left, the globe from orbit at
-// its right (ui/planet_emblem.ts), the name, the line that says the rules
-// (ui/royale_modes.ts) and the pill. Same frame as the play tiles
-// (ui/play_tiles.ts), so the two rows read as one section. Respawn's card
-// greets an account that has played before with its level, read off the
-// line's points the home's answer carries (ui/royale_goal_lines.ts).
+// now launches, and the Thornfray (ADR 0035) under them across the row, a
+// band rather than a third column, which would have squeezed every name.
+// A tile is the button: a view of the Wanderseed's ground behind it,
+// fading into the words on the left, the globe from orbit at its right
+// (ui/planet_emblem.ts), the name, the line that says the rules
+// (ui/royale_modes.ts, ui/bout_text.ts) and the pill. Same frame as the
+// play tiles (ui/play_tiles.ts), so the two rows read as one section.
+// Respawn's card greets an account that has played before with its level,
+// read off the line's points the home's answer carries
+// (ui/royale_goal_lines.ts).
 
 import { getSettings } from '../game/settings';
 import type { RoyaleVariant } from '../sim/royale/types';
+import { THORNFRAY_CALL, THORNFRAY_LINE, THORNFRAY_TITLE } from './bout_text';
 import type { HomeLine } from './home_panels';
 import { el } from './menu';
 import { planetEmblem } from './planet_emblem';
@@ -35,6 +39,13 @@ const CSS = `
 .royale-tile.one_life { background:
     radial-gradient(ellipse at 82% 50%, rgba(232, 106, 74, 0.14) 0%, rgba(232, 106, 74, 0) 46%),
     linear-gradient(160deg, #120d1c 0%, #08060d 100%); }
+.royale-tile.thornfray { grid-column: 1 / -1; min-height: 0; padding: 14px 22px; background:
+    radial-gradient(ellipse at 88% 50%, rgba(240, 150, 76, 0.16) 0%, rgba(240, 150, 76, 0) 40%),
+    linear-gradient(160deg, #120f1c 0%, #08070d 100%); }
+.royale-tile.thornfray::before { background-position: 50% 78%; }
+.royale-tile.thornfray .planet-emblem { --planet: 92px; }
+.royale-tile.thornfray h3 { font-size: 22px; }
+.royale-tile.thornfray p { max-width: 74ch; }
 .royale-tile::before { content: ''; position: absolute; inset: 0;
   background: var(--view) 50% 45% / cover no-repeat; opacity: 0.55;
   transition: transform 0.7s ease; }
@@ -64,6 +75,9 @@ const CSS = `
   .royale-tile-cta { padding: 6px 14px; font-size: 12px; }
   .royale-tile .goal-line.royale-tile-back { font-size: 11.5px; }
   .royale-tile .planet-emblem { --planet: 72px; }
+  .royale-tile.thornfray { padding: 12px 14px; }
+  .royale-tile.thornfray h3 { font-size: 18px; }
+  .royale-tile.thornfray .planet-emblem { --planet: 60px; }
 }
 @media (max-width: 560px) {
   .royale-tiles { grid-template-columns: 1fr; }
@@ -79,6 +93,10 @@ function ensureCss(): void {
   document.head.appendChild(style);
 }
 
+// What a tile of the row plays: a rule set of the battle royale, or a
+// Thornfray.
+export type RoyaleWay = RoyaleVariant | 'thornfray';
+
 export interface RoyaleTiles {
   root: HTMLElement;
   // The account's line as the home's answer carries it (ui/home_panels.ts),
@@ -92,7 +110,7 @@ function welcomeOf(points: number, best: number): GoalLine | null {
   return goalWelcome({ points, best, picked: getSettings().royalePick !== null });
 }
 
-export function buildRoyaleTiles(onPick: (variant: RoyaleVariant) => void): RoyaleTiles {
+export function buildRoyaleTiles(onPick: (way: RoyaleWay) => void): RoyaleTiles {
   ensureCss();
   const row = el('div', 'royale-tiles');
   // Respawn's greeting, and where it stands in the card.
@@ -125,6 +143,21 @@ export function buildRoyaleTiles(onPick: (variant: RoyaleVariant) => void): Roya
     tile.addEventListener('click', () => onPick(mode.variant));
     row.appendChild(tile);
   }
+  // The Thornfray, across the row under the two: the daylight ground behind
+  // it, its globe in the Dusk with one Thornyard lit.
+  const thornfray = el('button', 'royale-tile thornfray');
+  thornfray.type = 'button';
+  thornfray.dataset.royale = 'thornfray';
+  thornfray.style.setProperty('--view', `url(${royaleArtUrl(viewArt('respawn'))})`);
+  const tfWords = el('div', 'royale-tile-words');
+  tfWords.append(
+    el('h3', '', THORNFRAY_TITLE),
+    el('p', '', THORNFRAY_LINE),
+    el('span', 'royale-tile-cta', THORNFRAY_CALL),
+  );
+  thornfray.append(tfWords, planetEmblem('thornfray'));
+  thornfray.addEventListener('click', () => onPick('thornfray'));
+  row.appendChild(thornfray);
   return {
     root: row,
     showLine(line) {

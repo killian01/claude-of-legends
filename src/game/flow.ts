@@ -15,7 +15,8 @@ export type GameMode =
   | 'join'
   | 'replay'
   | 'spectate'
-  | 'royale';
+  | 'royale'
+  | 'thornfray';
 export type NextStep = 'home' | 'replay' | 'requeue';
 
 // 'again' after practice replays the same offline pick without re-entering
@@ -24,12 +25,13 @@ export type NextStep = 'home' | 'replay' | 'requeue';
 // Forge queue requeues the Forge queue), because a private lobby is
 // destroyed with its match and its code has nothing left to join.
 // A battle royale runs its own loop, Play again and the other rule set
-// included (game/royale_flow.ts), and is asked here only once it is over:
-// home, whatever ended it.
+// included (game/royale_flow.ts), and so does a Thornfray
+// (game/thornfray_flow.ts): each is asked here only once it is over, and
+// goes home, whatever ended it.
 export function nextStep(action: PostMatchAction, mode: GameMode): NextStep {
   // 'other' outside a battle royale has nothing to switch to.
   if (action === 'menu' || action === 'other') return 'home';
-  if (mode === 'royale') return 'home';
+  if (mode === 'royale' || mode === 'thornfray') return 'home';
   if (mode === 'practice' || mode === 'replay' || mode === 'spectate') return 'replay';
   return 'requeue';
 }

@@ -92,10 +92,10 @@ const CSS = `
 .pg-opens-form { display: flex; flex-direction: column; justify-content: center;
   padding: 16px; border-radius: 12px; border: 1px solid rgba(140, 168, 208, 0.28);
   background: rgba(6, 10, 20, 0.72); }
-/* The other way in, and its three ways to play (ui/landing_modes.ts
-   LANDING_WAYS): the battle royale's two rule sets and the 5v5, a row
-   each, each a door. A row is an emblem, the kind of match in small gold
-   letters, the name, and the line that says the rules. Respawn's row
+/* The other way in, and its four ways to play (ui/landing_modes.ts
+   LANDING_WAYS): the battle royale's two rule sets, the Thornfray and the
+   5v5, a row each, each a door. A row is an emblem, the kind of match in
+   small gold letters, the name, and the line that says the rules. Respawn's row
    carries the gold edge, because the gold button under the rows plays it.
    The rows take whatever height the account card leaves over, which is
    what puts the two feet on one line without either card being told
@@ -156,8 +156,17 @@ const CSS = `
   object-position: 50% 18%; border: 1px solid #8a7433; background: #0a1120; margin-left: -6px; }
 .pg-way-week-faces img:first-child { margin-left: 0; }
 .pg-way-words .pg-way-week-text { min-width: 0; font-size: inherit; color: inherit; }
+/* The Thornfray's count under its rules (ui/landing_presence.ts
+   thornfrayLine): a gathering to join, or people in one, with the
+   presence line's green light; gone when nobody is in either. */
+.pg-way-words .pg-way-live { display: flex; align-items: center; gap: 7px; min-width: 0;
+  margin: 3px 0 0; font-size: 11.5px; line-height: 1.3; color: #c8f0d2; }
+.pg-way-words .pg-way-live[hidden] { display: none; }
+.pg-way-live i { flex: none; width: 7px; height: 7px; border-radius: 50%; background: #5fe08a;
+  box-shadow: 0 0 6px rgba(95, 224, 138, 0.7); }
+.pg-way-words .pg-way-live span { min-width: 0; font-size: inherit; color: inherit; }
 /* The emblem: the Wanderseed (ui/planet_emblem.ts) for the battle
-   royale's two, the ranked painting for the 5v5. */
+   royale's two and the Thornfray, the ranked painting for the 5v5. */
 .pg-way > .pg-way-art { flex: none; width: 46px; height: 46px; --planet: 46px; position: relative; }
 .pg-way-art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
   object-position: 50% 30%; }
@@ -297,8 +306,8 @@ const CSS = `
   .pg.land .pg-presence { padding: 5px 10px; margin-bottom: 6px; font-size: 12px; }
   .pg.land.own-on .pg-new { display: none; }
   .pg-way-words .pg-way-week-faces { display: none; }
-  .pg-way-words .pg-way-week-text { white-space: nowrap; overflow: hidden;
-    text-overflow: ellipsis; }
+  .pg-way-words .pg-way-week-text, .pg-way-words .pg-way-live span { white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; }
 }
 @media (prefers-reduced-motion: reduce) {
   .pg.land .pg-cards .pg-card.glow { animation: none; }
@@ -618,6 +627,10 @@ export function showLanding(
     // the kind of match, the name and its rules, and the chevron.
     const classicWeek = el('span', 'pg-way-week');
     classicWeek.hidden = true;
+    // The Thornfray's count, filled by the presence's read below.
+    const thornfrayLive = el('span', 'pg-way-live');
+    thornfrayLive.append(el('i', ''), el('span', ''));
+    thornfrayLive.hidden = true;
     const wayRow = (way: LandingWay): HTMLButtonElement => {
       const row = el('button', `pg-way${way.door === PLAY_NOW ? ' lead' : ''}`);
       row.type = 'button';
@@ -640,6 +653,8 @@ export function showLanding(
       // The 5v5's week (ADR 0018): the three champions any player may pick
       // there this week, a Guest too, filled from the landing's answer.
       if (way.id === 'classic') words.appendChild(classicWeek);
+      // The Thornfray's: a gathering to join, or people in one.
+      if (way.id === 'thornfray') words.appendChild(thornfrayLive);
       row.append(art, words, el('span', 'pg-way-go', '\u203a'));
       row.addEventListener('click', () => finish({ kind: way.door.kind, play: way.door.play }));
       return row;
@@ -767,22 +782,24 @@ export function showLanding(
     // The other way in, and the one that needs nothing: a match as a Guest
     // (ADR 0024), scored on the ladder from the first match (ADR 0027).
     // Its gold button plays the battle royale's Respawn (ADR 0031) under the
-    // banner that announces it, and the rows under it are the three ways to
-    // play, each a door of its own: the two rule sets of the battle royale
-    // and the 5v5 on the Star Orchard.
+    // banner that announces it, and the rows under it are the four ways to
+    // play, each a door of its own: the two rule sets of the battle royale,
+    // the Thornfray (ADR 0035) and the 5v5 on the Star Orchard.
     // The offline match that stood one quiet line under it left the
     // landing: visitors play online now, and the page falls back to
     // practice by itself when no Guest can be opened (src/main.ts).
     const playCard = el('section', 'pg-card plain glow');
     const playBtn = doorButton(PLAY_NOW, 'menu-btn pg-play');
-    // Someone playing right now, over the button (ui/landing_presence.ts).
+    // Someone playing right now, over the button (ui/landing_presence.ts),
+    // and the Thornfray's count on its own way in, from the same read.
     const presence = el('div', 'pg-presence');
     presence.append(el('i', ''), el('span', ''));
-    mountPresence(presence);
+    mountPresence(presence, thornfrayLive);
     // The ways in, under the gold button: the battle royale's two rule
-    // sets and the 5v5 (ui/landing_modes.ts). The button stands over them
-    // so it holds the first screen of a laptop, where it always stood; the
-    // gold edge on Respawn's row, right under it, says which it plays.
+    // sets, the Thornfray and the 5v5 (ui/landing_modes.ts). The button
+    // stands over them so it holds the first screen of a laptop, where it
+    // always stood; the gold edge on Respawn's row, right under it, says
+    // which it plays.
     const wayList = el('div', 'pg-ways');
     wayList.appendChild(el('div', 'pg-ways-label', WAYS_LABEL));
     for (const way of LANDING_WAYS) wayList.appendChild(wayRow(way));

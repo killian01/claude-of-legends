@@ -23,7 +23,7 @@ export const LASTWICK: BoutKind = {
     'The light closes fast: keep inside it',
   ],
   version: 1,
-  released: false,
+  released: true,
   base: 'one_life',
   playS: 120,
   thornyard: { radius: 40 },

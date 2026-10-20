@@ -10,6 +10,8 @@ const ALL_MODES: readonly GameMode[] = [
   'join',
   'replay',
   'spectate',
+  'royale',
+  'thornfray',
 ];
 
 describe('post-match flow', () => {
@@ -31,5 +33,14 @@ describe('post-match flow', () => {
     // A private lobby dies with its match: 'again' cannot go back to it.
     expect(nextStep('again', 'create')).toBe('requeue');
     expect(nextStep('again', 'join')).toBe('requeue');
+  });
+
+  // Each runs its own loop, Play again included (game/royale_flow.ts,
+  // game/thornfray_flow.ts), and is asked here only once it is over.
+  it('goes home once a battle royale or a Thornfray loop is over', () => {
+    for (const action of ['again', 'other', 'menu'] as const) {
+      expect(nextStep(action, 'royale')).toBe('home');
+      expect(nextStep(action, 'thornfray')).toBe('home');
+    }
   });
 });

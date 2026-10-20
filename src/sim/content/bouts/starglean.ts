@@ -27,7 +27,7 @@ export const STARGLEAN: BoutKind = {
     'A takedown takes one from the fallen',
   ],
   version: 1,
-  released: false,
+  released: true,
   base: 'respawn',
   playS: 105,
   thornyard: { radius: 40 },

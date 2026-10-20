@@ -6,8 +6,13 @@
 // "0 players". Play now plays the battle royale, whose Respawn always has a
 // match running to drop into (server/royale_service.ts): the line says a
 // match is on and the time it has left, counting down, and counts people
-// only, never the house bots. The words are pure so a test reads them
-// without a browser.
+// only, never the house bots. The Thornfray's count (ADR 0035,
+// server/thornfray_service.ts) stands on its own way in rather than over
+// the gold button, which never leads to it: a gathering open to join, or
+// people in one under way. The words are pure so a test reads them without
+// a browser.
+
+import { BOUT_SEATS } from '../sim/content/bouts/match';
 
 export const PRESENCE_ROUTE = '/api/public/presence';
 export const PRESENCE_POLL_MS = 20_000;
@@ -23,11 +28,19 @@ export interface RoyalePresence {
   endsInS: number | null;
 }
 
+// People in a Thornfray under way and in the gathering open to join; the
+// house bots are never counted.
+export interface ThornfrayPresence {
+  playing: number;
+  gathering: number;
+}
+
 export interface PresenceState {
   playing: number;
   queued: number;
   joinable: boolean;
   royale?: RoyalePresence;
+  thornfray?: ThornfrayPresence;
 }
 
 function clock(seconds: number): string {
@@ -58,6 +71,34 @@ export function presenceLine(p: PresenceState): string | null {
   return null;
 }
 
+// The Thornfray's line on its own way in: the gathering first, since the
+// way in joins it, then the people in one under way; nothing when nobody
+// is in either. Short enough for one line in a phone's column, upright or
+// sideways.
+export function thornfrayLine(p: PresenceState): string | null {
+  const t = p.thornfray;
+  if (!t) return null;
+  if (t.gathering > 0) return `Gathering now: ${t.gathering} of ${BOUT_SEATS}. Join in.`;
+  if (t.playing > 0) {
+    return t.playing === 1
+      ? 'Someone is playing one now.'
+      : `${t.playing} people are playing one now.`;
+  }
+  return null;
+}
+
+const count = (n: unknown): number | null =>
+  typeof n === 'number' && Number.isFinite(n) && n >= 0 ? Math.floor(n) : null;
+
+function asThornfray(raw: unknown): ThornfrayPresence | undefined {
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const r = raw as Record<string, unknown>;
+  const playing = count(r.playing);
+  const gathering = count(r.gathering);
+  if (playing === null || gathering === null) return undefined;
+  return { playing, gathering };
+}
+
 function asRoyale(raw: unknown): RoyalePresence | undefined {
   if (typeof raw !== 'object' || raw === null) return undefined;
   const r = raw as Record<string, unknown>;
@@ -74,11 +115,13 @@ function asPresence(raw: unknown): PresenceState | null {
   const r = raw as Record<string, unknown>;
   if (typeof r.playing !== 'number' || typeof r.queued !== 'number') return null;
   const royale = asRoyale(r.royale);
+  const thornfray = asThornfray(r.thornfray);
   return {
     playing: r.playing,
     queued: r.queued,
     joinable: r.joinable === true,
     ...(royale ? { royale } : {}),
+    ...(thornfray ? { thornfray } : {}),
   };
 }
 
@@ -101,17 +144,24 @@ export async function fetchPresence(
   }
 }
 
+// One line into its element's span, hidden when there is nothing to say.
+function say(into: HTMLElement, line: string | null): void {
+  into.hidden = line === null;
+  const words = into.querySelector('span');
+  if (words && line !== null && words.textContent !== line) words.textContent = line;
+}
+
 // Fills `into` with the line and keeps it current, the match's clock
-// counting down between reads; stops by itself once the element has left
-// the page.
-export function mountPresence(into: HTMLElement): void {
+// counting down between reads, and `thornfrayInto`, when given, with the
+// Thornfray's line from the same read; stops by itself once the element
+// has left the page.
+export function mountPresence(into: HTMLElement, thornfrayInto: HTMLElement | null = null): void {
   into.hidden = true;
+  if (thornfrayInto) thornfrayInto.hidden = true;
   let read: { p: PresenceState; at: number } | null = null;
   const show = (): void => {
-    const line = read ? presenceLine(presenceAfter(read.p, Date.now() - read.at)) : null;
-    into.hidden = line === null;
-    const words = into.querySelector('span');
-    if (words && line !== null) words.textContent = line;
+    say(into, read ? presenceLine(presenceAfter(read.p, Date.now() - read.at)) : null);
+    if (thornfrayInto) say(thornfrayInto, read ? thornfrayLine(read.p) : null);
   };
   const refresh = (): void => {
     void fetchPresence().then((p) => {

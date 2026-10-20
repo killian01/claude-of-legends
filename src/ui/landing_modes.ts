@@ -13,6 +13,7 @@
 
 import type { LandingOwn } from '../net/landing';
 import type { RoyaleVariant } from '../sim/royale/types';
+import { THORNFRAY_CALL, THORNFRAY_LABEL, THORNFRAY_LINE, THORNFRAY_TITLE } from './bout_text';
 import { type TileId, tileArtUrl } from './home_tiles';
 import { kept } from './own_panel';
 import {
@@ -82,11 +83,16 @@ export function accountCardWords(own: LandingOwn | null): { title: string; line:
 }
 
 // What a way in plays as a Guest (ADR 0024): the battle royale on one of its
-// two rule sets (ADR 0031), or the 5v5 on the Star Orchard.
-// `solo`: the quick pick opens on Solo whatever crew size it remembers
-// (ADR 0034: Play now stays Respawn in Solo, the match the landing's line
-// says is on); the person may still choose a crew on it.
-export type LandingPlay = { to: 'royale'; variant: RoyaleVariant; solo?: true } | { to: 'classic' };
+// two rule sets (ADR 0031), a Thornfray (ADR 0035), or the 5v5 on the Star
+// Orchard. `solo`: the quick pick opens on Solo whatever crew size it
+// remembers (ADR 0034: Play now stays Respawn in Solo, the match the
+// landing's line says is on); the person may still choose a crew on it. A
+// Thornfray is Solo by itself. Each leads to its own loop
+// (game/guest_route.ts): none falls through to the 5v5's queue.
+export type LandingPlay =
+  | { to: 'royale'; variant: RoyaleVariant; solo?: true }
+  | { to: 'thornfray' }
+  | { to: 'classic' };
 
 // The way in that needs nothing: what its button says, and what the
 // landing resolves with when it is pressed (ui/landing.ts). The Play now
@@ -109,9 +115,10 @@ export const PLAY_NOW: LandingDoor = {
 
 // The Play now card's ways in, one row each, in the order they stand: the
 // two rule sets of the battle royale, Respawn first since the gold button
-// over them plays it, and the 5v5. Each row is a door of its own.
+// over them plays it, the Thornfray beside them on the same planet, and
+// the 5v5. Each row is a door of its own.
 export interface LandingWay {
-  id: RoyaleVariant | 'classic';
+  id: RoyaleVariant | 'thornfray' | 'classic';
   // The small word over the name: what kind of match it is.
   kicker: string;
   title: string;
@@ -120,7 +127,7 @@ export interface LandingWay {
 }
 
 // The small heading over the rows.
-export const WAYS_LABEL = 'Three ways to play';
+export const WAYS_LABEL = 'Four ways to play';
 
 // The battle royale's arrival, said at the top of the Play now card
 // (ADR 0031): the word New, the planet's name, and what one does there,
@@ -154,6 +161,13 @@ export const LANDING_WAYS: readonly LandingWay[] = [
       kind: 'guest',
       play: { to: 'royale', variant: 'one_life' },
     },
+  },
+  {
+    id: 'thornfray',
+    kicker: THORNFRAY_LABEL,
+    title: THORNFRAY_TITLE,
+    line: THORNFRAY_LINE,
+    door: { call: THORNFRAY_CALL, kind: 'guest', play: { to: 'thornfray' } },
   },
   {
     id: 'classic',

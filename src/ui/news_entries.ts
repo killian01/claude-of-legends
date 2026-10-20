@@ -35,6 +35,30 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
+    day: '2026-10-20',
+    title: 'Thornfray: eight champions, six bouts',
+    body: [
+      'A new way to play on the Wanderseed. Eight champions land on a Thornyard, a small part ' +
+        "of the planet around one region's heart, and play a bout of a minute and a half or so " +
+        'to a rule of its own. Each bout pays bushels by place, five to the first down to none ' +
+        'for the last three. Five bouts, then the Final, where every place pays double, and the ' +
+        'most bushels wins the Thornfray.',
+      'Two kinds of bout to start with. In Lastwick you have one life, the light closes fast, ' +
+        'and the last one standing wins. In Starglean a fall costs five seconds: open caches for ' +
+        'one each, a golden one for two and a Seedfall cache for three, take one from whoever ' +
+        'you bring down, and the most gleaned when the clock runs out wins.',
+      'You keep your champion for the whole match, and every bout lands you a level higher with ' +
+        "more of your build. Between two bouts, ten seconds over the globe show everyone's " +
+        'bushels and the next rule while you pick where to land, and the last winner picks a ' +
+        'Graft for the next bout. House bots take every seat nobody does.',
+      'Takedowns, assists and caches score on the ladder as in the battle royale, and the end ' +
+        'pays the top three. Press Thornfray under the gold button on the front page, or its ' +
+        'tile on your home.',
+    ],
+    image: 'thornfray.webp',
+    link: { label: 'Play a Thornfray', to: 'play' },
+  },
+  {
     day: '2026-10-18',
     title: 'The Opening Seedfall',
     body: [

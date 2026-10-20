@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { NEW_LINE, NEW_TAG, NEW_TITLE, PLAY_NOW, PLAY_NOW_CALL } from '../src/ui/landing_modes';
 import { newestOf } from '../src/ui/news';
 import { NEWS } from '../src/ui/news_entries';
+import { emblemArt, THORNYARD_EMBLEM, THORNYARD_EMBLEM_CLOSE } from '../src/ui/planet_emblem';
 import { globeArt, ROYALE_ART, royaleArtUrl, viewArt } from '../src/ui/royale_modes';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -35,9 +36,30 @@ describe("the Wanderseed's pictures", () => {
 
   it('stand where the drawn orbs stood, the drawn one kept only behind the picture', () => {
     const emblem = readFileSync(path.join(ROOT, 'src/ui/planet_emblem.ts'), 'utf8');
-    expect(emblem).toContain('royaleArtUrl(globeArt(variant))');
+    expect(emblem).toContain('img.src = royaleArtUrl(art);');
+    expect(emblem).toContain("img.addEventListener('error', () => img.remove());");
     const tiles = readFileSync(path.join(ROOT, 'src/ui/royale_tiles.ts'), 'utf8');
     expect(tiles).toContain('royaleArtUrl(viewArt(mode.variant))');
+  });
+
+  it("give the Thornfray an emblem of its own: the Dusk's globe, one Thornyard lit", () => {
+    // Respawn and One life each wear their globe; the Thornfray (ADR 0035)
+    // the globe in the Dusk, the daylight one cut to its Thornyard over it.
+    expect(emblemArt('respawn')).toEqual(['globe']);
+    expect(emblemArt('one_life')).toEqual(['globe_dusk']);
+    expect(emblemArt('thornfray')).toEqual(['globe_dusk', 'globe']);
+    // The cap stands whole inside the globe, the closing inside the cap.
+    const { x, y, r } = THORNYARD_EMBLEM;
+    expect(Math.hypot(x - 0.5, y - 0.5) + r).toBeLessThan(0.5);
+    expect(THORNYARD_EMBLEM_CLOSE).toBeGreaterThan(0);
+    expect(THORNYARD_EMBLEM_CLOSE).toBeLessThan(1);
+    // Worn wherever a Thornfray is offered or waited for.
+    for (const file of ['royale_tiles.ts', 'thornfray_gather.ts']) {
+      const src = readFileSync(path.join(ROOT, 'src/ui', file), 'utf8');
+      expect(`${file}: ${src.includes("planetEmblem('thornfray')")}`).toBe(`${file}: true`);
+    }
+    const pick = readFileSync(path.join(ROOT, 'src/ui/royale_pick.ts'), 'utf8');
+    expect(pick).toContain("planetEmblem(opts.thornfray ? 'thornfray' : opts.variant)");
   });
 });
 

@@ -21,6 +21,9 @@ export const THORNFRAY_TITLE = 'Thornfray';
 export const THORNFRAY_LINE =
   'Eight champions, six short bouts, each to a rule of its own. Places pay bushels; the Final ' +
   'pays double, and the most bushels wins.';
+// What its button says where it has one of its own: the landing's way in
+// and the home's tile (ui/landing_modes.ts, ui/royale_tiles.ts).
+export const THORNFRAY_CALL = 'Play Thornfray';
 
 // Whether a bout is the Final (the sixth, every place paying double).
 export function isFinal(b: number): boolean {

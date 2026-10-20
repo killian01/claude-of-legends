@@ -19,6 +19,12 @@
 // the cookie loc_guest=seed-home-guest reads Thornwick with 340 points,
 // Level 4 and a best of 9.
 //
+// On every state the four ways to play under the gold button are measured
+// too (ui/landing_modes.ts LANDING_WAYS): Respawn, One life, the Thornfray
+// with its own emblem, and the 5v5, each row whole inside the card, none
+// over another, its words at a readable size; with PRESENCE=1 the
+// Thornfray's row says its gathering on one line.
+//
 // CHROME and E2E_URL from the environment, SHOT_DIR for the PNGs, SIZES to
 // pick among desktop,landscape,portrait, PRESENCE=1 for someone on (fixture
 // mode). One browser.
@@ -236,6 +242,7 @@ async function intercept(page, fixture) {
         queued: 0,
         joinable: true,
         royale: { playing: 3, joinable: true, endsInS: 420 },
+        thornfray: { playing: 5, gathering: 3 },
       });
       return;
     }
@@ -324,8 +331,71 @@ async function measure(page) {
       ownRow: text('.pg-ladder li.me .pg-ladder-name'),
       face: document.querySelector('.own-mark img.own-face')?.getAttribute('src') ?? null,
       emblem: document.querySelector('.own-mark .planet-emblem') !== null,
+      ways: [...document.querySelectorAll('.pg-way')].map((row) => {
+        const words = row.querySelector('.pg-way-words');
+        const live = row.querySelector('.pg-way-live');
+        const liveText = live?.querySelector('span');
+        return {
+          id: row.dataset.way,
+          box: box(row),
+          words: box(words),
+          title: row.querySelector('.pg-way-words b')?.textContent ?? '',
+          lineSize: Number.parseFloat(
+            getComputedStyle(row.querySelector('.pg-way-words span')).fontSize,
+          ),
+          clipped: words.scrollWidth > words.clientWidth + 1,
+          emblem: [...(row.querySelector('.planet-emblem')?.classList ?? [])].join(' '),
+          rings: row.querySelectorAll('.planet-emblem .pe-rim, .planet-emblem .pe-close').length,
+          live: box(live) ? (liveText?.textContent ?? '') : null,
+          liveOneLine: liveText ? liveText.getBoundingClientRect().height < 20 : true,
+          liveWhole: liveText ? liveText.scrollWidth <= liveText.clientWidth + 1 : true,
+        };
+      }),
+      waysLabel: text('.pg-ways-label'),
     };
   });
+}
+
+// The four ways under the gold button, on every state.
+function checkWays(m, size, label) {
+  const at = `${size.id} ${label}`;
+  const ids = m.ways.map((w) => w.id).join(',');
+  check(ids === 'respawn,one_life,thornfray,classic', `${at}: four ways in (${ids})`);
+  check(m.waysLabel === 'Four ways to play', `${at}: ${m.waysLabel}`);
+  let worst = 0;
+  for (let i = 0; i < m.ways.length; i++) {
+    const w = m.ways[i];
+    check(w.box !== null, `${at}: the ${w.id} row is drawn`);
+    check(
+      w.box.left >= m.card.left - 0.5 && w.box.right <= m.card.right + 0.5,
+      `${at}: the ${w.id} row stays inside the card`,
+    );
+    check(!w.clipped, `${at}: the ${w.id} row's words fit their column`);
+    check(w.lineSize >= 11, `${at}: the ${w.id} row's line at ${w.lineSize} px`);
+    for (let j = i + 1; j < m.ways.length; j++) {
+      const o = m.ways[j].box;
+      worst = Math.max(
+        worst,
+        Math.max(0, Math.min(w.box.bottom, o.bottom) - Math.max(w.box.top, o.top)),
+      );
+    }
+  }
+  check(worst < 1, `${at}: no row over another (${worst.toFixed(1)})`);
+  const tf = m.ways.find((w) => w.id === 'thornfray');
+  check(tf?.title === 'Thornfray', `${at}: the Thornfray row reads ${tf?.title}`);
+  check(
+    /\bthornfray\b/.test(tf?.emblem ?? '') && tf?.rings === 2,
+    `${at}: the Thornfray wears its own emblem (${tf?.emblem}, ${tf?.rings} rings)`,
+  );
+  if (PRESENCE) {
+    check(
+      tf?.live === 'Gathering now: 3 of 8. Join in.',
+      `${at}: the Thornfray row says ${tf?.live}`,
+    );
+    check(tf.liveOneLine && tf.liveWhole, `${at}: its count keeps one line, whole`);
+  } else {
+    check(tf?.live === null, `${at}: no count on the Thornfray row with nobody on`);
+  }
 }
 
 function checkLayout(m, size, label) {
@@ -399,6 +469,12 @@ async function fixtureRun(browser, size) {
     await openLanding(page);
     const m = await measure(page);
     checkLayout(m, size, state);
+    console.log(
+      `${size.id} ${state}: the gold button at ${Math.round(m.play.top)} to ` +
+        `${Math.round(m.play.bottom)}, the rows from ${Math.round(m.ways[0].box.top)} to ` +
+        `${Math.round(m.ways[m.ways.length - 1].box.bottom)}`,
+    );
+    checkWays(m, size, state);
     const own = STATES[state];
     check(m.nameText === own.name, `${size.id} ${state}: the name reads ${own.name}`);
     await shot(page, `own-${size.id}-${state}`);

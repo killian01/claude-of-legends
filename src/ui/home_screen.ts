@@ -32,7 +32,7 @@ import { buildPage, ensurePageCss, fetchStats, renderStats } from './page';
 import { buildJoinLine, buildPlayTiles } from './play_tiles';
 import { openRosterBrowser } from './roster_browser';
 import { CLASSIC_TITLE, ROYALE_LABEL } from './royale_modes';
-import { buildRoyaleTiles } from './royale_tiles';
+import { buildRoyaleTiles, type RoyaleWay } from './royale_tiles';
 import { createSectionHost } from './section_host';
 import type { Drawer } from './side_drawer';
 
@@ -81,8 +81,18 @@ export interface HomeChoice {
   name: string;
   // 'forge-queue' is the Forge's own public queue (plan-forge phase 6):
   // same flow as 'queue', a separate ladder, forged champions in select.
-  // 'royale' is the battle royale (ADR 0031), on the rule set `royale` names.
-  mode: 'practice' | 'queue' | 'forge-queue' | 'create' | 'join' | 'replay' | 'spectate' | 'royale';
+  // 'royale' is the battle royale (ADR 0031), on the rule set `royale` names;
+  // 'thornfray' a Thornfray on the same planet (ADR 0035).
+  mode:
+    | 'practice'
+    | 'queue'
+    | 'forge-queue'
+    | 'create'
+    | 'join'
+    | 'replay'
+    | 'spectate'
+    | 'royale'
+    | 'thornfray';
   code?: string;
   royale?: RoyaleVariant;
   // For mode 'replay': the saved replay to watch, and the tick to open it
@@ -316,11 +326,16 @@ export function showHome(
       if (tile.goes.to === 'mode') done(tile.goes.mode);
       else if (tile.goes.key === 'academy') showAcademy();
     };
-    // The battle royale first (ADR 0031), its two rule sets in a row of
-    // their own, then the 5v5's tiles under the name the landing gives it.
-    const onRoyale = (variant: RoyaleVariant): void => {
+    // The battle royale first (ADR 0031), its two rule sets and the
+    // Thornfray (ADR 0035) in a row of their own, then the 5v5's tiles
+    // under the name the landing gives it.
+    const onRoyale = (way: RoyaleWay): void => {
       leave();
-      resolve({ name: accountName, mode: 'royale', royale: variant });
+      resolve(
+        way === 'thornfray'
+          ? { name: accountName, mode: 'thornfray' }
+          : { name: accountName, mode: 'royale', royale: way },
+      );
     };
     const royaleTiles = buildRoyaleTiles(onRoyale);
     const main = el('section', 'home-main');

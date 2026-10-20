@@ -67,7 +67,7 @@ export function showThornfrayGathering(
   const btns = el('div', 'tf-gather-btns');
   btns.append(start, cancel);
   card.append(
-    planetEmblem('respawn'),
+    planetEmblem('thornfray'),
     el('h1', 'menu-title', THORNFRAY_TITLE),
     line,
     el('p', 'menu-sub', GATHER_FILL),

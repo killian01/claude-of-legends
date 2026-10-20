@@ -10,6 +10,7 @@ import {
   PRESENCE_ROUTE,
   presenceAfter,
   presenceLine,
+  thornfrayLine,
 } from '../src/ui/landing_presence';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -75,6 +76,54 @@ describe('the presence line', () => {
       throw new Error('down');
     }) as typeof fetch;
     expect(await fetchPresence(gone)).toBeNull();
+  });
+
+  it("says the Thornfray's gathering, then the people in one, on its own way in", () => {
+    const none = { playing: 0, queued: 0, joinable: false };
+    // No block from an older server, or nobody in either: nothing said.
+    expect(thornfrayLine(none)).toBeNull();
+    expect(thornfrayLine({ ...none, thornfray: { playing: 0, gathering: 0 } })).toBeNull();
+    // A gathering to join comes first: the way in joins it.
+    expect(thornfrayLine({ ...none, thornfray: { playing: 5, gathering: 2 } })).toBe(
+      'Gathering now: 2 of 8. Join in.',
+    );
+    expect(thornfrayLine({ ...none, thornfray: { playing: 0, gathering: 1 } })).toBe(
+      'Gathering now: 1 of 8. Join in.',
+    );
+    expect(thornfrayLine({ ...none, thornfray: { playing: 1, gathering: 0 } })).toBe(
+      'Someone is playing one now.',
+    );
+    expect(thornfrayLine({ ...none, thornfray: { playing: 3, gathering: 0 } })).toBe(
+      '3 people are playing one now.',
+    );
+    // One line in a phone's column held upright, as scripts/e2e_landing.mjs
+    // measures it: 32 characters at most.
+    for (const t of [
+      { playing: 0, gathering: 8 },
+      { playing: 48, gathering: 0 },
+    ]) {
+      expect((thornfrayLine({ ...none, thornfray: t }) ?? '').length).toBeLessThanOrEqual(32);
+    }
+    // The line over the gold button never counts it: that button plays
+    // Respawn, never a Thornfray.
+    expect(presenceLine({ ...none, thornfray: { playing: 3, gathering: 2 } })).toBeNull();
+  });
+
+  it("reads the Thornfray's block, and leaves out one it cannot trust", async () => {
+    const answer = (thornfray: unknown) =>
+      (async () =>
+        new Response(
+          JSON.stringify({ playing: 0, queued: 0, joinable: false, thornfray }),
+        )) as typeof fetch;
+    expect((await fetchPresence(answer({ playing: 4, gathering: 1 })))?.thornfray).toEqual({
+      playing: 4,
+      gathering: 1,
+    });
+    for (const bad of [null, 'x', { playing: 2 }, { playing: -1, gathering: 0 }]) {
+      const read = await fetchPresence(answer(bad));
+      expect(read).not.toBeNull();
+      expect(read?.thornfray).toBeUndefined();
+    }
   });
 
   it('is really gone when nobody is on, not an empty box', () => {

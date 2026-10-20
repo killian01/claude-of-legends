@@ -7,6 +7,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { LandingOwn } from '../src/net/landing';
+import {
+  THORNFRAY_CALL,
+  THORNFRAY_LABEL,
+  THORNFRAY_LINE,
+  THORNFRAY_TITLE,
+} from '../src/ui/bout_text';
 import { PLAY_TILES, tileArtUrl } from '../src/ui/home_tiles';
 import { JOIN_CALL, LADDER_HEADING, ladderLead } from '../src/ui/landing_ladder';
 import {
@@ -18,8 +24,9 @@ import {
   LANDING_WAYS,
   PLAY_NOW,
   PLAY_NOW_CALL,
+  WAYS_LABEL,
 } from '../src/ui/landing_modes';
-import { CLASSIC_TITLE, ONE_LIFE_LINE, RESPAWN_LINE } from '../src/ui/royale_modes';
+import { CLASSIC_LINE, CLASSIC_TITLE, ONE_LIFE_LINE, RESPAWN_LINE } from '../src/ui/royale_modes';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -96,18 +103,58 @@ describe("the landing's ways to play", () => {
     });
   });
 
-  it('offers the two rule sets of the battle royale and the 5v5, a row each', () => {
-    expect(LANDING_WAYS.map((w) => w.id)).toEqual(['respawn', 'one_life', 'classic']);
-    expect(LANDING_WAYS.map((w) => w.title)).toEqual(['Respawn', 'One life', CLASSIC_TITLE]);
+  it('offers the two rule sets of the battle royale, the Thornfray and the 5v5, a row each', () => {
+    // The Thornfray (ADR 0035) stands beside the battle royale's two, on
+    // the same planet, and the 5v5 keeps the last row.
+    expect(WAYS_LABEL).toBe('Four ways to play');
+    expect(LANDING_WAYS.map((w) => w.id)).toEqual(['respawn', 'one_life', 'thornfray', 'classic']);
+    expect(LANDING_WAYS.map((w) => w.title)).toEqual([
+      'Respawn',
+      'One life',
+      'Thornfray',
+      CLASSIC_TITLE,
+    ]);
     expect(CLASSIC_TITLE).toBe('Classic 5v5');
     // Respawn's row is the gold button's own door, so the two cannot differ.
     expect(LANDING_WAYS[0]?.door).toBe(PLAY_NOW);
     expect(LANDING_WAYS.map((w) => w.door.play)).toEqual([
       { to: 'royale', variant: 'respawn', solo: true },
       { to: 'royale', variant: 'one_life' },
+      { to: 'thornfray' },
       { to: 'classic' },
     ]);
     for (const way of LANDING_WAYS) expect(way.door.kind).toBe('guest');
+    expect(new Set(LANDING_WAYS.map((w) => w.door.call)).size).toBe(LANDING_WAYS.length);
+  });
+
+  it("names the Thornfray's way in with the words its quick pick and its tile use", () => {
+    const way = LANDING_WAYS.find((w) => w.id === 'thornfray');
+    expect(way).toEqual({
+      id: 'thornfray',
+      kicker: THORNFRAY_LABEL,
+      title: THORNFRAY_TITLE,
+      line: THORNFRAY_LINE,
+      door: { call: THORNFRAY_CALL, kind: 'guest', play: { to: 'thornfray' } },
+    });
+    expect(THORNFRAY_LABEL).toBe('Wanderseed');
+    expect(THORNFRAY_CALL).toBe('Play Thornfray');
+    // The rules in a line no longer than the longest of the four: a phone
+    // held sideways reads every row under the gold button.
+    const longest = Math.max(RESPAWN_LINE.length, CLASSIC_LINE.length);
+    expect(THORNFRAY_LINE.length).toBeLessThanOrEqual(longest);
+    expect(THORNFRAY_LINE).toMatch(/Eight champions, six short bouts/);
+    expect(THORNFRAY_LINE).toMatch(/Final pays double/);
+  });
+
+  it('draws the Thornfray row with its own emblem and its count', () => {
+    // Read off the page module: the emblem of each planet row is its id's
+    // (ui/planet_emblem.ts), and the Thornfray's row carries the presence
+    // read's count (ui/landing_presence.ts thornfrayLine).
+    const landing = readFileSync(path.join(ROOT, 'src/ui/landing.ts'), 'utf8');
+    expect(landing).toContain("planetEmblem(way.id, 'pg-way-art')");
+    expect(landing).toContain("if (way.id === 'thornfray') words.appendChild(thornfrayLive);");
+    expect(landing).toContain('mountPresence(presence, thornfrayLive);');
+    expect(landing).toContain('.pg-way-words .pg-way-live[hidden] { display: none; }');
   });
 
   it('says the rules of each in a line, the same words the home uses', () => {
@@ -120,7 +167,9 @@ describe("the landing's ways to play", () => {
     );
     expect(LANDING_WAYS[0]?.line).toBe(RESPAWN_LINE);
     expect(LANDING_WAYS[1]?.line).toBe(ONE_LIFE_LINE);
-    expect(LANDING_WAYS[2]?.line).toMatch(/Star Orchard/);
+    expect(LANDING_WAYS[2]?.line).toBe(THORNFRAY_LINE);
+    expect(LANDING_WAYS[3]?.line).toBe(CLASSIC_LINE);
+    expect(CLASSIC_LINE).toMatch(/Star Orchard/);
   });
 
   it('shows the way to play once, in the Play now card, and asks for no star', () => {

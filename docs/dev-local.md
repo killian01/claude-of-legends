@@ -102,7 +102,7 @@ up the Arena runner plays the seeded bots on its own, so their numbers move.
 | The Forge's generation | Finalize answers "not configured" | `GENERATION_PROVIDER=mock` for placeholders, or `TRIPO_API_KEY` |
 | Mail | Links printed to the log | `MAIL_API_KEY` and `MAIL_FROM` |
 | Continue with Discord | Button hidden | `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET` |
-| A Thornfray before its kinds are released (ADR 0035) | Answers "Thornfray is not open yet." | `THORNFRAY_UNRELEASED=1` in the server's environment: every registered bout kind, released or not (`server/thornfray_pool.ts`); the dev client enters at `/?thornfray` |
+| A bout kind in progress, in a Thornfray (ADR 0035) | Left out of the pool, which draws the released kinds | `THORNFRAY_UNRELEASED=1` in the server's environment: every registered bout kind, released or not (`server/thornfray_pool.ts`) |
 
 Every knob is documented in `.env.example`. `.env` is gitignored and never committed.
 
@@ -132,9 +132,9 @@ From cheapest to most complete:
 puppeteer-core against the stack on the default ports. They are not part of `pnpm test`.
 `CHROME` names the binary (the default is the Windows install path); `SHOT_DIR` collects
 screenshots where a script supports it. `scripts/e2e_thornfray.mjs` plays a Thornfray as a
-Guest through `/?thornfray` (two kinds on one socket, Back in a Lull, the return globe after a
-fall in a Respawn bout) and needs a server started with `THORNFRAY_UNRELEASED=1` until the
-kinds are released; a whole run takes several minutes on software WebGL. The Thornfray's
+Guest through the landing's Thornfray way in (two kinds on one socket, Back in a Lull, the
+return globe after a fall in a Respawn bout); a whole run takes several minutes on software
+WebGL. The Thornfray's
 screens alone, with no server, are the dev demo's scenes: `/?royale-ui-demo=bout`, `lull`,
 `lull-prize`, `lull-final` and `thornfray_end`.
 

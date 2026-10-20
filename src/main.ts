@@ -19,6 +19,7 @@ import { nextStep, type PostMatchAction } from './game/flow';
 import { registerForgedAssets } from './game/forged_visuals';
 import { frameRate, watchFrames } from './game/frame_rate';
 import { requestGameFullscreen } from './game/fullscreen';
+import { guestLoop } from './game/guest_route';
 import { parseJoinCode } from './game/invite';
 import { appNav, installNav, sectionFromHash } from './game/nav';
 import { loadPlanetRecords, planetWalk } from './game/planet_records';
@@ -1912,11 +1913,14 @@ async function thornfrayLoop(guest: boolean): Promise<PostMatchAction> {
   }
 }
 
-// What a Guest plays from the landing (ui/landing_modes.ts LandingPlay):
-// the battle royale, which Play now launches, or the 5v5's public queue,
-// Play again queueing again. Resolves with the exit that ended it.
+// What a Guest plays from the landing (ui/landing_modes.ts LandingPlay,
+// routed by game/guest_route.ts): the battle royale, which Play now
+// launches, a Thornfray, or the 5v5's public queue, Play again queueing
+// again. Resolves with the exit that ended it.
 async function playAsGuest(guestName: string, play: LandingPlay): Promise<PostMatchAction> {
-  if (play.to === 'royale') return royaleLoop(play.variant, true, play.solo === true);
+  const route = guestLoop(play);
+  if (route.loop === 'royale') return royaleLoop(route.variant, true, route.solo);
+  if (route.loop === 'thornfray') return thornfrayLoop(true);
   let action: PostMatchAction = 'again';
   while (action === 'again') action = await runOnline({ name: guestName, mode: 'queue' }, true);
   return action;
@@ -2003,11 +2007,6 @@ async function boot(): Promise<void> {
   // A replay opened from the Academy returns there, on the same bot.
   let reopenAcademy: { botId: string } | null = null;
   let lastPick: OfflinePick | null = null;
-  // A Thornfray straight from the address on the dev server (?thornfray),
-  // before slice 7 gives it its door on the landing and the home; a build
-  // never carries it (import.meta.env.DEV is false there).
-  let devThornfray =
-    import.meta.env.DEV && new URLSearchParams(window.location.search).has('thornfray');
   // Who is signed in, or null while only the offline match is reachable.
   // A live session cookie from a previous visit skips the sign-in screen.
   // Decided once per page load and never again: signing in reloads the
@@ -2022,18 +2021,6 @@ async function boot(): Promise<void> {
     // needs an account, so the sign-in screen stands in front of the home
     // screen rather than beside it. An invite code survives the detour and
     // lands in the join field on the other side.
-    if (devThornfray) {
-      devThornfray = false;
-      if (account !== null) {
-        await thornfrayLoop(false);
-        continue;
-      }
-      const guestName = await openGuest();
-      if (guestName !== null) {
-        await thornfrayLoop(true);
-        continue;
-      }
-    }
     if (account === null) {
       const entry = await showLanding(container, discordResult);
       if (entry.kind === 'account') {
@@ -2114,6 +2101,8 @@ async function boot(): Promise<void> {
       action = await runSpectate(choice.matchId, choice.team === 1 ? 1 : 0);
     } else if (choice.mode === 'royale') {
       action = await royaleLoop(choice.royale ?? 'respawn', false);
+    } else if (choice.mode === 'thornfray') {
+      action = await thornfrayLoop(false);
     } else {
       action = await runOnline(choice);
     }

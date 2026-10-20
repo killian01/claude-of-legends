@@ -151,7 +151,7 @@ export function showRoyalePick(
     el('h1', 'menu-title', opts.thornfray ? THORNFRAY_TITLE : mode.title),
     el('p', '', opts.thornfray ? THORNFRAY_LINE : mode.line),
   );
-  head.append(planetEmblem(opts.variant), words);
+  head.append(planetEmblem(opts.thornfray ? 'thornfray' : opts.variant), words);
 
   const grid = el('div', 'br-pick-grid');
   const cards = new Map<string, HTMLButtonElement>();

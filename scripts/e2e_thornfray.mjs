@@ -1,14 +1,13 @@
-// E2E for a Thornfray in the browser (ADR 0035, docs/plan-thornfray.md slice
-// 6): a Guest enters through the dev server's door (?thornfray, until the
-// landing's own door lands), Starts now from the gathering, and plays bouts
-// on one socket and one guarded match layer until it has seen a Lastwick and
-// a Starglean: each Lull's card names its bout, the browser's Back in a Lull
+// E2E for a Thornfray in the browser (ADR 0035, docs/plan-thornfray.md slices
+// 6 and 7): a Guest enters through the landing's Thornfray way in, Starts
+// now from the gathering, and plays bouts on one socket and one guarded
+// match layer until it has seen a Lastwick and a Starglean: each Lull's card
+// names its bout, the browser's Back in a Lull
 // opens the pause menu (and Back again resumes), and a fall in a Starglean
 // bout raises the return globe. The champion walks out of the Thornyard in
 // a Respawn bout to fall to the Dusk if no bot takes it first.
 //
-// Needs a stack whose server opens the kinds in progress until they are
-// released: THORNFRAY_UNRELEASED=1 (docs/dev-local.md).
+// Any stack will do: the released kinds open the mode.
 //
 //   CHROME=<chrome> URL=http://localhost:5173 node scripts/e2e_thornfray.mjs
 import puppeteer from 'puppeteer-core';
@@ -103,7 +102,9 @@ const run = async () => {
   });
   page.on('dialog', (d) => void d.dismiss());
 
-  await page.goto(`${URL}/?thornfray`, { waitUntil: 'load' });
+  await page.goto(URL, { waitUntil: 'load' });
+  await waitFor(page, `!!document.querySelector('.pg-way[data-way="thornfray"]')`, 'the way in');
+  await page.evaluate(() => document.querySelector('.pg-way[data-way="thornfray"]').click());
   await waitFor(page, `!!document.querySelector('.br-pick-play')`, 'the quick pick');
   if (await page.evaluate(`!!document.querySelector('.br-pick-crew')`)) {
     throw new Error('the quick pick shows a Crew row in a Thornfray');

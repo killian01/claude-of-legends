@@ -369,3 +369,12 @@ Either variant is now played Solo, as above, or in Crews of three (sixteen crews
 seats) or five (ten crews): a crew shares its sight, lands, comes back and arrives together,
 scores every takedown its champions land, and wins or falls as one. ADR 0034 records it; Solo
 is unchanged, match for match.
+
+## Amended: Thornfray (2026-10-20)
+
+The Wanderseed also holds Thornfray: eight champions, house bots on every seat no person takes,
+in six short bouts on a Thornyard, each bout a whole battle royale `Sim` on one of the two
+variants above with a kind's rules read through `RoyaleOptions.bout`, its places paying bushels.
+It is the landing's fourth way to play and a tile on the home beside Respawn and One life.
+ADR 0035 records it; without a bout every seam reads what it read before, and both variants
+are unchanged, match for match (`tests/royale_golden.test.ts`).
