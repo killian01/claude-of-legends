@@ -148,6 +148,9 @@ describe('the weight', () => {
       top_five: 25,
       top_ten: 15,
       best_score: 50,
+      // A Thornfray's end (ADR 0035): its first, its second and third.
+      thornfray_first: 40,
+      thornfray_top_three: 20,
     });
     expect(ACTIVE_END_TICKS).toBe(3 * 60 * 20);
   });

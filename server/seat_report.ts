@@ -16,7 +16,8 @@ import type { SeatStats } from './match';
 
 // 2: the seat's first moments and the page's frame rate (2026-10-03).
 // 3: how finely the page drew, its quality step and pixels (2026-10-06).
-export const SEAT_REPORT_VERSION = 3;
+// 4: a Thornfray's seat, with its bouts' replay ids (2026-10-20).
+export const SEAT_REPORT_VERSION = 4;
 
 // How the seat ended: the pause menu's Leave or the end screen's way out
 // ('menu'), the socket closing with no word (a closed tab, a lost network:
@@ -24,8 +25,9 @@ export const SEAT_REPORT_VERSION = 3;
 // still held ('ended').
 export type SeatEnd = 'menu' | 'closed' | 'idle' | 'ended';
 // 'royale': a battle royale seat (server/royale_service.ts), its variant
-// beside it.
-export type SeatQueue = 'public' | 'lobby' | 'forge' | 'royale';
+// beside it. 'thornfray': a Thornfray's seat over its bouts
+// (server/thornfray_service.ts), its bouts' replay ids beside it.
+export type SeatQueue = 'public' | 'lobby' | 'forge' | 'royale' | 'thornfray';
 
 export interface SeatReport {
   v: number;
@@ -36,6 +38,9 @@ export interface SeatReport {
   variant?: RoyaleVariant;
   // A battle royale's crew size in Crews (ADR 0034); absent in Solo.
   crew?: 3 | 5;
+  // A Thornfray's bouts played so far, by their replay ids, in order
+  // (ADR 0035); absent on every other seat.
+  replays?: number[];
   guest: boolean;
   dropIn: boolean;
   mobile: boolean;
@@ -121,6 +126,7 @@ export interface SeatReportInput {
   queue: SeatQueue;
   variant?: RoyaleVariant;
   crew?: 3 | 5;
+  replays?: readonly number[];
   guest: boolean;
   dropIn: boolean;
   mobile: boolean;
@@ -147,6 +153,7 @@ export function buildSeatReport(i: SeatReportInput): SeatReport {
     queue: i.queue,
     ...(i.variant !== undefined ? { variant: i.variant } : {}),
     ...(i.crew !== undefined ? { crew: i.crew } : {}),
+    ...(i.replays !== undefined ? { replays: [...i.replays] } : {}),
     guest: i.guest,
     dropIn: i.dropIn,
     mobile: i.mobile,

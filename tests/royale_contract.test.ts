@@ -30,7 +30,7 @@ import { loadPlanet } from './royale_planet';
 import { boutReplay, buildBout, land } from './thornfray_fixture';
 
 // Every optional block on the wire (src/net/royale_wire.ts SnapRoyale).
-const NEW_BLOCK_KEYS = ['offer', 'gr', 'sf', 'ri', 'mk', 'cl', 'rk', 'gap', 'rp', 'ar', 'wa'];
+const NEW_BLOCK_KEYS = ['offer', 'gr', 'sf', 'ri', 'mk', 'cl', 'rk', 'gap', 'rp', 'ar', 'wa', 'tf'];
 
 describe('the state', () => {
   it('holds every new field at its default, in the sim and on the fake', () => {
@@ -150,6 +150,7 @@ describe('the wire', () => {
         ri: [['warden', 0, 80, 0, 280, 0, 1]],
         mk: [[2, 'lodestar', 0, 80, 0, 50]],
         cl: [[0, 80, 0, 51]],
+        tf: { c: 1, pl: 3, bc: 2 },
       }),
     );
     world.applyServer(snap(base));
@@ -158,6 +159,7 @@ describe('the wire', () => {
     expect(r.ri).toHaveLength(1);
     expect(r.mk).toHaveLength(1);
     expect(r.cl).toHaveLength(1);
+    expect(r.tf).toEqual({ c: 1, pl: 3, bc: 2 });
     world.applyServer({
       t: 'match_start',
       selfUnitId: 1,
@@ -166,6 +168,7 @@ describe('the wire', () => {
     });
     world.applyServer(snap(base));
     expect(world.royaleView()).not.toHaveProperty('sf');
+    expect(world.royaleView()).not.toHaveProperty('tf');
   });
 });
 

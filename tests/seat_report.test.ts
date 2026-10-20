@@ -219,7 +219,29 @@ describe('the seat report', () => {
     expect(none.step).toBeNull();
     expect(none.px).toBeNull();
     expect(none.firstHitS).toBeNull();
+    expect(rec).not.toHaveProperty('replays');
     for (const key of Object.keys(rec)) expect(key).not.toMatch(/name|account|addr|ip|id$/i);
+  });
+
+  it("carries a Thornfray seat's bouts by their replay ids", () => {
+    const rec = buildSeatReport({
+      at: 0,
+      how: 'ended',
+      queue: 'thornfray',
+      replays: [41, 43, 47],
+      guest: true,
+      dropIn: false,
+      mobile: false,
+      country: null,
+      stats: freshStats(0, 0, 0),
+      tickCount: 4000,
+      unit: null,
+      pings: [],
+      fps: [],
+      quality: null,
+    });
+    expect(rec).toMatchObject({ v: 4, queue: 'thornfray', replays: [41, 43, 47], matchS: 200 });
+    expect(rec).not.toHaveProperty('variant');
   });
 
   it("notes a seat's first moments once each, champions only", () => {

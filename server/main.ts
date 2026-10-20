@@ -22,6 +22,7 @@ import {
   stepOnWire,
 } from '../src/net/protocol';
 import { REPLAY_VERSION } from '../src/net/replay';
+import { boutPool } from '../src/sim/content/bouts';
 import { contentFingerprint } from '../src/sim/content/fingerprint';
 import type { ForgedChampionDef } from '../src/sim/forge/forged_def';
 import { validateForged } from '../src/sim/forge/validate';
@@ -190,6 +191,7 @@ import {
 import { suggestKit } from './suggest';
 import { suggestLook } from './suggest_look';
 import { suggestStats } from './suggest_stats';
+import { ThornfrayService } from './thornfray_service';
 import { formatTickReport, TickMeter } from './tick_meter';
 import {
   nextVisit,
@@ -637,7 +639,7 @@ const arenaDeps: ArenaDeps = {
   nextMatchId: () => nextMatchId++,
   saveReplay: (id, record) => {
     saveJsonAtomic(path.join(REPLAYS_DIR, `${id}.json`), record);
-    pruneNumberedJson(REPLAYS_DIR, REPLAY_KEEP, botStore.heldReplayIds());
+    pruneNumberedJson(REPLAYS_DIR, REPLAY_KEEP, heldReplayIds());
   },
   recordMatch: (rec) => {
     matchLog.push(rec);
@@ -1052,7 +1054,7 @@ const royale = new RoyaleService({
   factory: royaleFactory,
   newMatchId: () => nextMatchId++,
   newSeed: (id) => (Date.now() % 2_000_000_000) + id,
-  capacityLeft: () => MAX_MATCHES - matches.size - royale.load(),
+  capacityLeft: () => MAX_MATCHES - matches.size - royale.load() - thornfray.load(),
   leaveQueues: (id) => {
     for (const mm of matchmakers) mm.removeEverywhere(id);
   },
@@ -1069,12 +1071,49 @@ const royale = new RoyaleService({
   appendSeat: (rec) => appendJsonl(SEATS_FILE, rec),
   saveReplay: (id, record) => {
     saveJsonAtomic(path.join(REPLAYS_DIR, `${id}.json`), record);
-    pruneNumberedJson(REPLAYS_DIR, REPLAY_KEEP, botStore.heldReplayIds());
+    pruneNumberedJson(REPLAYS_DIR, REPLAY_KEEP, heldReplayIds());
   },
   now: () => Date.now(),
   log: (line) => console.log(line),
   standing: true,
 });
+
+// Thornfray (ADR 0035, server/thornfray_service.ts): its gathering and its
+// matches beside the battle royale's, each bout a sim built by the same
+// factory, each match weighing one 5v5 match against MAX_MATCHES. Its bouts
+// are drawn from the released kinds alone: with none released, it is closed.
+const thornfray = new ThornfrayService({
+  send,
+  client: (id) => clients.get(id),
+  factory: royaleFactory,
+  pool: boutPool(),
+  newMatchId: () => nextMatchId++,
+  newSeed: (id) => (Date.now() % 2_000_000_000) + id,
+  capacityLeft: () => MAX_MATCHES - matches.size - royale.load() - thornfray.load(),
+  leaveQueues: (id) => {
+    for (const mm of matchmakers) mm.removeEverywhere(id);
+  },
+  bank: (owner, delta) => {
+    royaleVeterans.noteBanked(owner);
+    return bankPoints(owner, delta);
+  },
+  newcomer: (owner) => isRoyaleNewcomer(royaleVeterans, owner),
+  appendSeat: (rec) => appendJsonl(SEATS_FILE, rec),
+  saveReplay: (id, record) => {
+    saveJsonAtomic(path.join(REPLAYS_DIR, `${id}.json`), record);
+    pruneNumberedJson(REPLAYS_DIR, REPLAY_KEEP, heldReplayIds());
+  },
+  now: () => Date.now(),
+  log: (line) => console.log(line),
+});
+
+// The replays the prune keeps whatever their age: those a bot's Record
+// still references, and the bouts of every Thornfray still running.
+function heldReplayIds(): Set<number> {
+  const held = botStore.heldReplayIds();
+  for (const id of thornfray.heldReplayIds()) held.add(id);
+  return held;
+}
 
 // A player leaves a live match FOR GOOD, by choice or by the AFK sweep:
 // rated walk-out penalty and queue lockout when it applies, champion to a
@@ -1473,6 +1512,7 @@ const server = http.createServer(async (req, res) => {
       sendJson(res, 200, {
         ...presenceOf(dropInCandidates(), matchmaker.queuedCount),
         royale: royale.presence(),
+        thornfray: thornfray.presence(),
       });
       return;
     }
@@ -1895,7 +1935,7 @@ const server = http.createServer(async (req, res) => {
           console.error('sparring replay save failed', err);
         }
         const { id } = addEntry(botStore, found.bot.id, me.id, { ...parsed.value.entry, replayId });
-        pruneNumberedJson(REPLAYS_DIR, REPLAY_KEEP, botStore.heldReplayIds());
+        pruneNumberedJson(REPLAYS_DIR, REPLAY_KEEP, heldReplayIds());
         const entry = getEntry(botStore, found.bot.id, id);
         sendJson(res, 200, {
           ok: true,
@@ -2663,6 +2703,7 @@ const server = http.createServer(async (req, res) => {
           clients: clients.size,
           matches: matches.size,
           royale: royale.matches.size,
+          thornfray: thornfray.entries.size,
           uptimeS: Math.round(process.uptime()),
           // How the world loop kept up over its last window (server/tick_meter.ts).
           tick: meter.last(),
@@ -2914,7 +2955,7 @@ wss.on('connection', (ws, req) => {
           tellSeat(entry, 'back', seat, id);
           console.log(`match ${seat.matchId}: ${seat.name} reconnected`);
         }
-      } else royale.rejoin(client);
+      } else if (!thornfray.rejoin(client)) royale.rejoin(client);
       return;
     }
 
@@ -2923,7 +2964,7 @@ wss.on('connection', (ws, req) => {
     const inMatch = client.matchId !== null;
     // Capacity gate at the entry points: a full server refuses new games
     // politely instead of degrading every running one.
-    const atCapacity = matches.size + royale.load() >= MAX_MATCHES;
+    const atCapacity = matches.size + royale.load() + thornfray.load() >= MAX_MATCHES;
     const refuseCapacity = (): void =>
       send(id, { t: 'error', message: 'The server is at capacity, try again in a bit.' });
     // A Guest has the public queue and the match it lands in (ADR 0024);
@@ -2932,6 +2973,9 @@ wss.on('connection', (ws, req) => {
       send(id, { t: 'error', message: 'This needs an account.' });
       return;
     }
+    // A Thornfray's own messages, and every message of a seat in one or of
+    // a person in its gathering; then the battle royale's.
+    if (thornfray.handle(client, msg)) return;
     // The battle royale's own messages, and every message of a seat in one.
     if (royale.handle(client, msg)) return;
     switch (msg.t) {
@@ -3111,6 +3155,7 @@ wss.on('connection', (ws, req) => {
     clearInterval(pinger);
     connections.release(ip);
     for (const mm of matchmakers) mm.removeEverywhere(id);
+    thornfray.disconnect(client);
     royale.disconnect(client);
     const matchId = client.matchId;
     clients.delete(id);
@@ -3317,7 +3362,7 @@ setInterval(() => {
                 ...forgedPayload(entry.match),
               });
               replayId = matchId;
-              pruneNumberedJson(REPLAYS_DIR, REPLAY_KEEP, botStore.heldReplayIds());
+              pruneNumberedJson(REPLAYS_DIR, REPLAY_KEEP, heldReplayIds());
             } catch (err) {
               console.error('replay save failed', err);
             }
@@ -3407,16 +3452,20 @@ setInterval(() => {
         }
       }
     }
-    // The battle royale's matches, inside the same measured tick.
+    // The battle royale's matches and the Thornfrays, inside the same
+    // measured tick.
     royale.tick();
-    if (matches.size + royale.matches.size > 0) {
+    thornfray.tick();
+    if (matches.size + royale.matches.size + thornfray.entries.size > 0) {
       meter.tick(performance.now() - tickStart, ran > 0);
     }
     ran++;
   }
   const report = meter.report(
     now,
-    [...matches.values()].filter((e) => e.endedAt === null).length + royale.matches.size,
+    [...matches.values()].filter((e) => e.endedAt === null).length +
+      royale.matches.size +
+      thornfray.entries.size,
     clients.size,
   );
   if (report && report.ticks > 0) console.log(formatTickReport(report));

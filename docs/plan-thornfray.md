@@ -377,6 +377,67 @@ on the tick's `damage` events, plays the whole chain. The battle royale does not
   at a bout's start and on a rejoin, the snapshot's `tf`, every primitive round trip); `tf` added
   to `NEW_BLOCK_KEYS` (`tests/royale_contract.test.ts`); the reset in
   `tests/royale_snapshot.test.ts`.
+- As built:
+  - The factory's new member is `RoyaleBuild.bout`, a `BoutHost` (`server/royale_sim.ts`): the
+    bout's ranking, its goal primitives, its result for the ledger and the kind's Seedfalls,
+    read through `bouts/end.ts` and `bouts/goals.ts` on the real build and from counts, goals
+    and prizes a test sets on the fake. The bout argument is `RoyaleBoutArgs` (the ledger's
+    `NextBout` and the match's `guestsOnly`): the bots' softening is decided once, when the
+    seats are dealt, so every bout deals each seat the same skill whoever holds the other
+    seats. A bout runs its kind's death rule, and the service hands the kind's `base` as the
+    variant. `RoyaleMatch` takes `{ seats, bout }` as an options argument, keeps `unitIds` by
+    seat, and gains `reserve` (a bot seat held for its away person from a bout's start) and
+    `replayFrom` (below). `RoyalePoints` gains an `endAwards` switch, off in a bout.
+  - A seat stays its person's for the whole match, as the design's "until they come back, at
+    any moment" says, not for the battle royale's minute: a dropped connection is brought back
+    by the socket's hello or by entering again, a menu Leave only by entering again (a reload
+    after a Leave lands on the home, not back in the match). A Thornfray nobody is connected to
+    for a minute is closed.
+  - Entering asks, in order: a seat the person owns in a running Thornfray, the gathering open
+    (joined before any late seat, so the people waiting for company get it), the fewest-bushels
+    bot seat of a Thornfray in its second Lull, then a new gathering. The late seat is taken
+    only during that Lull (the second bout's drop): someone entering during the first bout's
+    play opens a gathering rather than waiting a bout and a half. The Lull is then built again
+    under the same bout id with the person's champion on the seat and played up to where it
+    stood (`RoyaleMatch.replayFrom`: the old build's recorded events applied and recorded again
+    tick by tick), and everyone in it gets a fresh `match_start` with the new table; the old
+    build is dropped with nothing saved. One line holds one seat in a match.
+  - The wire's shapes: `match_start.royale.tf` is a `BoutStart` (`{ b, k, s, t, p? }`, rows
+    `BoutTableRow` best first); the snapshot's `tf` a `SnapBout` (`{ c, pl, bc, g? }`, the
+    count and the best rounded to hundredths, each goal a `SnapGoal`
+    `[shape, x, y, z, radius, holder unit id | null]`); `thornfray_gather`
+    `{ people, of, startsIn, opener }`, sent on a change and each second;
+    `thornfray_result` `{ place, of, seat, bushels, won, points, table, bouts, replays }` (the
+    ladder points the person banked over the match, each bout's kind, place and pay for their
+    seat), then `match_end`. A goal's wire form is one small module both ends share,
+    `src/net/goal_wire.ts` (`goalOnWire`, `goalOffWire`), and the client mirror keeps the last
+    `tf` between sends like the other blocks sent on change (`src/net/client_world.ts`, one
+    line): the wire's other half, so slice 6 only reads it.
+  - The snapshot's `tf` goes through `sentOnChange` keyed on the seat's record, which every bout
+    and every rejoin makes afresh: the memory resets by itself, with no reset call.
+    `seedfallsBlock` now hands the bout's Seedfalls to `firstSeedfallCallAt` (slice 1's open
+    item): a bout that calls none never sends the block.
+  - Points: the match's end pays a seat whose last order is within three minutes of the match's
+    clock (every bout's ticks summed, the Lulls included), not the last bout's. The two reasons
+    have words in `src/ui/points_text.ts` ('Thornfray won', 'top three'), which its typed table
+    asks for.
+  - The seat report writes one line per person per Thornfray (`queue: 'thornfray'`,
+    `replays`), `SEAT_REPORT_VERSION` 4: each stint of a seat (a bout, or the part of one
+    before a leave) is folded onto the match's clock by a new pure module,
+    `server/thornfray_seat.ts`, the champion's counters counted from where each stint began.
+  - `server/main.ts`: the pool is `boutPool()`, empty until slice 7 releases the kinds, so the
+    mode answers "Thornfray is not open yet." and nothing a player sees changes. The prune's
+    held ids are the bots' Records' and every running Thornfray's bouts (`heldReplayIds()` in
+    every prune call), `/api/public/presence` gains `thornfray: { playing, gathering }` and
+    `/healthz` the count of Thornfrays.
+  - Two more test files: `tests/thornfray_seat.test.ts` (the fold) and
+    `tests/thornfray_server.test.ts`, the whole path on the real Wanderseed: one person and
+    seven house bots through six bouts, a second person taking the late seat, every bout's
+    replay played back to the very checksum its live sim ended on (the rebuilt Lull included,
+    its landing picked before the rebuild kept in its record). The fake service tests share
+    `tests/thornfray_harness.ts`. Checked by breaking the code: the end awards in a bout, the
+    three minutes, the late seat's choice, the catch-up and its recording, the reservations and
+    the replay ids each turn a test red.
 
 ### 6. The client: the HUD, the bout's card, the Lull, the end
 

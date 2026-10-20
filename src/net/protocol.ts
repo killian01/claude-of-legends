@@ -17,6 +17,7 @@ import type { LanePreference } from '../sim/playbook/types';
 import type { AbilityKey, ScoreRow, TeamId, Vec2 } from '../sim/types';
 import type { StructureMeta, UnitKind } from '../sim/unit';
 import type {
+  BoutStart,
   LastLightStep,
   MarkKind,
   RisingKind,
@@ -24,6 +25,9 @@ import type {
   RoyaleResult,
   RoyaleVariant,
   SnapRoyale,
+  ThornfrayClientMsg,
+  ThornfrayGather,
+  ThornfrayResult,
   WirePoint,
 } from './royale_wire';
 
@@ -142,7 +146,10 @@ export type ClientMsg =
   | { t: 'ping'; x: number; z: number }
   // The battle royale's own (src/net/royale_wire.ts, ADR 0031): entering
   // one, and the landing point picked during the drop.
-  | RoyaleClientMsg;
+  | RoyaleClientMsg
+  // A Thornfray's own (ADR 0035): entering one, and the gathering's Start
+  // now.
+  | ThornfrayClientMsg;
 
 // Lite fields ride every snapshot; the optional identity block only on the
 // first snapshot after the unit (re)enters this client's vision.
@@ -413,7 +420,8 @@ export interface LobbyPlayer {
 // creature or the Warden, an Ascendant, the win, or a loss played through.
 // The battle royale adds (server/royale_points.ts, ADR 0031): a cache
 // opened, and the end, One life's last standing, top five and top ten,
-// Respawn's best score.
+// Respawn's best score. A Thornfray adds its end (server/thornfray_points.ts,
+// ADR 0035): its first, and its second and third.
 export type PointsReason =
   | 'last_hit'
   | 'kill'
@@ -427,7 +435,9 @@ export type PointsReason =
   | 'last_standing'
   | 'top_five'
   | 'top_ten'
-  | 'best_score';
+  | 'best_score'
+  | 'thornfray_first'
+  | 'thornfray_top_three';
 
 export type ServerMsg =
   // The account this socket belongs to, so the client can show who it is
@@ -478,8 +488,10 @@ export type ServerMsg =
       // A battle royale on the Wanderseed (ADR 0031): its variant and how
       // many seats it holds, and in Crews the crew size (ADR 0034; absent
       // in Solo). A new one on the same socket (Respawn's next match)
-      // starts the mirror over.
-      royale?: { v: RoyaleVariant; seats: number; c?: 3 | 5 };
+      // starts the mirror over. In a Thornfray (ADR 0035) every bout starts
+      // with one, its variant the bout's, and `tf` says which bout and the
+      // table, sent again on a rejoin.
+      royale?: { v: RoyaleVariant; seats: number; c?: 3 | 5; tf?: BoutStart };
       forged?: ForgedChampionDef[];
       forgedAssets?: Record<string, ForgedMatchAssets>;
     }
@@ -542,6 +554,10 @@ export type ServerMsg =
   | { t: 'points'; delta: number; total: number; reason: PointsReason }
   // A battle royale's end for this person, or their elimination (One life).
   | RoyaleResult
+  // A Thornfray's gathering, to the people in it, and its end, to each
+  // person still in it (ADR 0035). A bout's end sends no royale_result.
+  | ThornfrayGather
+  | ThornfrayResult
   | { t: 'match_end' }
   | { t: 'error'; message: string };
 

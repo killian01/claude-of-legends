@@ -118,11 +118,16 @@ export const graftsBlock: Builder<string[]> = (sim, viewer) => {
   return sentOnChange(viewer, 'gr', [...held], sim.time, GRAFTS_RESEND_S);
 };
 // The Seedfalls called and not yet opened, everyone's: on the tick the list
-// changes and once a second otherwise, from the first call on (an empty
-// list once the last is opened, so the mirror lets go of it).
-export const seedfallsBlock: Builder<SnapSeedfall[]> = (sim, viewer) => {
+// changes and once a second otherwise, from the first call on (a bout's on
+// its own plan, never in a bout that calls none; an empty list once the
+// last is opened, so the mirror lets go of it).
+export const seedfallsBlock: Builder<SnapSeedfall[]> = (sim, viewer, ctx) => {
   const r = sim.royale;
-  if (r.seedfalls.length === 0 && sim.time + 1e-9 < firstSeedfallCallAt(r.variant, r.dropEndsAt)) {
+  const plan = ctx.bout ? ctx.bout.seedfalls : undefined;
+  if (
+    r.seedfalls.length === 0 &&
+    sim.time + 1e-9 < firstSeedfallCallAt(r.variant, r.dropEndsAt, plan)
+  ) {
     return undefined;
   }
   const value = r.seedfalls.map(

@@ -3,6 +3,7 @@
 // unit, projectile and zone records with a y beside x and z on the sphere
 // (src/sim/geo.ts). Types only; protocol.ts embeds them.
 
+import type { GoalShape } from '../sim/content/bouts/types';
 import type {
   GraftGrade,
   MarkKind,
@@ -164,7 +165,90 @@ export interface SnapRoyale {
   // Respawn: the champion that took the recipient down, through the wait
   // (CONTEXT.md: Death beat), while it stands; absent otherwise.
   wa?: SnapWatch;
+  // A Thornfray's bout (ADR 0035): the recipient's count and place, the
+  // best count and the goals, sent when they change (the client keeps the
+  // last), each bout starting over; absent in a battle royale.
+  tf?: SnapBout;
 }
+
+// A goal primitive of a bout (ADR 0035; src/net/goal_wire.ts): its shape,
+// where it stands, its radius, and the unit id of the champion holding it
+// (null for none).
+export type SnapGoal = [GoalShape, number, number, number, number, number | null];
+
+// A Thornfray's bout in the recipient's snapshot: their own count and
+// their place as the bout stands, the best count, and the kind's goals
+// (absent when it stands none). The HUD's top line reads it; nothing in it
+// is hidden from anyone (ObsRoyale.bout reads the same numbers).
+export interface SnapBout {
+  c: number;
+  pl: number;
+  bc: number;
+  g?: SnapGoal[];
+}
+
+// One seat of a Thornfray's table (CONTEXT.md: Bushel): its seat index,
+// its champion's unit id in this bout, the name it plays under, its
+// champion, whether a bot (1) or a person (0) holds it now, its bushels,
+// the bushels the last bout paid it, and the bouts it won.
+export type BoutTableRow = [number, number, string, string, 0 | 1, number, number, number];
+
+// A Thornfray's bout at its match_start, and again on a rejoin (ADR 0035):
+// the bout's index (0 the first, 5 the Final), the six kinds in order, the
+// recipient's seat, the table best first, and the seat offered a prize
+// this bout (the last bout's winner; absent in the first).
+export interface BoutStart {
+  b: number;
+  k: string[];
+  s: number;
+  t: BoutTableRow[];
+  p?: number;
+}
+
+// A Thornfray gathering for the people in it (ADR 0035): how many people
+// are in, of how many seats, the seconds until it starts, and whether the
+// recipient holds Start now (its opener).
+export interface ThornfrayGather {
+  t: 'thornfray_gather';
+  people: number;
+  of: number;
+  startsIn: number;
+  opener: boolean;
+}
+
+// One seat at a Thornfray's end: its seat index, name, champion, a bot (1)
+// or a person (0), its bushels and the bouts it won.
+export type ThornfrayEndRow = [number, string, string, 0 | 1, number, number];
+
+// Sent to each person still in a Thornfray when its Final ends: their
+// place of the seats, their seat, bushels and bouts won, the ladder points
+// they banked over the match, the table best first, their seat bout by
+// bout (the kind, its place, the bushels it paid), and the bouts' replay
+// ids in order.
+export interface ThornfrayResult {
+  t: 'thornfray_result';
+  place: number;
+  of: number;
+  seat: number;
+  bushels: number;
+  won: number;
+  points: number;
+  table: ThornfrayEndRow[];
+  bouts: { k: string; pl: number; paid: number }[];
+  replays: number[];
+}
+
+// What a player sends for a Thornfray: entering one with the quick pick's
+// champion, skin and sigils (a gathering, a held seat, or a late seat at
+// the second Lull), and the gathering's Start now, its opener's.
+export type ThornfrayClientMsg =
+  | {
+      t: 'thornfray';
+      championId: string;
+      sigils: [string, string];
+      skin?: number;
+    }
+  | { t: 'thornfray_start' };
 
 // Sent to each person when their match ends or they are out for good.
 export interface RoyaleResult {

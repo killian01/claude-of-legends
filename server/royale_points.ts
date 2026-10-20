@@ -12,7 +12,10 @@
 // for 15, as fifty seats give five and ten), and every seat of the winning
 // crew is paid its end; a One life champion fallen while its crew stands
 // counts as still playing when it was at its fall, since it can only
-// watch from there. Pure over what the sim counts and the mode's events.
+// watch from there. A Thornfray's bout (ADR 0035) pays its actions alike
+// and no end of its own: the match's end is paid once, after the Final
+// (server/thornfray_points.ts). Pure over what the sim counts and the
+// mode's events.
 
 import type { RoyaleVariant } from '../src/net/royale_wire';
 import { activeNearEnd, POINTS, type PointsAward, weighted } from './points';
@@ -86,6 +89,9 @@ export class RoyalePoints {
     private readonly variant: RoyaleVariant,
     // Crews only: how many crews the places count out of.
     private readonly crews: number | null = null,
+    // Whether the places and the end pay (One life's places, the end's
+    // awards): off in a Thornfray's bout, whose end is the match's.
+    private readonly endAwards = true,
   ) {
     this.note(world);
   }
@@ -141,7 +147,7 @@ export class RoyalePoints {
         const seat = bySeat.get(ev.unitId);
         if (seat) give(seat, 'cache');
       } else if (ev.type === 'royale_out') {
-        if (this.variant !== 'one_life') continue;
+        if (this.variant !== 'one_life' || !this.endAwards) continue;
         const seat = bySeat.get(ev.unitId);
         const reason =
           this.crews !== null ? placeReason(ev.place, this.crews) : placeReason(ev.place);
@@ -151,6 +157,7 @@ export class RoyalePoints {
         }
       } else if (ev.type === 'royale_end') {
         this.ended = true;
+        if (!this.endAwards) continue;
         const reason = this.variant === 'one_life' ? 'last_standing' : 'best_score';
         // In Crews every seat of the winning crew, the fallen too.
         const team = ev.winnerId !== null ? world.units.get(ev.winnerId)?.team : undefined;

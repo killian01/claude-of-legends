@@ -39,6 +39,10 @@ export const POINTS: Readonly<Record<PointsReason, number>> = {
   top_five: 25,
   top_ten: 15,
   best_score: 50,
+  // A Thornfray's end (server/thornfray_points.ts, ADR 0035): its first,
+  // and its second and third. Bushels are never banked.
+  thornfray_first: 40,
+  thornfray_top_three: 20,
 };
 
 // The end bonus goes to a seat that issued a command in the last three

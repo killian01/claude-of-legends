@@ -247,8 +247,9 @@ export class ClientWorld implements IWorld {
   // In Crews (ADR 0034), the crewmates' landing picks, kept like the others'.
   private dropMates: WirePoint[] = [];
   // The blocks sent on change (the Seedfalls, the Risings, the marks, the
-  // Clamors, the own Grafts): the last of each, kept between sends.
-  private kept: Pick<SnapRoyale, 'sf' | 'ri' | 'mk' | 'cl' | 'gr'> = {};
+  // Clamors, the own Grafts, a Thornfray bout's line): the last of each,
+  // kept between sends.
+  private kept: Pick<SnapRoyale, 'sf' | 'ri' | 'mk' | 'cl' | 'gr' | 'tf'> = {};
   private readonly seats = new Map<number, SeatLabel>();
   // The killer's body drawn from the mode block's wa through a Respawn
   // wait (net/watch_body.ts), by unit id; null when none is.
@@ -404,6 +405,7 @@ export class ClientWorld implements IWorld {
     if (r.mk) this.kept.mk = r.mk;
     if (r.cl) this.kept.cl = r.cl;
     if (r.gr) this.kept.gr = r.gr;
+    if (r.tf) this.kept.tf = r.tf;
     this.royaleBlock = {
       ...r,
       ...this.kept,

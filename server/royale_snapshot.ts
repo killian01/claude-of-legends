@@ -15,7 +15,7 @@ import { heartwoodOf } from '../src/sim/content/grafts';
 import type { Vec3 } from '../src/sim/geo';
 import { type DuskState, MARK_SHOWN_S } from '../src/sim/royale/types';
 import { crewPlaceOf, placeOf } from './royale_ranking';
-import type { RoyaleSim, RoyaleSimEvent } from './royale_sim';
+import type { BoutHost, RoyaleSim, RoyaleSimEvent } from './royale_sim';
 import { addRoyaleBlocks, cacheKindOf, openingDuration } from './royale_snapshot_blocks';
 import {
   projectileRecord,
@@ -26,6 +26,7 @@ import {
   wallRecord,
   zoneRecord,
 } from './snapshot';
+import { boutSnapBlock } from './thornfray_snapshot';
 
 // Ticks between two caches lists (one a second at 20 Hz).
 export const CACHES_EVERY_TICKS = 20;
@@ -52,6 +53,9 @@ export interface RoyaleSnapContext {
   // (server/royale_match.ts RoyalePlayer.window); the rank line counts
   // from there.
   windowBase?: ReadonlyMap<number, number>;
+  // A Thornfray's bout (ADR 0035): its ranking, goals and Seedfalls, for
+  // the tf block and the Seedfalls' first call.
+  bout?: BoutHost;
 }
 
 const point = (p: Vec3): WirePoint => [round2(p.x), round2(p.y), round2(p.z)];
@@ -144,6 +148,10 @@ export function royaleBlock(
     }
   }
   addRoyaleBlocks(block, sim, viewer, ctx);
+  if (ctx.bout) {
+    const tf = boutSnapBlock(sim, viewer, ctx.bout);
+    if (tf !== undefined) block.tf = tf;
+  }
   return block;
 }
 

@@ -267,3 +267,60 @@ describe('the bandwidth with fifty champions', () => {
     expect(deflated).toBeLessThan(15_000);
   });
 });
+
+describe("a Thornfray bout's line", () => {
+  // A bout of eight seats on the fake: its counts, and what the server reads
+  // of it (server/royale_sim.ts BoutHost).
+  function bout() {
+    const s = setup(8, 'one_life');
+    const unitIds = s.champions.map((u) => u.id);
+    s.sim.royale.bout = {
+      kind: 'lastwick',
+      index: 0,
+      final: false,
+      seats: unitIds,
+      counts: unitIds.map(() => 0),
+      falls: unitIds.map(() => 0),
+      seedfalls: unitIds.map(() => 0),
+      reached: unitIds.map(() => 0),
+      fellHp: unitIds.map(() => null),
+      goals: [],
+      prizes: [],
+      prizeOffered: false,
+      started: false,
+      ranking: null,
+    };
+    const ctx = (): RoyaleSnapContext => ({
+      seat: (id) => s.labels.get(id),
+      seats: 8,
+      people: 1,
+      caches: false,
+      bout: s.sim.boutHost(),
+    });
+    const tf = (viewer: RoyaleViewer) =>
+      (buildRoyaleSnapshot(s.sim, viewer, [], ctx()) as Snap).royale!.tf;
+    return { ...s, tf, ctx };
+  }
+
+  it('is sent when it changes, and starts over with each seat record (each bout)', () => {
+    const { sim, viewer, tf } = bout();
+    expect(tf(viewer)).toEqual({ c: 0, pl: 1, bc: 0 });
+    expect(tf(viewer)).toBeUndefined();
+    sim.royale.bout!.counts[3] = 2;
+    expect(tf(viewer)).toEqual({ c: 0, pl: 2, bc: 2 });
+    expect(tf(viewer)).toBeUndefined();
+    // A bout seats everyone afresh: a new seat record, the line again.
+    const next: RoyaleViewer = { ...viewer, seat: { ack: 0, ackAt: 0 } };
+    expect(tf(next)).toEqual({ c: 0, pl: 2, bc: 2 });
+  });
+
+  it('calls no Seedfall in a bout that has none, whatever the planet does', () => {
+    const { sim, viewer, ctx } = bout();
+    sim.royale.stage = 'play';
+    sim.time = 200;
+    const planet: RoyaleSnapContext = { ...ctx(), bout: undefined };
+    expect((buildRoyaleSnapshot(sim, viewer, [], planet) as Snap).royale!.sf).toEqual([]);
+    const fresh: RoyaleViewer = { ...viewer, seat: { ack: 0, ackAt: 0 } };
+    expect((buildRoyaleSnapshot(sim, fresh, [], ctx()) as Snap).royale!).not.toHaveProperty('sf');
+  });
+});

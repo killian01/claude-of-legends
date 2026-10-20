@@ -7,8 +7,11 @@
 
 import type { ReplayPick, RoyaleRecord } from '../src/net/replay';
 import type { RoyaleVariant } from '../src/net/royale_wire';
+import type { BoutSeedfalls, GoalPrimitive } from '../src/sim/content/bouts/types';
 import type { Vec3 } from '../src/sim/geo';
 import type { Projectile } from '../src/sim/projectiles';
+import type { BoutResult, PendingPrize } from '../src/sim/royale/bouts/ledger';
+import type { RegionId } from '../src/sim/royale/layout';
 import type { RoyaleCrew, RoyaleEvent, RoyaleState } from '../src/sim/royale/types';
 import type { SimEvent } from '../src/sim/sim';
 import type { AbilityKey, ScoreRow, Vec2 } from '../src/sim/types';
@@ -76,6 +79,36 @@ export interface RoyaleSeatPick {
   newcomer?: boolean;
 }
 
+// A Thornfray's bout as the factory builds it (ADR 0035; the ledger's
+// NextBout, src/sim/royale/bouts/ledger.ts): the match's seed (every bout
+// deals the seats' skills from it), the bout's index, kind and Thornyard,
+// the seat offered fresh prize cards (the last bout's winner) and the
+// prizes carried unpicked, the Grafts each seat carries in, and whether the
+// match's people were Guests only (decided once, when its seats were
+// dealt, so every bout's bots play alike).
+export interface RoyaleBoutArgs {
+  matchSeed: number;
+  index: number;
+  kind: string;
+  region: RegionId;
+  prize: number | null;
+  pendingPrize: readonly PendingPrize[];
+  grafts: readonly (readonly string[])[];
+  guestsOnly: boolean;
+}
+
+// What the server reads of a bout beside its sim, by seat index (the order
+// the builder seated them in): the seats best first as the bout stands
+// (its ranking once over), the kind's goal primitives as they stand, the
+// bout as it ended for the ledger, and the kind's Seedfalls (null when it
+// calls none).
+export interface BoutHost {
+  ranking(): number[];
+  primitives(): readonly GoalPrimitive[];
+  result(): BoutResult;
+  readonly seedfalls: BoutSeedfalls | null;
+}
+
 export interface RoyaleBuild {
   sim: RoyaleSim;
   // The unit each pick became, in pick order.
@@ -88,6 +121,9 @@ export interface RoyaleBuild {
   };
   // Hands a seat to the battle royale's bot: a person left it.
   standIn(unitId: number): void;
+  // A Thornfray's bout: what the server reads of it. Absent in a battle
+  // royale.
+  bout?: BoutHost;
 }
 
 export type RoyaleSimFactory = (
@@ -96,4 +132,7 @@ export type RoyaleSimFactory = (
   picks: readonly RoyaleSeatPick[],
   // The crew size (ADR 0034); Solo when absent.
   crew?: RoyaleCrew,
+  // A Thornfray's bout (ADR 0035), built by buildBoutSim; a battle royale
+  // when absent. A bout runs its kind's death rule, whatever the variant.
+  bout?: RoyaleBoutArgs,
 ) => RoyaleBuild;

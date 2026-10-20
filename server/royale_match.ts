@@ -10,8 +10,10 @@
 // spot), in its Grace, its tally from zero (CONTEXT.md: Arrival;
 // src/sim/royale/grace.ts). A
 // person who leaves hands the seat to the mode's bot, held for them when the
-// connection only dropped. Transport-agnostic: the service hands it what a
-// socket said and sends what it answers.
+// connection only dropped. A Thornfray's bout (ADR 0035) is one of these
+// too: its eight seats dealt once for the whole match and handed in, its
+// sim built for the bout, and no end award of its own. Transport-agnostic:
+// the service hands it what a socket said and sends what it answers.
 
 import { type ClientMsg, type ServerMsg, type WireStepId, wirePoint } from '../src/net/protocol';
 import {
@@ -44,8 +46,15 @@ import {
   royaleRanking,
   royaleResult,
 } from './royale_ranking';
-import { type RoyalePerson, royaleSeats } from './royale_seats';
-import type { RoyaleBuild, RoyaleSim, RoyaleSimEvent, RoyaleSimFactory } from './royale_sim';
+import { type RoyalePerson, type RoyaleSeat, royaleSeats } from './royale_seats';
+import type {
+  BoutHost,
+  RoyaleBoutArgs,
+  RoyaleBuild,
+  RoyaleSim,
+  RoyaleSimEvent,
+  RoyaleSimFactory,
+} from './royale_sim';
 import { buildRoyaleSnapshot, CACHES_EVERY_TICKS } from './royale_snapshot';
 
 export interface RoyalePlayer {
@@ -109,12 +118,25 @@ export interface RoyaleReplay {
   royale: RoyaleRecord;
 }
 
+// What a match may be handed beyond its people: its seats dealt already
+// (a Thornfray deals its eight once for the match, server/thornfray_match.ts),
+// none dealt here then; and a Thornfray's bout, for the factory.
+export interface RoyaleMatchOptions {
+  seats?: readonly RoyaleSeat[];
+  bout?: RoyaleBoutArgs;
+}
+
 // Every seat of a match this many seats wide, by default the crew size's
 // (src/sim/royale/crews.ts crewSeats: fifty, Trios forty-eight).
 export class RoyaleMatch {
   readonly sim: RoyaleSim;
   readonly players = new Map<number, RoyalePlayer>();
   readonly points: RoyalePoints;
+  // The unit each seat became, in seat order.
+  readonly unitIds: readonly number[];
+  // A Thornfray's bout: what the server reads of it; null in a battle
+  // royale.
+  readonly bout: BoutHost | null;
   private readonly seats = new Map<number, SeatState>();
   private readonly standIn: RoyaleBuild['standIn'];
   private readonly replay: RoyaleBuild['replay'];
@@ -134,12 +156,19 @@ export class RoyaleMatch {
     factory: RoyaleSimFactory,
     seatCount?: number,
     readonly crew: RoyaleCrew = 1,
+    options: RoyaleMatchOptions = {},
   ) {
-    const seats = royaleSeats(people, seed, seatCount ?? crewSeats(crew), crew);
-    const build = factory(seed, variant, seats, crew);
+    const seats = options.seats
+      ? [...options.seats]
+      : royaleSeats(people, seed, seatCount ?? crewSeats(crew), crew);
+    const build = options.bout
+      ? factory(seed, variant, seats, crew, options.bout)
+      : factory(seed, variant, seats, crew);
     this.sim = build.sim;
     this.standIn = build.standIn;
     this.replay = build.replay;
+    this.unitIds = [...build.unitIds];
+    this.bout = build.bout ?? null;
     seats.forEach((s, i) => {
       const unitId = build.unitIds[i];
       if (unitId === undefined) return;
@@ -159,7 +188,12 @@ export class RoyaleMatch {
       const person = people.find((p) => p.clientId === s.clientId);
       if (person) this.seat(person, unitId, false);
     });
-    this.points = new RoyalePoints(this.sim, variant, crew > 1 ? this.sim.teamCount : null);
+    this.points = new RoyalePoints(
+      this.sim,
+      variant,
+      crew > 1 ? this.sim.teamCount : null,
+      this.bout === null,
+    );
   }
 
   get seatCount(): number {
@@ -355,6 +389,48 @@ export class RoyaleMatch {
     return p;
   }
 
+  // A bot's seat held for its owner from the start (a Thornfray's bout
+  // built while the seat's person was away): their rejoin takes it back.
+  reserve(unitId: number, owner: number): void {
+    const s = this.seats.get(unitId);
+    if (s?.bot) s.heldFor = owner;
+  }
+
+  // Plays the events another build of this very match recorded (the same
+  // seed and unit ids, a seat's champion changed during the drop: a
+  // Thornfray's late seat in its Lull) up to `ticks`, recording each again,
+  // so this build stands where that one stood and its replay holds them.
+  replayFrom(events: readonly ReplayEvent[], ticks: number): void {
+    let i = 0;
+    const due = (): boolean => i < events.length && events[i]!.k <= this.sim.tickCount;
+    while (this.sim.tickCount < ticks) {
+      while (due()) this.applyRecorded(events[i++]!);
+      this.events = this.sim.tick();
+    }
+    while (due()) this.applyRecorded(events[i++]!);
+  }
+
+  private applyRecorded(ev: ReplayEvent): void {
+    this.record(ev);
+    const c = ev.c;
+    if (ev.e === 'cmd' && c) {
+      if (c.t === 'drop') {
+        const at = wirePoint(c.x, c.z, c.y);
+        if (at && at.y !== undefined) this.sim.pickDrop(ev.u, { x: at.x, y: at.y, z: at.z });
+      } else {
+        applyRoyaleCommand(this.sim, this.seats.get(ev.u)?.team ?? 0, ev.u, c);
+      }
+    } else if (ev.e === 'kit' && ev.kit) {
+      this.sim.setLoadout(ev.u, ev.kit.sigils, ev.kit.skin);
+    } else if (ev.e === 'arrive') {
+      this.sim.beginArrival(ev.u);
+    } else if (ev.e === 'bot_on') {
+      this.standIn(ev.u);
+    } else if (ev.e === 'bot_off') {
+      this.sim.detachPolicy(ev.u);
+    }
+  }
+
   // The reservation on a seat ran out: a newcomer may take it.
   release(unitId: number): void {
     const s = this.seats.get(unitId);
@@ -460,6 +536,7 @@ export class RoyaleMatch {
         caches,
         ...(finalPlace !== undefined ? { finalPlace } : {}),
         ...(p.window ? { windowBase: p.window.base } : {}),
+        ...(this.bout ? { bout: this.bout } : {}),
       },
     );
   }
@@ -484,8 +561,13 @@ export class RoyaleMatch {
     }));
   }
 
-  // Every seat's place at the end: its own in Solo, its crew's in Crews.
+  // Every seat's place at the end: its own in Solo, its crew's in Crews,
+  // the bout's ranking in a Thornfray's bout.
   private finalPlaces(): Map<number, number> {
+    if (this.bout) {
+      const ranking = this.bout.ranking();
+      return new Map(ranking.map((seat, i) => [this.unitIds[seat] ?? -1, i + 1]));
+    }
     const seats = this.rankedSeats();
     if (this.crew === 1) return finalPlaces(royaleRanking(this.sim.royale, seats));
     const crewPlace = finalPlaces(crewRanking(this.sim.royale, seats));

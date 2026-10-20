@@ -25,6 +25,8 @@ const REASON_WORDS: Readonly<Record<PointsReason, string>> = {
   top_five: 'top five',
   top_ten: 'top ten',
   best_score: 'best score',
+  thornfray_first: 'Thornfray won',
+  thornfray_top_three: 'top three',
 };
 
 export function popText(delta: number, reason: PointsReason): string {

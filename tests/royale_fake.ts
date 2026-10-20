@@ -2,14 +2,26 @@
 // server's service, snapshots and points run without the mode's rules. Real
 // units on a sphere of radius 80, each champion its own team, a clock that
 // runs the drop, the play and the end, and helpers a test calls to make
-// things happen (a takedown, a cache, a camp, a projectile).
+// things happen (a takedown, a cache, a camp, a projectile). Handed a
+// Thornfray's bout (ADR 0035), it holds the bout's state and answers what the
+// server reads of it (server/royale_sim.ts BoutHost) from counts, goals and
+// prizes a test sets.
 
-import type { RoyaleBuild, RoyaleSeatPick, RoyaleSim, RoyaleSimEvent } from '../server/royale_sim';
+import type {
+  BoutHost,
+  RoyaleBoutArgs,
+  RoyaleBuild,
+  RoyaleSeatPick,
+  RoyaleSim,
+  RoyaleSimEvent,
+} from '../server/royale_sim';
 import type { RoyaleVariant } from '../src/net/royale_wire';
+import type { GoalPrimitive } from '../src/sim/content/bouts/types';
 import { CAMPS } from '../src/sim/content/camps';
 import { CHAMPIONS } from '../src/sim/content/champions';
 import type { Vec3 } from '../src/sim/geo';
 import type { Projectile } from '../src/sim/projectiles';
+import type { PendingPrize } from '../src/sim/royale/bouts/ledger';
 import {
   DROP_S,
   PLAY_S,
@@ -68,6 +80,11 @@ export class FakeRoyaleSim implements RoyaleSim {
   readonly policies = new Set<number>();
   // Events the next tick answers with.
   readonly pending: RoyaleSimEvent[] = [];
+  // A bout's goals and the prizes it leaves open and picked, as a test sets
+  // them (BoutHost reads them).
+  goals: GoalPrimitive[] = [];
+  openPrizes: PendingPrize[] = [];
+  prizeGrafts: { seat: number; graft: string }[] = [];
   private nextId = 1;
 
   constructor(variant: RoyaleVariant, crew: RoyaleCrew = 1) {
@@ -205,7 +222,34 @@ export class FakeRoyaleSim implements RoyaleSim {
   finish(winnerId: number | null): void {
     this.royale.stage = 'over';
     this.royale.winnerId = winnerId;
+    const b = this.royale.bout;
+    if (b) b.ranking = this.boutRanking();
     this.pending.push({ type: 'royale_end', winnerId });
+  }
+
+  // A bout's seats best first: the count, then the lower seat (its ranking
+  // once over).
+  boutRanking(): number[] {
+    const b = this.royale.bout;
+    if (!b) return [];
+    if (b.ranking) return [...b.ranking];
+    return b.seats.map((_, i) => i).sort((a, c) => b.counts[c]! - b.counts[a]! || a - c);
+  }
+
+  // What the server reads of the bout.
+  boutHost(): BoutHost {
+    return {
+      ranking: () => this.boutRanking(),
+      primitives: () => this.goals,
+      result: () => ({
+        kind: this.royale.bout?.kind ?? '',
+        ranking: this.boutRanking(),
+        counts: [...(this.royale.bout?.counts ?? [])],
+        pendingPrize: this.openPrizes.map((p) => ({ seat: p.seat, cards: [...p.cards] })),
+        prizeGrafts: [...this.prizeGrafts],
+      }),
+      seedfalls: null,
+    };
   }
 
   tick(): readonly RoyaleSimEvent[] {
@@ -224,6 +268,10 @@ export class FakeRoyaleSim implements RoyaleSim {
     } else if (r.stage === 'play' && this.time >= r.endsAt) {
       let best: number | null = null;
       for (const [id, s] of r.scores) if (best === null || s > (r.scores.get(best) ?? 0)) best = id;
+      if (r.bout) {
+        r.bout.ranking = this.boutRanking();
+        best = r.bout.seats[r.bout.ranking[0] ?? -1] ?? null;
+      }
       r.stage = 'over';
       r.winnerId = best;
       out.push({ type: 'royale_end', winnerId: best });
@@ -320,24 +368,52 @@ export class FakeRoyaleSim implements RoyaleSim {
   }
 }
 
-// The factory the service takes, keeping every sim it built for the test.
-export function fakeFactory(): {
+// A bout's state at its start, every seat at nothing.
+function boutState(args: RoyaleBoutArgs, unitIds: readonly number[]) {
+  const zeros = (): number[] => unitIds.map(() => 0);
+  return {
+    kind: args.kind,
+    index: args.index,
+    final: args.index === 5,
+    seats: [...unitIds],
+    counts: zeros(),
+    falls: zeros(),
+    seedfalls: zeros(),
+    reached: zeros(),
+    fellHp: unitIds.map(() => null),
+    goals: [],
+    prizes: [],
+    prizeOffered: false,
+    started: false,
+    ranking: null,
+  };
+}
+
+// The factory the service takes, keeping every sim it built for the test,
+// and the bout each was handed. A bout's clock is `boutS` past its drop.
+export function fakeFactory(opts: { boutS?: number } = {}): {
   factory: (
     seed: number,
     variant: RoyaleVariant,
     picks: readonly RoyaleSeatPick[],
     crew?: RoyaleCrew,
+    bout?: RoyaleBoutArgs,
   ) => RoyaleBuild;
   sims: FakeRoyaleSim[];
   picks: (readonly RoyaleSeatPick[])[];
+  bouts: (RoyaleBoutArgs | undefined)[];
+  seeds: number[];
 } {
   const sims: FakeRoyaleSim[] = [];
   const picksSeen: (readonly RoyaleSeatPick[])[] = [];
+  const bouts: (RoyaleBoutArgs | undefined)[] = [];
+  const seeds: number[] = [];
   const factory = (
-    _seed: number,
+    seed: number,
     variant: RoyaleVariant,
     picks: readonly RoyaleSeatPick[],
     crew: RoyaleCrew = 1,
+    bout?: RoyaleBoutArgs,
   ): RoyaleBuild => {
     const sim = new FakeRoyaleSim(variant, crew);
     const unitIds = picks.map((p, i) => {
@@ -347,8 +423,14 @@ export function fakeFactory(): {
       if (p.bot) sim.policies.add(u.id);
       return u.id;
     });
+    if (bout) {
+      sim.royale.bout = boutState(bout, unitIds);
+      sim.royale.endsAt = DROP_S + (opts.boutS ?? 30);
+    }
     sims.push(sim);
     picksSeen.push(picks);
+    bouts.push(bout);
+    seeds.push(seed);
     // The newcomers' seats, as the real builder records them.
     const newcomers: number[] = [];
     picks.forEach((p, i) => {
@@ -377,7 +459,8 @@ export function fakeFactory(): {
       standIn: (unitId) => {
         sim.policies.add(unitId);
       },
+      ...(bout ? { bout: sim.boutHost() } : {}),
     };
   };
-  return { factory, sims, picks: picksSeen };
+  return { factory, sims, picks: picksSeen, bouts, seeds };
 }
