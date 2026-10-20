@@ -5,8 +5,10 @@
 // player knows (the planet, the Dusk, the standing caches, the pads), and
 // nothing here reaches past it.
 
+import { BOUT_BOTS } from '../../content/bots/bout_skills';
 import { type ChampionHints, hintsFor } from '../../content/bots/hints';
 import type { RoyaleSkill } from '../../content/bots/royale_skills';
+import type { BoutBots } from '../../content/bouts/types';
 import type { ChampionDef } from '../../content/champions';
 import { CHAMPIONS } from '../../content/champions';
 import { dist, type Vec3 } from '../../geo';
@@ -41,6 +43,10 @@ export interface Sense {
   readonly struck: boolean;
   // The seat's own Burr while it lasts (ObsRoyale.burr), else null.
   readonly burr: ObsBurr | null;
+  // In a Thornfray's bout (ObsRoyale.bout), the kind's numbers its bots
+  // read in place of the fifty seat tunings (content/bots/bout_skills.ts),
+  // BOUT_BOTS when the policy was given none; null on the planet.
+  readonly bout: BoutBots | null;
 }
 
 export function p3(u: { x: number; z: number; y?: number }): Vec3 {
@@ -52,6 +58,7 @@ export function buildSense(
   r: ObsRoyale,
   layout: RoyaleLayout,
   skill: RoyaleSkill,
+  bout: BoutBots | null = null,
 ): Sense {
   const s = obs.self;
   const me = p3(s);
@@ -81,5 +88,6 @@ export function buildSense(
     attackRange: s.attackRange ?? 5,
     struck: s.struckAt !== null && s.struckAt !== undefined && obs.time - s.struckAt <= 2,
     burr: r.burr && r.burr.until >= obs.time ? r.burr : null,
+    bout: r.bout ? (bout ?? BOUT_BOTS) : null,
   };
 }

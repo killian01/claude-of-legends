@@ -5,27 +5,34 @@
 // the planet it plays (what any player knows of the map), under the same
 // decision budget and the same sight as a person. A seat keeps its skill
 // for the match, so the stand-in that takes a seat a person left plays
-// that seat's skill, live and replayed alike.
+// that seat's skill, live and replayed alike. In a Thornfray's bout the
+// policy carries the kind's numbers for its bots (BoutBots,
+// bout_skills.ts), as it carries the seat's skill.
 
 import type { Policy } from '../../policy';
 import { decide } from '../../royale/bot/brain';
 import type { RoyaleLayout } from '../../royale/layout';
 import type { Sim } from '../../sim';
+import type { BoutBots } from '../bouts/types';
 import { ROYALE_SKILLS, type RoyaleSkillId } from './royale_skills';
 
 export const ROYALE_BOT_ID = 'royale';
 
-export function royalePolicy(layout: RoyaleLayout, skill: RoyaleSkillId): Policy {
+export function royalePolicy(
+  layout: RoyaleLayout,
+  skill: RoyaleSkillId,
+  bout: BoutBots | null = null,
+): Policy {
   const s = ROYALE_SKILLS[skill];
-  return (obs, rng) => decide(obs, rng, layout, s);
+  return (obs, rng) => decide(obs, rng, layout, s, undefined, bout);
 }
 
-// The seat's bot in a battle royale sim, at the seat's skill; null outside
-// one.
+// The seat's bot in a battle royale sim, at the seat's skill, with its
+// bout's numbers in a Thornfray; null outside one.
 export function royaleBotPolicy(sim: Sim, unitId: number): Policy | null {
   const mode = sim.royaleMode;
   if (!mode) return null;
-  return royalePolicy(mode.layout, mode.skillOf(unitId));
+  return royalePolicy(mode.layout, mode.skillOf(unitId), mode.bout?.kind.bots ?? null);
 }
 
 // Seats the seat's bot: the house seats at the start, a stand-in when a

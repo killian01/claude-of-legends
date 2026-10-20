@@ -17,7 +17,12 @@
 // nothing better is near; a cache or a Seedfall further off, a wander
 // only with none near. Its skill (content/bots/royale_skills.ts), sharpened
 // by its score and the Dusk, slows its eye, scatters its aim and sets its
-// nerve.
+// nerve. In a Thornfray's bout (ObsRoyale.bout) the same brain reads the
+// kind's numbers in place of the fifty seat tunings (BoutBots,
+// content/bots/bout_skills.ts: the calm nerve, the pace, the cornered
+// light, the Dusk margin), lands inside the Thornyard, never runs
+// Respawn's Seedfall errand, and asks the kind's own errand
+// (bout_calls.ts) only after the fight block, where the calls are asked.
 
 import {
   CALL_HP,
@@ -32,6 +37,7 @@ import {
   type RoyaleSkill,
   sharpenedSkill,
 } from '../../content/bots/royale_skills';
+import type { BoutBots } from '../../content/bouts/types';
 import { dirTo, dist, dot, norm, scale, sub, turnLeft, type Vec3 } from '../../geo';
 import {
   fumbled,
@@ -44,6 +50,7 @@ import type { Action, Observation, ObsRoyale, ObsUnit } from '../../policy';
 import type { Rng } from '../../rng';
 import { depthInside, insideCap } from '../dusk';
 import { along, type RoyaleLayout } from '../layout';
+import { beginHeldOpening, boutCall } from './bout_calls';
 import {
   ambushBush,
   ambushCall,
@@ -327,22 +334,54 @@ export function effectiveSkill(skill: RoyaleSkill, r: ObsRoyale): RoyaleSkill {
   return id === skill.id ? skill : ROYALE_SKILLS[id];
 }
 
-// The champions One life's pace expects still in at sim time `time`.
-export function paceAlive(r: ObsRoyale, time: number): number {
+// The champions One life's pace (`curve`, the champions still in at each
+// minute from the landing) expects still in at sim time `time`.
+export function paceAlive(
+  r: ObsRoyale,
+  time: number,
+  curve: readonly number[] = ONE_LIFE_PACE,
+): number {
   const minutes = Math.max(0, (time - r.dropEndsAt) / 60);
   const i = Math.floor(minutes);
-  const last = ONE_LIFE_PACE.length - 1;
-  if (i >= last) return ONE_LIFE_PACE[last]!;
+  const last = curve.length - 1;
+  if (i >= last) return curve[last]!;
   const f = minutes - i;
-  return ONE_LIFE_PACE[i]! * (1 - f) + ONE_LIFE_PACE[i + 1]! * f;
+  return curve[i]! * (1 - f) + curve[i + 1]! * f;
 }
 
 // How much more a fight's odds must show in One life for the field's
-// pace: more when champions fell ahead of it, less when behind.
-export function paceNerve(r: ObsRoyale, time: number): number {
-  if (r.variant !== 'one_life') return 0;
-  const ahead = paceAlive(r, time) - r.alive;
+// pace: more when champions fell ahead of it, less when behind; none with
+// no curve (a bout's kind with no pace).
+export function paceNerve(
+  r: ObsRoyale,
+  time: number,
+  curve: readonly number[] | null = ONE_LIFE_PACE,
+): number {
+  if (r.variant !== 'one_life' || curve === null || curve.length === 0) return 0;
+  const ahead = paceAlive(r, time, curve) - r.alive;
   return Math.min(PACE_NERVE_MAX, Math.max(PACE_NERVE_MIN, ahead * PACE_NERVE_PER_SEAT));
+}
+
+// The pace a seat's bot holds to: the planet's fifty, or the bout's own
+// (BoutBots.pace, none in Lastwick: held against eight seats the fifty's
+// curve would ask odds no fight shows).
+export function paceOf(sense: Sense): readonly number[] | null {
+  return sense.bout ? sense.bout.pace : ONE_LIFE_PACE;
+}
+
+// The nerve One life's calm adds: CALM_NERVE on the planet, the bout's own
+// (BoutBots.calm, none in Lastwick and Starglean: a bout is fought from its
+// landing, never looted first).
+export function calmOf(sense: Sense): number {
+  return sense.bout ? sense.bout.calm : CALM_NERVE;
+}
+
+// The light under which a bot is cornered (stops fleeing, answers every
+// hit, its nerve lowered): LAST_LIGHT_M on the planet, the bout's own
+// (BoutBots.cornered, 8 m in Lastwick and Starglean: under the planet's
+// 20 m it would hold from a bout's second closing, half the bout).
+export function corneredLightOf(sense: Sense): number {
+  return sense.bout ? sense.bout.cornered : LAST_LIGHT_M;
 }
 
 // The odds a fight must show for this bot to start it: its skill's, less
@@ -352,8 +391,8 @@ export function nerveOf(sense: Sense, cornered: boolean): number {
   const r = sense.r;
   const base = sense.skill.fightOdds - (cornered ? LAST_LIGHT_NERVE : 0);
   if (r.variant !== 'one_life' || sense.struck) return base;
-  const calm = r.dusk.phase === 0 ? CALM_NERVE : 0;
-  return base + calm + paceNerve(r, sense.obs.time);
+  const calm = r.dusk.phase === 0 ? calmOf(sense) : 0;
+  return base + calm + paceNerve(r, sense.obs.time, paceOf(sense));
 }
 
 // Whether an ambush's cue becomes a strike: always in Respawn, and in One
@@ -367,7 +406,7 @@ export function nerveOf(sense: Sense, cornered: boolean): number {
 export const AMBUSH_MARGIN = 0.1;
 export function strikesFromAmbush(sense: Sense, target: ObsUnit): boolean {
   if (sense.r.variant !== 'one_life') return true;
-  if (paceNerve(sense.r, sense.obs.time) <= 0) return true;
+  if (paceNerve(sense.r, sense.obs.time, paceOf(sense)) <= 0) return true;
   return royaleOdds(sense, target) >= nerveOf(sense, false) - AMBUSH_MARGIN;
 }
 
@@ -410,16 +449,19 @@ export function heldOpening(sense: Sense): Action | null {
 // point, the fight for the cache). Measured against two other ways (the
 // report, seeds 1 to 8): finishing a low enemy in reach on the way made
 // more of the takedowns steals, and facing an enemy within CLOSE_M
-// shortened lives for no fewer steals.
+// shortened lives for no fewer steals. Never in a bout: there the fight
+// comes first, always.
 export function errandPast(sense: Sense, errand: RoyaleCall | null): Action | null {
-  if (!errand || inOwnFight(sense)) return null;
+  if (!errand || sense.bout || inOwnFight(sense)) return null;
   const sf = sense.r.seedfalls?.find((x) => x.id === errand.seedfallId);
   if (!sf || dist(sense.me, p3(sf)) <= ERRAND_NEAR_M) return null;
   return approachSeedfall(sense, sf, seedfallCache(sense, sf));
 }
 
 // The walk of a Respawn Seedfall errand: toward the point and its cache.
-function errandWalk(sense: Sense, errand: RoyaleCall): Action | null {
+// Never in a bout, where the kind's own errand walks after the fight block.
+export function errandWalk(sense: Sense, errand: RoyaleCall): Action | null {
+  if (sense.bout) return null;
   const sf = sense.r.seedfalls?.find((x) => x.id === errand.seedfallId);
   return sf ? approachSeedfall(sense, sf, seedfallCache(sense, sf)) : null;
 }
@@ -470,12 +512,15 @@ export function followLastSeen(sense: Sense): Action | null {
 // stand-in's median life from 17.9 s to 15.0 s and the steals from 37 to
 // 45 percent, and one across the light from the fall to 13.7 s: the picks
 // crowd the returns into the fights. With none, 18.3 s and 41 percent.
+// `bout` is the bout's kind's numbers (BoutBots), read only while the
+// observation shows a bout (BOUT_BOTS when none is given).
 export function decide(
   obs: Observation,
   rng: Rng,
   layout: RoyaleLayout,
   seatSkill: RoyaleSkill,
   trace?: DecideTrace,
+  bout: BoutBots | null = null,
 ): Action {
   const why: Why = (w, a) => {
     trace?.(w);
@@ -488,13 +533,14 @@ export function decide(
   if (graft) return why('graft', graft);
   if (r.stage === 'drop') {
     if (r.drop) return NOOP;
-    const p = pickDropPoint(layout, rng);
+    // In a bout, inside the Thornyard: the Dusk's phase 0 cap.
+    const p = pickDropPoint(layout, rng, r.bout ? r.dusk.now : null);
     return { kind: 'drop', x: p.x, y: p.y, z: p.z };
   }
   if (obs.self.dead) return NOOP;
   if (r.stage !== 'play' || r.flying) return NOOP;
   const skill = effectiveSkill(seatSkill, r);
-  const sense = buildSense(obs, r, layout, skill);
+  const sense = buildSense(obs, r, layout, skill, bout);
 
   // Once the last light is out there is nowhere to go: no way out of the
   // dark, every fight is the last one.
@@ -508,7 +554,11 @@ export function decide(
   // A held opening keeps to its reach: no sidestep out of it.
   const held = heldOpening(sense);
   if (held) return why('opening-held', held);
-  const errand = seedfallErrand(sense);
+  // In a bout, a held opening underfoot is begun (bout_calls.ts).
+  const begin = beginHeldOpening(sense);
+  if (begin) return why(begin.why, begin.action);
+  // Respawn's Seedfall errand, never in a bout.
+  const errand = sense.bout ? null : seedfallErrand(sense);
 
   // A swing in the air is never thrown away but to run (the house bots'
   // orb walk, playbook/behaviors.ts): a sidestep or a kite step mid-swing
@@ -550,7 +600,7 @@ export function decide(
     const near = sense.enemies.some((e) => dist(sense.me, p3(e)) <= DANGER_M);
     // The last light leaves nowhere to go: everyone's nerve rises, and a
     // hit is answered rather than run from.
-    const cornered = lightsOut || sense.now.radius <= LAST_LIGHT_M;
+    const cornered = lightsOut || sense.now.radius <= corneredLightOf(sense);
     const nerve = nerveOf(sense, cornered);
     const backOff = cornered ? skill.retreatHp / 2 : skill.retreatHp;
     // Every skill takes a fight its odds reach its nerve on, in either
@@ -606,6 +656,11 @@ export function decide(
   const neutral = neutralTarget(sense);
   if (neutral && neutral.kind !== 'camp')
     return why('rising-fight', hitNeutral(sense, neutral, rng));
+
+  // A bout's own errand, where the calls are asked: after the whole fight
+  // block, so it never walks a bot past a fight.
+  const boutErrand = boutCall(sense);
+  if (boutErrand) return why(boutErrand.why, boutErrand.action);
 
   const call = royaleCall(sense, nerveOf(sense, false)) ?? errand;
   if (call) {

@@ -84,22 +84,35 @@ export function leaveDark(sense: Sense): Action | null {
 // the schedule says: never while the light holds and the bot is inside the
 // next cap.
 export function secondsToDark(sense: Sense): number {
+  return secondsToDarkAt(sense, sense.me);
+}
+
+// The same for any point `p` in the light.
+export function secondsToDarkAt(sense: Sense, p: Vec3): number {
   const { r, obs } = sense;
   const next = sense.next;
   if (!next) return Number.POSITIVE_INFINITY;
-  if (insideCap(next, sense.me) && depthInside(next, sense.me) > 2) {
+  if (insideCap(next, p) && depthInside(next, p) > 2) {
     return Number.POSITIVE_INFINITY;
   }
   const untilChange = r.dusk.phaseEndsAt - obs.time;
   if (r.dusk.shrinking) {
     // The edge closes from where it is toward the next cap at about the
-    // Dusk's pace: the bot's depth now over the closing's remaining time.
-    const depth = depthInside(sense.now, sense.me);
+    // Dusk's pace: the point's depth now over the closing's remaining time.
+    const depth = depthInside(sense.now, p);
     const shrinkLeft = sense.now.radius - next.radius;
     const pace = shrinkLeft > 0 ? shrinkLeft / Math.max(1, untilChange) : 0.74;
     return depth / Math.max(0.2, pace);
   }
   return untilChange;
+}
+
+// The seconds of margin the bot keeps ahead of the Dusk: its skill's, and
+// in a bout the share of it the kind's bots read (BoutBots.duskMargin,
+// half in Lastwick and Starglean): a bout's caps are a few tens of meters
+// across, a short walk from anywhere in the light.
+export function duskMarginOf(sense: Sense): number {
+  return sense.bout ? sense.skill.duskMargin * sense.bout.duskMargin : sense.skill.duskMargin;
 }
 
 // Ahead of the Dusk: toward the next cap once the walk there, with the
@@ -110,13 +123,13 @@ export function beatDusk(sense: Sense): Action | null {
   if (depthInside(next, sense.me) >= SAFE_DEPTH_M * 0.6) return null;
   const goal = intoCap(sense, next);
   const walk = dist(sense.me, goal) / Math.max(1, sense.speed);
-  if (secondsToDark(sense) > walk + sense.skill.duskMargin) return null;
+  if (secondsToDark(sense) > walk + duskMarginOf(sense)) return null;
   return walkVia(sense, goal);
 }
 
 // Whether a point is a safe place to stand for a while: in the light now,
 // and inside the next cap too once the Dusk is about to close on it.
-function safeGround(sense: Sense, p: Vec3): boolean {
+export function safeGround(sense: Sense, p: Vec3): boolean {
   if (!insideCap(sense.now, p) || depthInside(sense.now, p) < 2) return false;
   const next = sense.next;
   if (!next) return true;

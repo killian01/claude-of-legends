@@ -10,6 +10,7 @@
 // dark's burn ends the bout by its rule well before it.
 
 import { survivalScorer } from '../../royale/bouts/count';
+import { LASTWICK_BOTS } from '../bots/bout_skills';
 import type { BoutKind } from './types';
 
 export const LASTWICK: BoutKind = {
@@ -40,6 +41,6 @@ export const LASTWICK: BoutKind = {
   caches: { count: 12, backS: null },
   count: survivalScorer,
   ties: ['health', 'seat'],
-  bots: { errand: null, floor: 0, reach: 0, duskMargin: 0.5, cornered: 8, pace: null },
+  bots: LASTWICK_BOTS,
   hud: { word: 'left', place: true },
 };

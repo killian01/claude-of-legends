@@ -17,6 +17,7 @@ contract and Adding a bout) and the build plan (`docs/plan-thornfray.md`).
 |---|---|
 | `src/sim/content/bouts/lastwick.ts` | The kind: every field of the contract, `version: 1`, `released: false`. |
 | `src/sim/content/bouts/index.ts` | One import and one entry in `BOUT_KINDS`. |
+| `src/sim/content/bots/bout_skills.ts` | Its bots' numbers, `LASTWICK_BOTS`, the kind's `bots`. |
 | `tests/thornfray_bout_lastwick.test.ts` | The kind's own test. |
 | `tests/thornfray_bout_versions.test.ts` | Its end checksum, length, counts and ranking on match seed 1. |
 | `CONTEXT.md` | Its entry, written with the design before any code. |
@@ -95,9 +96,11 @@ Field by field, with Lastwick's choices:
 - `seedfalls`, `goals`: absent when the kind has none, as in Lastwick.
 - `count`: the scorer (step 3). `ties`: the tie-breaks after the count, in order, ending on
   `'seat'` (Lastwick: `['health', 'seat']`).
-- `bots`: the errand's id in `BOUT_CALLS` or `null`, its health floor and reach, the Dusk margin
-  as a share of the skill's, the cornered light in meters, the pace (`null` for none). Lastwick:
-  no errand, half the Dusk margin, cornered under 8 m, no pace.
+- `bots`: the kind's entry in `src/sim/content/bots/bout_skills.ts` (step 5): the errand's id in
+  `BOUT_CALLS` or `null`, its health floor and reach, the Dusk margin as a share of the skill's,
+  the cornered light in meters, the calm nerve (`0` for none), the pace (`null` for none).
+  Lastwick: `LASTWICK_BOTS`, no errand, half the Dusk margin, cornered under 8 m, no calm and no
+  pace.
 - `hud`: the count's word on the top line and whether the count reads as a place (Lastwick:
   `'left'`, a place).
 
@@ -126,11 +129,20 @@ already carry every primitive; the kind touches none of them. Lastwick stands no
 ### 5. The bots
 
 A bot plays every rule a person plays, from the same signals, and fights on sight in every bout.
-The kind's errand is one entry in `BOUT_CALLS` (`src/sim/royale/bot/bout_calls.ts`), answering
-the goal from the observation alone and asked only after the fight block; its numbers go in
-`src/sim/content/bots/bout_skills.ts`. A kind with no errand says `errand: null` in its data, as
-Lastwick does: the fights and the light are the bout. Both files land with slice 4 of
-`docs/plan-thornfray.md`; until then a bout's bots play the planet's brain.
+The house brain (`src/sim/royale/bot/brain.ts`) plays every bout with the kind's numbers in
+place of the fifty seat tunings: its policy carries them as it carries the seat's skill.
+
+- **The numbers**: one entry in `src/sim/content/bots/bout_skills.ts`, a `BoutBots`
+  (`STARGLEAN_BOTS`), which the kind's `bots` names.
+- **The errand**: when the kind needs one, one entry in `BOUT_CALLS`
+  (`src/sim/royale/bot/bout_calls.ts`), a `BoutCall`: `(sense, bots)` to
+  `{ why, action }` or `null`, answering the goal from the observation alone (`sense.r.bout` and
+  its `goals`). The brain asks it only after the fight block, where the planet's calls are
+  asked, so it never walks a bot past a fight. Starglean's is `glean` (`gleanCall`): from its
+  floor, the called Seedfall it would reach first, else a cache in reach. A kind with no errand
+  says `errand: null`, as Lastwick does: the fights and the light are the bout.
+- **Nothing before the fight**: the one rule asked before the fight block is the engine's
+  (`beginHeldOpening`, a landed Seedfall's held opening a step away); a kind adds none.
 
 ### 6. The gates
 
@@ -180,8 +192,8 @@ node scripts/thornfray_report.mjs --bout <id> --seeds 6
 Its length against 90 to 120 s, whether its rule or its clock ended it, the spread of its
 places, the fighting share against Lastwick's, its own counts; the numbers go in the PR. The
 report lands with slice 8 of `docs/plan-thornfray.md`; until then the PR carries the test's own
-figures. Lastwick's, with the planet's brain still playing its bots: on seeds 1 to 6 its rule
-ended it at 87, 80, 94, 82, 92 and 85 s, seven takedowns each, five to nine caches opened.
+figures. Lastwick's, with its bots fighting on sight: on seeds 1 to 6 its rule ended it at 50, 52,
+50, 63, 66 and 61 s, seven takedowns each, the first fall at 10 to 15 s.
 
 ### 9. Release
 

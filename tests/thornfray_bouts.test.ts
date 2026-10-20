@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { BOUT_KINDS, boutPool } from '../src/sim/content/bouts';
 import type { BoutKind } from '../src/sim/content/bouts/types';
+import { BOUT_CALLS } from '../src/sim/royale/bot/bout_calls';
 import { LAST_CLOSING_PHASE } from '../src/sim/royale/dusk';
 import { REGION_IDS } from '../src/sim/royale/layout';
 import { TEST_BOUT } from './thornfray_fixture';
@@ -33,9 +34,8 @@ function gaps(kind: BoutKind): string[] {
   if (!new RegExp(`^\\*\\*${kind.name}\\*\\*:`, 'm').test(context)) {
     out.push(`no CONTEXT.md entry for ${kind.name}`);
   }
-  if (kind.bots.errand !== null) {
-    const calls = read('src/sim/royale/bot/bout_calls.ts');
-    if (!calls?.includes(`'${kind.bots.errand}'`)) out.push(`no BOUT_CALLS entry for ${kind.id}`);
+  if (kind.bots.errand !== null && !Object.hasOwn(BOUT_CALLS, kind.bots.errand)) {
+    out.push(`no BOUT_CALLS entry for ${kind.id}`);
   }
   if (!read('tests/thornfray_bout_versions.test.ts')?.includes(`'${kind.id}'`)) {
     out.push(`no pinned end checksum for ${kind.id}`);
@@ -108,6 +108,8 @@ describe('the bout registry', () => {
       'no pinned end checksum for testbout',
       'no tests/thornfray_bout_testbout.test.ts',
     ]);
+    const lost = { ...TEST_BOUT.bots, errand: 'wander' };
+    expect(gaps({ ...TEST_BOUT, bots: lost })).toContain('no BOUT_CALLS entry for testbout');
     expect(gaps({ ...TEST_BOUT, rule: 'x'.repeat(40), card: ['one'] })).toContain(
       'the rule of testbout is 40 characters or more',
     );

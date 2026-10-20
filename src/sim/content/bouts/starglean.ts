@@ -14,6 +14,7 @@
 // beside the takedown score and never in it.
 
 import { gleanedScorer } from '../../royale/bouts/count';
+import { STARGLEAN_BOTS } from '../bots/bout_skills';
 import type { BoutKind } from './types';
 
 export const STARGLEAN: BoutKind = {
@@ -41,10 +42,8 @@ export const STARGLEAN: BoutKind = {
   seedfalls: { at: [25, 55, 85], seeds: 3, warnS: 12, forecastS: 15, apartM: 18, depthM: 8 },
   count: gleanedScorer,
   ties: ['seedfalls', 'falls', 'reached', 'seat'],
-  // The errand (glean: a called Seedfall anywhere in the Thornyard from 40
-  // percent health) is named here with its BOUT_CALLS entry
-  // (royale/bot/bout_calls.ts, docs/plan-thornfray.md slice 4); until then
-  // none, and the planet's brain plays the bout.
-  bots: { errand: null, floor: 0.4, reach: 80, duskMargin: 0.5, cornered: 8, pace: null },
+  // The glean errand (royale/bot/bout_calls.ts): a called Seedfall anywhere
+  // in the Thornyard from 40 percent health, else a cache in sight.
+  bots: STARGLEAN_BOTS,
   hud: { word: 'gleaned', place: false },
 };

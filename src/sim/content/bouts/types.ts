@@ -158,16 +158,22 @@ export interface BoutScorer {
 // standing), the lower seat. Every list ends on 'seat'.
 export type BoutTie = 'seedfalls' | 'falls' | 'reached' | 'health' | 'seat';
 
-// What a kind's bots read (src/sim/royale/bot/bout_calls.ts): the errand
-// asked after the fight block (null for none), the call's health floor and
-// reach, the Dusk margin as a share of the skill's, the cornered light
-// (meters), the pace (none, or a curve over the eight seats).
+// What a kind's bots read in place of the fifty seat tunings (its numbers
+// in src/sim/content/bots/bout_skills.ts, read by the brain's bout branch
+// under src/sim/royale/bot/): the errand asked after the fight block, an
+// entry of BOUT_CALLS (src/sim/royale/bot/bout_calls.ts), or null for
+// none; the errand's health floor and reach (meters); the Dusk margin as a
+// share of the skill's; the cornered light (meters: under it a bot stops
+// fleeing); the nerve One life's calm adds (phase 0, unless struck; 0 for
+// none); the pace (null for none, or the champions still in at each minute
+// from the landing, as royale_skills.ts ONE_LIFE_PACE counts fifty).
 export interface BoutBots {
   errand: string | null;
   floor: number;
   reach: number;
   duskMargin: number;
   cornered: number;
+  calm: number;
   pace: readonly number[] | null;
 }
 

@@ -405,7 +405,10 @@ observation's royale block), and fights on sight in every bout.
   Thornyard for a bot at 40 percent health and more, takes a cache in sight before a roam, and
   holds a Seedfall cache's opening as the held opening allows. A bot at 45 percent health on a
   called Seedfall with an enemy within 6 m fights it first; a bot under its floor fights or
-  flees by the brain's odds as ever.
+  flees by the brain's odds as ever. Once a seed has landed, a bot nobody is striking steps into
+  its cache from a step away and begins the held opening, the one rule asked before the fight
+  block; the seed it walks to is the one it would reach first as far as it sees (as built,
+  `docs/plan-thornfray.md` slice 4).
 - **The prize** is answered by the Graft pick already in the chain's first step.
 
 ## The HUD and the phone

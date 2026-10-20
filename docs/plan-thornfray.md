@@ -283,6 +283,53 @@ on the tick's `damage` events, plays the whole chain. The battle royale does not
   whole bout of eight house bots on seeds 1 to 3: Lastwick lands at least four takedowns and
   mostly ends before the light goes out; Starglean opens every burst's three caches.
   `tests/royale_bot.test.ts` and its siblings are unchanged.
+- As built:
+  - Each kind's numbers stand in `src/sim/content/bots/bout_skills.ts` (`LASTWICK_BOTS`,
+    `STARGLEAN_BOTS`) and the kind's `bots` is that entry, so its fingerprint still reads them.
+    `BoutBots` gains `calm` (the nerve One life's calm adds, 0 in both kinds): the plan reads the
+    calm nerve from the bout's data, and the contract had no field for it. `BOUT_BOTS` is what a
+    bout's bots read when the policy is handed none.
+  - The brain reads the kind's numbers from its policy, as it reads the seat's skill:
+    `royaleBotPolicy` hands `mode.bout.kind.bots` to `royalePolicy`, and `decide` takes them as
+    its last argument; the bout branch runs only while the observation shows a bout
+    (`sense.bout`, `BOUT_BOTS` when none was handed). The test kind's numbers reach its bots the
+    same way, with no registry lookup. `calmOf`, `paceOf` and `corneredLightOf` in `brain.ts`,
+    `duskMarginOf` in `travel.ts`; `paceAlive` and `paceNerve` take the curve.
+  - `BOUT_CALLS` maps an errand's id to a `BoutCall`, `(sense, bots) => { why, action } | null`;
+    the registry gate (`tests/thornfray_bouts.test.ts`) now reads `BOUT_CALLS` itself instead
+    of the file's text, and bites on an errand with no entry.
+  - The glean errand, from the kind's floor (under it the brain's own loot and odds decide, as
+    the design says): the called Seedfall the bot would reach first as far as it sees (fewest
+    enemies in sight nearer, then the nearest), else the nearest cache in reach weighed by what
+    it counts, raced for against an enemy farther off but never one an enemy stands within 8 m
+    of. Its goals ask the light to hold them for the walk, the opening and 4 s (`litFor`, over a
+    new `travel.ts secondsToDarkAt`, `secondsToDark` its call at the bot's own point), not the
+    planet's safe ground: that asks the next cap of every goal from 25 s before a closing, and a
+    first burst's seed placed past the next cap was walked to by nobody for a minute.
+  - One rule is asked before the fight block, beside the held opening it begins
+    (`bout_calls.ts beginHeldOpening`): in a bout, a bot no enemy struck in the last two seconds,
+    within 6 m of a landed Seedfall's cache whose opening is held (Respawn's) and that nobody
+    else opens as far as it sees, steps into its reach and holds still to begin it; begun, it is
+    the planet's held opening, which already comes before the fight block and hits back from
+    the cache. A struck bot answers first, a called seed not yet landed is fought over first
+    (the plan's 45 percent case), and nothing is walked to past a fight. Without it the bots at
+    a landed seed fought and chased each other around it, and nine bouts in twelve left a seed
+    unopened at the clock; with it, none (match seeds 1 to 12, bout 1 of a pool of Starglean
+    alone). The race to the seed took two in twelve to none, the light that holds two to none.
+  - The drop's pick in a bout is uniform over the Thornyard short of its edge by 4 m, away from
+    the poles when six draws allow it (the landing snaps the rest off the spire).
+  - Measured on the house bots (bout 1, a pool of the kind alone): Lastwick on seeds 1 to 6 ends
+    by its rule at 50, 52, 50, 63, 66 and 61 s, seven takedowns each, the first fall at 10 to
+    15 s, never by the dark (with the planet's brain: 80 to 94 s, the first fall mostly past
+    60 s). Starglean on seeds 1 to 12 opens all nine Seedfall caches in every bout, 3 to 16
+    plain and golden caches (about 8), the winner at 6 to 22 gleaned, 15 to 24 takedowns.
+  - Both pinned bouts are captured again (Lastwick now 1202 ticks, Starglean 2301); no version
+    moves, both kinds unreleased, and `BOUT_ENGINE_VERSION` stays 1. `tests/royale_golden.test.ts`
+    is green: every new read stands behind `r.bout` or `sense.bout`.
+  - Open for the maintainer: fought on sight, a Lastwick bout lasts about a minute, under the
+    design's 90 s floor for a bout (a calm or a pace in `LASTWICK_BOTS` is the dial); Starglean's
+    fights take most of its seconds, and about 17 caches are opened in all against the design's
+    30 to 40.
 
 ### 5. The server and the wire
 

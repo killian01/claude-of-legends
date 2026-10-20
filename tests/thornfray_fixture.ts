@@ -144,7 +144,7 @@ export const TEST_BOUT: BoutKind = {
   goals: [circleGoal, carrierGoal, targetGoal],
   count: damageScorer,
   ties: ['falls', 'reached', 'seat'],
-  bots: { errand: null, floor: 0.4, reach: 40, duskMargin: 0.5, cornered: 8, pace: null },
+  bots: { errand: null, floor: 0.4, reach: 40, duskMargin: 0.5, cornered: 8, calm: 0, pace: null },
   hud: { word: 'dealt', place: false },
 };
 
