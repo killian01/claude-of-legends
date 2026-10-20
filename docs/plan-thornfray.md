@@ -226,6 +226,40 @@ on the tick's `damage` events, plays the whole chain. The battle royale does not
   others, inside the light, the 85 s burst included; the held opening; the bout ends at 105 s;
   the tie-breaks in order; the takedown score untouched by the count; a replay matches. The end
   checksum, counts and ranking pinned.
+- As built:
+  - `src/sim/content/bouts/starglean.ts` holds the design's numbers: Respawn, `playS` 105, a
+    Thornyard of 40 m in any region, one closing to 26 m from 60 to 75 s at 6 percent (phase 5)
+    held to 120 s (`lightOutS`, also the clock plus the forecast), 4 percent outside before it,
+    edge speed 1.1; up to 18 caches back after 30 s; bursts of three at 25, 55 and 85 s, called
+    12 s ahead, `forecastS` 15, `apartM` 18, `depthM` 8; the Clamors alone among the systems;
+    ties `['seedfalls', 'falls', 'reached', 'seat']`; `hud` `'gleaned'`, a number. The Grace,
+    the return pick and the held opening are Respawn's own and need no switch.
+  - The count is `gleanedScorer` in `bouts/count.ts`, `weightedScorer('gleaned', GLEANED)` with
+    `GLEANED = { plain: 1, golden: 2, seedfall: 3, steal: 1 }`. A weighted scorer now carries its
+    weights as data (`weights` beside `id`), so the kind's fingerprint moves with them; before,
+    they hid in a closure the fingerprint cannot read. No play moves: Lastwick's pinned bout and
+    the golden checksums are unchanged, and `BOUT_ENGINE_VERSION` stays 1 (no kind is released).
+  - `bots.errand` is `null`, not `'glean'`: the registry's gate asks a named errand for its entry
+    in `BOUT_CALLS`, which lands with slice 4, and slice 4 names it there. The rest of the bots'
+    data stands: `floor` 0.4, `reach` 80 (the Thornyard's width), `duskMargin` 0.5, `cornered` 8,
+    no pace.
+  - The caches at landing come out as the design says on every region's spots: 18 in the Ruins
+    (25 spots inside) and the Sanctuary (45), 14 in the Lakes (20), 13 in the Cliffs (19), 12 on
+    the Open ground (18), 10 in the Cypress groves (16).
+  - The pinned bout in `tests/thornfray_bout_versions.test.ts` stands in the Ruins, not in the
+    region the ledger draws for match seed 1 (the Cypress groves, as for Lastwick): the full
+    eighteen caches, and a region the kind keeps whatever the maintainer decides on the groves.
+  - Its test also covers the Dusk (one closing as phase 5, dark only at 120 s), a cache back 30 s
+    after opened, a fall back in five seconds inside the light at its globe pick and in its
+    Grace, no Rising, camp, pad, mark, Burr, Last light, Upstart or Graft (the Seedfall cache's
+    Heartwood and the golden cache's Bough stay off in a bout), and a count moved by hand moving
+    the checksum. The held opening is staged with a hit every tick for two seconds after the
+    opening begins: it never changes hands and opens in about 4.5 s where a calm one takes 3.
+  - With the planet's brain still playing (slice 4 brings `glean`), 24 bouts (every region,
+    match seeds 1 to 4) all ended at the clock, 105 s: plain and golden caches opened 4 to 18 a
+    bout (about 9), Seedfall caches 6 to 9 of the 9 (mostly 8), the winner at 7 to 18 (about
+    12), 10 to 24 takedowns. The design's 30 to 40 caches wait on the errand's "a cache in sight
+    before a roam".
 
 ### 4. The bots in a bout
 

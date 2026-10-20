@@ -53,6 +53,16 @@ const PINNED: readonly Pinned[] = [
     counts: [4, 3, 5, 6, 2, 8, 0, 1],
     ranking: [5, 3, 2, 0, 1, 4, 7, 6],
   },
+  {
+    kind: 'starglean',
+    version: 1,
+    engine: 1,
+    region: 'ruins',
+    checksum: 3092319011,
+    ticks: 2301,
+    counts: [6, 2, 0, 18, 4, 5, 11, 2],
+    ranking: [3, 6, 0, 5, 4, 7, 1, 2],
+  },
 ];
 
 const pinnedOf = (id: string) => PINNED.find((p) => p.kind === id);

@@ -107,7 +107,8 @@ Use a shared scorer from `src/sim/royale/bouts/count.ts` when one fits:
 
 - `survivalScorer`: the order of the falls, a same-tick pair placed by the health each had the
   tick before, as One life places its fallen (`score.ts` `placeFallen`). Lastwick's.
-- `weightedScorer(id, weights)`: caches by kind, and a takedown's steal.
+- `weightedScorer(id, weights)`: caches by kind, and a takedown's steal; its weights stand on
+  the scorer as data, so the kind's fingerprint reads them. Starglean's `gleanedScorer` is one.
 - `heldTimeScorer(id)`: the seconds a circle or a carrier is held.
 
 Only when none fits: `src/sim/royale/bouts/score_<id>.ts`, a `BoutScorer` whose

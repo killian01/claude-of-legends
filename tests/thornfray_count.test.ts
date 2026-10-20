@@ -2,15 +2,23 @@
 // end.ts, goals.ts, observe.ts; ADR 0035): the shared scorers on staged
 // events (the order of the falls, a same-tick pair placed by health
 // before; a cache by its kind and a takedown's steal, none from a fallen at
-// nothing; the time a circle or a carrier is held), the kind's own scorer
+// nothing, the weights in the kind's fingerprint; the time a circle or a
+// carrier is held), the kind's own scorer
 // fed the damage events, every seat ranked by the count then the kind's
 // tie-breaks in order down to the lower seat, and the bout as a seat's
 // observation reads it, its goals' holders named by unit id.
 
 import { describe, expect, it } from 'vitest';
+import { boutFingerprint } from '../src/sim/content/bouts';
 import type { BoutView, GoalPrimitive, GoalSlot } from '../src/sim/content/bouts/types';
 import { Rng } from '../src/sim/rng';
-import { heldTimeScorer, survivalScorer, weightedScorer } from '../src/sim/royale/bouts/count';
+import {
+  GLEANED,
+  gleanedScorer,
+  heldTimeScorer,
+  survivalScorer,
+  weightedScorer,
+} from '../src/sim/royale/bouts/count';
 import { boutRanking } from '../src/sim/royale/bouts/end';
 import type { CacheKind } from '../src/sim/royale/types';
 import type { SimEvent } from '../src/sim/sim';
@@ -114,6 +122,16 @@ describe('the weighted count', () => {
     // The world's fall, or one's own, moves nothing.
     gleaned.onEvents([death(0, null), death(0, 0)], v);
     expect(v.counts).toEqual([2, 1, 0]);
+  });
+
+  it('carries its weights as data, where a kind fingerprint reads them', () => {
+    expect(gleanedScorer.id).toBe('gleaned');
+    expect(gleanedScorer.weights).toEqual(GLEANED);
+    const kind = testKind({ count: gleanedScorer });
+    const heavier = testKind({ count: weightedScorer('gleaned', { ...GLEANED, seedfall: 4 }) });
+    const same = testKind({ count: weightedScorer('gleaned', { ...GLEANED }) });
+    expect(boutFingerprint(heavier)).not.toBe(boutFingerprint(kind));
+    expect(boutFingerprint(same)).toBe(boutFingerprint(kind));
   });
 });
 

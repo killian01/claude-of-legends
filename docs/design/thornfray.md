@@ -356,7 +356,9 @@ its three points from the sim's stream on its call tick, as the planet's Seedfal
 enough inside the forecast light and at least `apartM` from every seed drawn before it, and
 when those run out, from walkable ground on a seeded ring inside the same light, so a burst
 never stacks two seeds on one point. Expected per bout, to be measured: 30 to 40 caches and 9
-Seedfall caches opened in all, the winner near 12 to 15.
+Seedfall caches opened in all, the winner near 12 to 15. Its data is
+`src/sim/content/bouts/starglean.ts`, its count the shared `gleanedScorer`
+(`src/sim/royale/bouts/count.ts`).
 
 ## How a person plays a bout
 

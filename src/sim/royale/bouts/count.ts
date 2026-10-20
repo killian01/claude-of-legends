@@ -12,7 +12,9 @@
 //   placing (score.ts placeFallen).
 // - weighted: a cache opened counts by its kind (plain, golden, Seedfall),
 //   and a takedown moves `steal` from the fallen to its taker (none from a
-//   fallen at nothing).
+//   fallen at nothing). Its weights stand on the scorer as data, so a
+//   kind's fingerprint (content/bouts/index.ts boutFingerprint) moves with
+//   them. The gleaned count is one: Starglean's (content/bouts/starglean.ts).
 // - held time: every seat standing inside a circle, and the holder of a
 //   carrier, counts the seconds it holds it.
 
@@ -52,15 +54,22 @@ export interface Weights {
   steal: number;
 }
 
-function weightOf(w: Weights, kind: CacheKind | null): number {
+function weightOf(w: Readonly<Weights>, kind: CacheKind | null): number {
   if (kind === 'golden') return w.golden;
   if (kind === 'seedfall') return w.seedfall;
   return kind === 'plain' ? w.plain : 0;
 }
 
-export function weightedScorer(id: string, w: Weights): BoutScorer {
+// A weighted scorer carries its weights as data beside its id.
+export interface WeightedScorer extends BoutScorer {
+  readonly weights: Readonly<Weights>;
+}
+
+export function weightedScorer(id: string, weights: Readonly<Weights>): WeightedScorer {
+  const w: Readonly<Weights> = { ...weights };
   return {
     id,
+    weights: w,
     onEvents(events: readonly SimEvent[], bout: BoutView) {
       for (const e of events) {
         if (e.type === 'royale_cache') {
@@ -80,6 +89,11 @@ export function weightedScorer(id: string, w: Weights): BoutScorer {
     },
   };
 }
+
+// The gleaned count (CONTEXT.md: Starglean): a cache 1, a golden cache 2,
+// a Seedfall cache 3, and a takedown takes one from the fallen.
+export const GLEANED: Readonly<Weights> = { plain: 1, golden: 2, seedfall: 3, steal: 1 };
+export const gleanedScorer: WeightedScorer = weightedScorer('gleaned', GLEANED);
 
 export function heldTimeScorer(id: string): BoutScorer {
   return {
