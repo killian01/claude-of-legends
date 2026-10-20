@@ -5,6 +5,7 @@
 // (bot/skill.ts). Each on a stream of its own, so the sim's stream and the
 // fill's never shift each other.
 
+import { BOUT_MIX, BOUT_MIX_GUESTS } from '../content/bots/bout_skills';
 import type { RoyaleSkillId } from '../content/bots/royale_skills';
 import { CHAMPION_LIST } from '../content/champions';
 import { Rng } from '../rng';
@@ -31,4 +32,17 @@ export function royaleSeatSkills(
   guestsOnly = false,
 ): RoyaleSkillId[] {
   return skillMix(seats, new Rng((seed ^ SKILL_SALT) >>> 0), guestsOnly);
+}
+
+// A Thornfray's seats' skills (ADR 0035), dealt once for the match from its
+// seed on the same stream: the bout's own mix (content/bots/bout_skills.ts),
+// whose softening for Guests tells at eight seats, where the planet's does
+// not (rounded over eight, both of its mixes deal four, three and one).
+export function boutSeatSkills(
+  matchSeed: number,
+  seats: number,
+  guestsOnly = false,
+): RoyaleSkillId[] {
+  const mix = guestsOnly ? BOUT_MIX_GUESTS : BOUT_MIX;
+  return skillMix(seats, new Rng((matchSeed ^ SKILL_SALT) >>> 0), guestsOnly, mix);
 }

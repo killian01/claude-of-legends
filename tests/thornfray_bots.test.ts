@@ -18,6 +18,7 @@
 // the light goes out; Starglean opens every burst's three Seedfall caches.
 
 import { describe, expect, it } from 'vitest';
+import { buildBoutSim } from '../src/net/replay';
 import {
   GLEAN_STEP_IN_M,
   LASTWICK_BOTS,
@@ -32,6 +33,7 @@ import {
 } from '../src/sim/content/bots/royale_skills';
 import { BOUT_KINDS } from '../src/sim/content/bouts';
 import { LASTWICK } from '../src/sim/content/bouts/lastwick';
+import { BOUT_SEATS } from '../src/sim/content/bouts/match';
 import { STARGLEAN } from '../src/sim/content/bouts/starglean';
 import type { BoutBots, BoutKind } from '../src/sim/content/bouts/types';
 import { dirTo, dist, settle, type Vec3 } from '../src/sim/geo';
@@ -67,13 +69,14 @@ import { boutSeed, drawBouts } from '../src/sim/royale/bouts/ledger';
 import { thornyardOf } from '../src/sim/royale/bouts/plan';
 import { landingIn } from '../src/sim/royale/drop';
 import { depthInside, insideCap } from '../src/sim/royale/dusk';
+import { boutSeatSkills } from '../src/sim/royale/fill';
 import { along, REGION_IDS } from '../src/sim/royale/layout';
 import { royaleGround } from '../src/sim/royale/mode';
 import { royaleLayoutOf } from '../src/sim/royale/planet_map';
 import type { DuskState } from '../src/sim/royale/types';
 import { fakeLayout, R, sph } from './royale_fixture';
 import { loadPlanet } from './royale_planet';
-import { type BoutArgs, buildBout, land } from './thornfray_fixture';
+import { type BoutArgs, boutReplay, buildBout, land } from './thornfray_fixture';
 
 const layout = fakeLayout();
 const { gentle, normal, strong } = ROYALE_SKILLS;
@@ -539,4 +542,42 @@ describe('eight house bots in a bout', () => {
       );
     });
   }
+});
+
+describe("a bout's seats' skills", () => {
+  const count = (skills: readonly string[]) => ({
+    gentle: skills.filter((s) => s === 'gentle').length,
+    normal: skills.filter((s) => s === 'normal').length,
+    strong: skills.filter((s) => s === 'strong').length,
+  });
+
+  it('deal four gentle, three normal and one strong, and no strong one when only Guests play', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      expect(count(boutSeatSkills(seed, BOUT_SEATS, false))).toEqual({
+        gentle: 4,
+        normal: 3,
+        strong: 1,
+      });
+      expect(count(boutSeatSkills(seed, BOUT_SEATS, true))).toEqual({
+        gentle: 4,
+        normal: 4,
+        strong: 0,
+      });
+    }
+  });
+
+  it("are the bout's own seats' skills, softer when only Guests play", () => {
+    const skillsOf = (guestsOnly: boolean) => {
+      const record = boutReplay({ kind: LASTWICK, matchSeed: 3 });
+      const { sim, unitIds } = buildBoutSim(
+        loadPlanet(),
+        { ...record, royale: { ...record.royale!, guestsOnly } },
+        BOUT_KINDS,
+      );
+      return unitIds.map((id) => sim.royaleMode!.skills.get(id)!);
+    };
+    expect(skillsOf(false)).toEqual(boutSeatSkills(3, BOUT_SEATS, false));
+    expect(skillsOf(true)).toEqual(boutSeatSkills(3, BOUT_SEATS, true));
+    expect(count(skillsOf(true)).strong).toBe(0);
+  });
 });

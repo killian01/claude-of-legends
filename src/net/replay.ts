@@ -20,7 +20,7 @@ import type { LanePreference, PlaybookDef } from '../sim/playbook/types';
 import type { PendingPrize } from '../sim/royale/bouts/ledger';
 import { boutGameMap, thornyardOf } from '../sim/royale/bouts/plan';
 import { crewCount, crewOfSeat } from '../sim/royale/crews';
-import { royaleSeatSkills } from '../sim/royale/fill';
+import { boutSeatSkills, royaleSeatSkills } from '../sim/royale/fill';
 import type { RegionId } from '../sim/royale/layout';
 import { type PlanetLayoutRecord, planetGameMap, royaleLayoutOf } from '../sim/royale/planet_map';
 import { ROYALE_RULES_VERSION, type RoyaleCrew, type RoyaleVariant } from '../sim/royale/types';
@@ -350,7 +350,7 @@ export function buildBoutSim(
   });
   const mode = sim.royaleMode!;
   const seats = Math.max(BOUT_SEATS, picks.length);
-  const skills = royaleSeatSkills(bout.matchSeed, seats, royale.guestsOnly === true);
+  const skills = boutSeatSkills(bout.matchSeed, seats, royale.guestsOnly === true);
   // Where everyone waits while the drop runs (the Lull): no system reads it.
   const waiting = thornyard.center;
   const unitIds: number[] = [];

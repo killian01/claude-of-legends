@@ -89,8 +89,9 @@ It starts when eight people are in, when its 20 seconds run out, or when its ope
 Start now. The eight seats are then dealt once for the whole match from the match's seed, as
 the battle royale deals its seats (`royaleSeats`, `server/royale_seats.ts`: the house bots'
 names, champions, skins and sigils), and the bots' skills once from the same seed
-(`royaleSeatSkills`, `src/sim/royale/fill.ts`): four gentle, three normal, one strong, softer
-when only Guests play. No bout deals them again.
+(`boutSeatSkills`, `src/sim/royale/fill.ts`, its mix in `src/sim/content/bots/bout_skills.ts`):
+four gentle, three normal, one strong, and when only Guests play four gentle and four normal.
+No bout deals them again.
 
 A person who enters while a Thornfray runs can still take a bot's seat at the Lull before the
 second bout: the seat with the fewest bushels (the lower seat on a tie), its bushels kept, its

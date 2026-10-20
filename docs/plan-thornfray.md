@@ -11,7 +11,7 @@ on its own, with its tests green, and changes nothing a player sees until slice 
 |---|---|
 | Format | 8 champions, Solo. House bots fill; four gentle, three normal, one strong. |
 | Entry | The landing's fourth way and a home tile; the quick pick without the Crew row; a gathering of up to 20 s (full, timed out, or the opener's Start now). A late person may take the fewest-bushels bot seat at the second Lull. |
-| Seats | Dealt once for the match from its seed (`royaleSeats`, `royaleSeatSkills`); one champion, skin and pair of sigils per seat all match. |
+| Seats | Dealt once for the match from its seed (`royaleSeats`, `boutSeatSkills`); one champion, skin and pair of sigils per seat all match. |
 | Bouts | Six: five drawn from the pool, then the Final, drawn too, bushels doubled. The six drawn at once as one sequence: never the kind just played, never a kind three times once the pool holds three, never the region just played unless the kind allows no other. |
 | Length | Each bout 90 to 120 s from landing; the Lull 10 s; about 12 minutes a match. |
 | Thornyard | A cap of chord radius 40 m around a region's heart, drawn per bout; the Dusk outside it from the first second. |
@@ -108,7 +108,7 @@ on the tick's `damage` events, plays the whole chain. The battle royale does not
   `ObsGoal` and the additive `ObsRoyale.bout`.
 - **The build.** `src/net/replay.ts`: `buildBoutSim(planet, record)` beside `buildRoyaleSim`:
   a `planetGameMap` filtered to the camps, rings and Warden the kind runs; the champions from
-  the record's picks; the skills from `royaleSeatSkills(record.bout.matchSeed, 8, guestsOnly)`,
+  the record's picks; the skills from `boutSeatSkills(record.bout.matchSeed, 8, guestsOnly)`,
   never from the bout's seed. `RoyaleRecord.bout` (the match's seed, the bout's index, kind and
   Thornyard, the Graft each seat carries in, `pendingPrize`, the kind's `version`,
   `boutFingerprint`, `BOUT_ENGINE_VERSION`); `royaleReplayPlayable` checks the three versions

@@ -1,7 +1,8 @@
 // Which skill each seat's bot plays (content/bots/royale_skills.ts): the
 // mix's counts dealt over the seats and shuffled on the match's stream, so
 // the same seed seats the same mix and the strong ones are not always the
-// first seats. Softer when the server says only Guests play.
+// first seats. Softer when the server says only Guests play. A bout deals
+// its eight seats from a mix of its own (fill.ts boutSeatSkills).
 
 import {
   ROYALE_MIX,
@@ -12,8 +13,21 @@ import {
 } from '../../content/bots/royale_skills';
 import type { Rng } from '../../rng';
 
-export function skillMix(count: number, rng: Rng, guestsOnly = false): RoyaleSkillId[] {
-  const mix = guestsOnly ? ROYALE_MIX_GUESTS : ROYALE_MIX;
+// The shares of the seats a mix deals: gentle, then normal, the rest
+// strong.
+export interface SkillShares {
+  gentle: number;
+  normal: number;
+}
+
+// `mix`, when given, in place of the planet's (a bout's own,
+// content/bots/bout_skills.ts).
+export function skillMix(
+  count: number,
+  rng: Rng,
+  guestsOnly = false,
+  mix: Readonly<SkillShares> = guestsOnly ? ROYALE_MIX_GUESTS : ROYALE_MIX,
+): RoyaleSkillId[] {
   const gentle = Math.round(count * mix.gentle);
   const normal = Math.min(count - gentle, Math.round(count * mix.normal));
   const out: RoyaleSkillId[] = [];

@@ -8,6 +8,21 @@
 
 import type { BoutBots } from '../bouts/types';
 
+// The skills of a Thornfray's eight seats (royale/fill.ts boutSeatSkills),
+// dealt once for the match: four gentle, three normal, one strong. When
+// only Guests play, the strong seat plays normal: softer, as the planet's
+// Guests mix moves its strong share to normal and keeps the gentle at half
+// (a field mostly gentle loots and never fights back). Rounded over eight
+// seats the planet's two mixes deal alike, so a bout keeps its own.
+export const BOUT_MIX: Readonly<{ gentle: number; normal: number }> = {
+  gentle: 4 / 8,
+  normal: 3 / 8,
+};
+export const BOUT_MIX_GUESTS: Readonly<{ gentle: number; normal: number }> = {
+  gentle: 4 / 8,
+  normal: 4 / 8,
+};
+
 // What a bout's bots read when the kind gives the policy none (a script
 // that calls the brain with a bout's observation alone): no errand, the
 // Dusk margin halved, cornered under 8 m, no calm nerve and no pace.

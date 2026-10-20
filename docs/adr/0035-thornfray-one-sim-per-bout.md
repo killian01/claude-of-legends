@@ -23,7 +23,7 @@ rests on.
   dealt once for the match, never from a bout's seed: the server deals them with
   `royaleSeats(people, matchSeed, 8)` in `server/thornfray_match.ts` (names, champions, skins,
   sigils) and hands the same `RoyaleSeat[]` to every bout's `RoyaleMatch`, and `buildBoutSim`
-  deals the bots' skills with `royaleSeatSkills(record.bout.matchSeed, 8, guestsOnly)`. Nothing
+  deals the bots' skills with `boutSeatSkills(record.bout.matchSeed, 8, guestsOnly)`. Nothing
   lives inside a Sim from one bout to the next: what carries (the seat's champion, its prize
   Graft or pending prize, its bushels) is data the next build reads.
 - **A bout runs on an existing variant.** A bout kind names its death rule, One life or Respawn
