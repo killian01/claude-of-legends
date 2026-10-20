@@ -35,6 +35,7 @@ const pick = (l: ReturnType<typeof ladderFor>) => ({
   judgedMs: l.judgedMs,
   topMs: l.topMs,
   topShare: l.topShare,
+  quickTop: l.quickTop,
 });
 
 describe('the lean levels', () => {
@@ -63,7 +64,7 @@ describe('what a match leaves for the next', () => {
     expect(memory).toEqual(mem(0, 0, 1));
   });
 
-  it('needs a match judged a hundred seconds, its top twenty', () => {
+  it('needs a match judged a hundred seconds, its top twenty or left early', () => {
     // Judged too short to tell: as it found it, not even a match played.
     expect(leaves(mem(0, 0, 1), 99_999, 50_000, SLOW)).toEqual(mem(0, 0, 1));
     expect(leaves(mem(0, 0, 1), 99_999, 50_000, FAST)).toEqual(mem(0, 0, 1));
@@ -74,6 +75,12 @@ describe('what a match leaves for the next', () => {
     expect(leaves(mem(0, 0, 1), 600_000, 19_999, SLOW)).toEqual(mem(0));
     expect(leaves(mem(1, 1, 1), 600_000, 19_999, SLOW)).toEqual(mem(1, 2));
     expect(leaves(mem(1, 1), 600_000, 30_000, null)).toEqual(mem(1, 2));
+    // Unless the ladder left it early, under a third of the target: slow on
+    // the median that left it, whatever its few windows say, until the top
+    // has been drawn its twenty seconds after all.
+    const quick = { judgedMs: 600_000, topMs: 8000, topShare: FAST, quickTop: true };
+    expect(afterMatch({ start: mem(0, 0, 1), ...quick })).toEqual(mem(1));
+    expect(afterMatch({ start: mem(0, 0, 1), ...quick, topMs: 20_000 })).toEqual(mem(0));
   });
 
   it('gives a level back after five matches at it, a retry', () => {
@@ -106,6 +113,11 @@ describe('what a match leaves for the next', () => {
     exact(weak, (i) => (i === 0 ? 25 : 50), 130);
     expect(afterMatch({ start: mem(0), ...pick(weak) })).toEqual(mem(0, 0, 1));
     expect(afterMatch({ start: mem(0, 0, 1), ...pick(weak) })).toEqual(mem(1));
+    // 15 at the top leaves it after eight windows, slow all the same.
+    const weaker = ladderFor();
+    exact(weaker, (i) => (i === 0 ? 15 : 30), 130);
+    expect(weaker.topMs).toBeLessThan(10_000);
+    expect(afterMatch({ start: mem(0, 0, 1), ...pick(weaker) })).toEqual(mem(1));
     const fast = ladderFor();
     exact(fast, () => 58, 130);
     expect(afterMatch({ start: mem(0, 0, 1), ...pick(fast) })).toEqual(mem(0));

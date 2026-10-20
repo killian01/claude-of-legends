@@ -120,11 +120,12 @@ describe('the dial', () => {
       h: 1080,
       shadows: true,
     });
-    // Not judged while the match settles (10 s), nor in the top's first
-    // twenty seconds and four fresh windows (of 14 frames, 1.05 s each).
-    let at = play(dial, gl, 75, 34.2);
+    // Not judged while the match settles (10 s); under a third of the
+    // target, only the top's first eight windows (of 14 frames, 1.05 s
+    // each), with no fresh ones after them.
+    let at = play(dial, gl, 75, 17.5);
     expect(gl.ratio).toBe(1.25);
-    at = play(dial, gl, 75, 35.2, at);
+    at = play(dial, gl, 75, 18.5, at);
     expect(gl.ratio).toBe(1);
     play(dial, gl, 75, 120, at);
     // Each step kept still short, the next at once, to the floor's ratio

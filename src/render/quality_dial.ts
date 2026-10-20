@@ -250,6 +250,7 @@ export class QualityDial {
           judgedMs: this.ladder.judgedMs,
           topMs: this.ladder.topMs,
           topShare: this.ladder.topShare,
+          quickTop: this.ladder.quickTop,
         }),
       },
     };

@@ -12,7 +12,9 @@
 // draws for its first judged seconds. A match judged two minutes, its
 // settling aside, whose top windows (twenty seconds of them at least) drew
 // under 0.6 of the target rate nine times in ten is slow: three fights in
-// two minutes fill most of a capable machine's top windows. Two slow
+// two minutes fill most of a capable machine's top windows; so is one whose
+// top the ladder left within its first seconds, under a third of the
+// target, unless it was drawn its twenty seconds after all. Two slow
 // matches in a row make the next one leaner by a level, never one alone:
 // first without the effects' lights (three pooled point lights every lit
 // pixel of the ground shades: the frame drawn in 0.63 of the time on the
@@ -128,6 +130,9 @@ export interface MatchQuality {
   judgedMs: number;
   topMs: number;
   topShare: number | null;
+  // The top left early, under a third of the target (quality_ladder.ts):
+  // slow, unless it was drawn its twenty seconds after all.
+  quickTop?: boolean;
 }
 
 // What a match leaves for the next one of its kind: the same however often
@@ -136,7 +141,13 @@ export interface MatchQuality {
 export function afterMatch(m: MatchQuality): ModeMemory {
   const { lean, played, slow } = m.start;
   if (m.judgedMs < EVIDENCE_MS) return { lean, played, slow };
-  const isSlow = m.topMs >= TOP_EVIDENCE_MS && m.topShare !== null && m.topShare < LEAN_SHARE;
+  // A top left within its first seconds under a third of the target was
+  // slow on the median that left it; its few windows are too few for nine
+  // in ten to tell.
+  const isSlow =
+    m.topMs >= TOP_EVIDENCE_MS
+      ? m.topShare !== null && m.topShare < LEAN_SHARE
+      : m.quickTop === true;
   const run = isSlow ? Math.min(slow + 1, SLOW_MATCHES) : 0;
   if (run === SLOW_MATCHES && lean < LEANEST) return { lean: lean + 1, played: 0, slow: 0 };
   if (lean === 0) return { lean, played: 0, slow: run };

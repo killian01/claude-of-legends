@@ -29,6 +29,9 @@
 //    in software, its pixels all script.
 // F. Matches of 2 to 10 minutes, as when a player joins a running one, hold
 //    all of that.
+// G. A page under a third of the target from its first frames draws a rung
+//    down within 22 s of the start and has it kept within 35 s, and leans
+//    after two such matches.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type ModeMemory, QUALITY_KEY } from '../src/game/quality_memory';
@@ -305,6 +308,48 @@ describe('D. a machine that got faster', () => {
         expect(remembered().lean).toBe(0);
       }
     }
+  });
+});
+
+describe('G. slow from the first frames', () => {
+  it('under a third of the target draws a rung down within 22 s of the start, kept by 35', () => {
+    // The settling's ten seconds and the top's eight windows, no fresh ones;
+    // a third of the target and over waits its twenty seconds as before.
+    for (const scriptShare of [undefined, 0.95]) {
+      for (const top of [1.25, 2]) {
+        for (const fps of [3, 5, 8, 12, 15, 19]) {
+          const [p] = series([
+            {
+              refreshHz: 60,
+              strict: false,
+              top,
+              scriptShare,
+              seconds: 60,
+              workMs: fill(1000 / fps, top),
+            },
+          ]);
+          const at = `${fps} at ${top}, script ${scriptShare}`;
+          expect(p!.changes[0]!.at / 1000, at).toBeLessThanOrEqual(22);
+          expect(p!.settled[1]!.at / 1000, at).toBeLessThanOrEqual(35);
+        }
+        const [usual] = series([
+          { refreshHz: 60, strict: false, top, seconds: 60, workMs: fill(1000 / 21, top) },
+        ]);
+        expect(usual!.changes[0]!.at / 1000).toBeGreaterThan(30);
+      }
+    }
+  });
+
+  it('leans after two such matches, its top left within its first seconds', () => {
+    const slow: MatchMachine = {
+      refreshHz: 60,
+      strict: false,
+      top: 2,
+      seconds: 130,
+      workMs: fill(80, 2),
+    };
+    const season = series([slow, slow, slow]);
+    expect(season.map((p) => p.lean)).toEqual([0, 0, 1]);
   });
 });
 
