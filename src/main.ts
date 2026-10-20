@@ -73,7 +73,7 @@ import {
 import {
   boutStartOf,
   isThornfrayGather,
-  thornfrayEnterMsg,
+  thornfrayOpenMsgs,
   thornfrayResultOf,
   thornfrayStartMsg,
 } from './net/thornfray_client';
@@ -1790,8 +1790,7 @@ async function runThornfray(pick: RoyalePick, guest: boolean): Promise<PostMatch
     };
     ws.addEventListener('open', () => {
       opened = true;
-      ws.send(JSON.stringify({ t: 'hello' }));
-      send(thornfrayEnterMsg(pick));
+      for (const msg of thornfrayOpenMsgs(pick)) send(msg);
     });
     ws.addEventListener('message', (event) => {
       if (finished) return;
@@ -1818,10 +1817,12 @@ async function runThornfray(pick: RoyalePick, guest: boolean): Promise<PostMatch
       const msg = raw as ServerMsg;
       switch (msg.t) {
         case 'match_start': {
-          registerForgedFromMatch(msg.forgedAssets);
-          world.applyServer(msg);
+          // Only a bout's start is this screen's: another match's is never
+          // put on the world.
           const start = boutStartOf(msg.royale);
           if (!msg.royale || !start) break;
+          registerForgedFromMatch(msg.forgedAssets);
+          world.applyServer(msg);
           bout = { variant: msg.royale.v, start };
           const arrival = boutArrival(shownSelf, msg.selfUnitId);
           if (arrival === 'switch') pres?.setBout(bout.variant, bout.start);

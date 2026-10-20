@@ -41,6 +41,16 @@ export function thornfrayEnterMsg(
   };
 }
 
+// What a Thornfray's socket says on opening: its entry alone, which takes
+// back a seat held for the person too (server/thornfray_service.ts enter).
+// Never the session's hello: the server answers one with any other seat
+// the account holds (a 5v5's, a battle royale's), whose match would then
+// play on the Thornfray's screen while the entry, from a client already in
+// a match, was ignored.
+export function thornfrayOpenMsgs(pick: ThornfrayEntry): ThornfrayClientMsg[] {
+  return [thornfrayEnterMsg(pick)];
+}
+
 // The gathering's Start now, its opener's.
 export function thornfrayStartMsg(): Extract<ThornfrayClientMsg, { t: 'thornfray_start' }> {
   return { t: 'thornfray_start' };

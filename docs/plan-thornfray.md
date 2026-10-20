@@ -389,10 +389,13 @@ on the tick's `damage` events, plays the whole chain. The battle royale does not
     seat, and gains `reserve` (a bot seat held for its away person from a bout's start) and
     `replayFrom` (below). `RoyalePoints` gains an `endAwards` switch, off in a bout.
   - A seat stays its person's for the whole match, as the design's "until they come back, at
-    any moment" says, not for the battle royale's minute: a dropped connection is brought back
-    by the socket's hello or by entering again, a menu Leave only by entering again (a reload
-    after a Leave lands on the home, not back in the match). A Thornfray nobody is connected to
-    for a minute is closed.
+    any moment" says, not for the battle royale's minute: a dropped connection and a menu Leave
+    alike are brought back by entering again (a reload lands on the home, not back in the
+    match). Never by the socket's hello: every flow says one on opening (the 5v5, the battle
+    royale, a spectate), and a seat taken back on it sent the bout to a client that never asked
+    for a Thornfray; the Thornfray's own socket says no hello either, so a held 5v5 seat or
+    battle royale reservation never plays on its screen. A Thornfray nobody is connected to for
+    a minute is closed.
   - Entering asks, in order: a seat the person owns in a running Thornfray, the gathering open
     (joined before any late seat, so the people waiting for company get it), the fewest-bushels
     bot seat of a Thornfray in its second Lull, then a new gathering. The late seat is taken

@@ -14,6 +14,7 @@ import {
   boutStartOf,
   isThornfrayGather,
   thornfrayEnterMsg,
+  thornfrayOpenMsgs,
   thornfrayResultOf,
   thornfrayStartMsg,
 } from '../src/net/thornfray_client';
@@ -54,6 +55,15 @@ describe('entering a Thornfray', () => {
       thornfrayEnterMsg({ championId: 'torv', sigils: ['mend', 'riftstep'], skin: 2 }),
     ).toEqual({ t: 'thornfray', championId: 'torv', sigils: ['mend', 'riftstep'], skin: 2 });
     expect(thornfrayStartMsg()).toEqual({ t: 'thornfray_start' });
+  });
+
+  it('opens its socket with the entry alone, never a hello', () => {
+    // A hello takes back any other seat the account holds (a 5v5's, a
+    // battle royale's): that match would play on the Thornfray's screen,
+    // and the entry be ignored. The entry takes back a held Thornfray seat
+    // by itself.
+    const pick = { championId: 'torv', sigils: ['mend', 'riftstep'] as [string, string], skin: 2 };
+    expect(thornfrayOpenMsgs(pick)).toEqual([thornfrayEnterMsg(pick)]);
   });
 });
 
