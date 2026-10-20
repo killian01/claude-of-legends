@@ -2956,7 +2956,9 @@ wss.on('connection', (ws, req) => {
           tellSeat(entry, 'back', seat, id);
           console.log(`match ${seat.matchId}: ${seat.name} reconnected`);
         }
-      } else if (!thornfray.rejoin(client)) royale.rejoin(client);
+      } else royale.rejoin(client);
+      // A Thornfray's seat comes back only by entering it again (the
+      // 'thornfray' message, ThornfrayService.enter): every flow says hello.
       return;
     }
 

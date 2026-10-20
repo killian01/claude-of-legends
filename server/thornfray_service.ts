@@ -115,9 +115,6 @@ interface SeatHolder {
   newcomer: boolean;
   // The connection in the seat now; null while away, the seat's bot playing.
   clientId: number | null;
-  // Away by the menu's Leave: only entering again brings them back, never a
-  // reconnecting socket's hello.
-  leftByMenu: boolean;
   // Took a bot's seat at the second Lull.
   dropIn: boolean;
   // The match's tick of the last order given (the end's "still playing").
@@ -293,7 +290,6 @@ export class ThornfrayService {
       pick: person.pick,
       newcomer: person.newcomer === true,
       clientId: person.clientId,
-      leftByMenu: false,
       dropIn,
       lastOrderAt: at,
       banked: 0,
@@ -313,7 +309,7 @@ export class ThornfrayService {
     if (this.owns(client.id) || this.gathers(client.id) || client.matchId !== null) return;
     this.picks.set(client.id, royalePick(msg, THORNFRAY_ROSTER));
     this.deps.leaveQueues(client.id);
-    if (this.rejoin(client, true)) return;
+    if (this.rejoin(client)) return;
     const g = this.gathering;
     if (g) {
       // One seat per line: the same account in two tabs gathers once.
@@ -557,11 +553,12 @@ export class ThornfrayService {
     return false;
   }
 
-  // A reconnected socket (its hello), or a person entering again
-  // (`entering`), takes back the seat they own in a running Thornfray: true
-  // when they did. A seat left by the menu waits for its person to enter
-  // again.
-  rejoin(client: RoyaleClient, entering = false): boolean {
+  // A person entering again takes back the seat they own in a running
+  // Thornfray, left by the menu or by a closed socket alike: true when they
+  // did. Entering is the only way back: every flow's socket says hello on
+  // opening (the 5v5, the battle royale, a spectate), and a seat taken back
+  // on it sent the bout to a client that never asked for a Thornfray.
+  private rejoin(client: RoyaleClient): boolean {
     if (this.owns(client.id) || client.matchId !== null) return false;
     for (const entry of this.entries.values()) {
       const seat = seatOfOwner(entry.m, client.accountId);
@@ -569,7 +566,6 @@ export class ThornfrayService {
       const h = entry.holders.get(seat);
       const unitId = entry.match.unitIds[seat];
       if (!h || h.clientId !== null || unitId === undefined) continue;
-      if (h.leftByMenu && !entering) continue;
       const person: RoyalePerson = {
         clientId: client.id,
         owner: h.owner,
@@ -580,7 +576,6 @@ export class ThornfrayService {
       const p = entry.match.rejoin(person, unitId);
       if (!p) continue;
       h.clientId = client.id;
-      h.leftByMenu = false;
       this.seatClient(client, entry);
       this.beginStint(entry, h);
       this.sendStart(entry, client.id);
@@ -599,10 +594,7 @@ export class ThornfrayService {
     this.report(client, entry, how);
     const left = entry.match.leave(client.id, true);
     const h = this.holderOf(entry, client.id);
-    if (h) {
-      h.clientId = null;
-      h.leftByMenu = how === 'menu';
-    }
+    if (h) h.clientId = null;
     this.unseat(client.id);
     if (left) this.tellSeat(entry, 'left', left, client.id);
     this.noteEmpty(entry);

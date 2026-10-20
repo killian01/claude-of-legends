@@ -64,7 +64,8 @@ describe("a bout's start", () => {
     h.step(10);
     h.close(a);
     const back = h.connect(2, 'ash', 5);
-    expect(h.service.rejoin(back)).toBe(true);
+    h.enter(back);
+    expect(back.matchId).not.toBeNull();
     expect(h.last(2, 'match_start')!.royale!.tf).toEqual(first);
   });
 });

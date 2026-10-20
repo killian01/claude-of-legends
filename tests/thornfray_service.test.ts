@@ -230,7 +230,8 @@ describe('the seats over the bouts', () => {
     expect(h.sim().policies.has(unit.id)).toBe(true);
     expect(h.last(2, 'player_left')).toMatchObject({ name: 'ash' });
     const back = h.connect(3, 'ash', 7);
-    expect(h.service.rejoin(back)).toBe(true);
+    h.enter(back);
+    expect(back.matchId).toBe(b.matchId);
     const during = h.last(3, 'match_start')!;
     expect(during.selfUnitId).toBe(unit.id);
     expect(during.royale?.tf).toMatchObject({ b: 0, s: 0 });
@@ -243,7 +244,7 @@ describe('the seats over the bouts', () => {
     expect(h.fake.picks.at(-1)![0]!.bot).toBeDefined();
     expect(h.sim().royale.stage).toBe('drop');
     const again = h.connect(4, 'ash', 7);
-    expect(h.service.rejoin(again)).toBe(true);
+    h.enter(again);
     const lull = h.last(4, 'match_start')!;
     expect(lull.royale?.tf).toMatchObject({ b: 1, s: 0, p: 1 });
     // The table best first: birch won the first bout.
@@ -270,13 +271,32 @@ describe('the seats over the bouts', () => {
     expect(h.seats.map((s) => s.how)).toEqual(['menu']);
     h.nextBout();
     expect(h.fake.picks.at(-1)![0]).toMatchObject({ name: 'ash', bot: { softened: false } });
-    // A reconnecting socket's hello brings back no seat left by the menu.
-    expect(h.service.rejoin(a)).toBe(false);
-    expect(a.matchId).toBeNull();
     // Entering again takes the seat back.
     h.enter(a);
     expect(a.matchId).not.toBeNull();
     expect(h.last(1, 'match_start')?.royale?.tf).toMatchObject({ b: 1, s: 0 });
+  });
+
+  it("never gives a held seat back on a socket's hello: only entering again does", () => {
+    // Every flow's socket says hello on opening (the 5v5, the battle
+    // royale, a spectate): taken back on it, the seat's bout went to a
+    // client that never asked for a Thornfray.
+    const h = thornfrayHarness();
+    const a = h.connect(1, 'ash', 7);
+    h.enter(a);
+    h.say(a, { t: 'thornfray_start' });
+    h.land();
+    const unit = h.last(1, 'match_start')!.selfUnitId;
+    h.close(a);
+    const back = h.connect(2, 'ash', 7);
+    expect(h.say(back, { t: 'hello' })).toBe(false);
+    expect(back.matchId).toBeNull();
+    expect(h.to(2, 'match_start')).toEqual([]);
+    expect(h.sim().policies.has(unit)).toBe(true);
+    h.enter(back);
+    expect(back.matchId).not.toBeNull();
+    expect(h.last(2, 'match_start')?.selfUnitId).toBe(unit);
+    expect(h.sim().policies.has(unit)).toBe(false);
   });
 
   it('seats a late person on the fewest-bushels bot seat at the second Lull alone', () => {
