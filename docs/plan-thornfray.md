@@ -44,6 +44,13 @@ on its own, with its tests green, and changes nothing a player sees until slice 
   `seedfallSchedule`, the cache draw, the Graft triggers, the drop and the `Sim`'s constructor,
   and a changed order of random draws in any of them would otherwise change every fifty seat
   match unseen.
+- As built: Trios seats forty-eight, not fifty (`crewSeats(3)`, `TRIO_SEATS`: sixteen crews of
+  three), so seed 5 in Trios is pinned on its forty-eight seats. Each match is built the way the
+  server builds one nobody has joined (`RoyaleMatch` with no person, over `royaleSeats` and
+  `royaleFactory`, so through `buildRoyaleSim`), which also guards slice 5's pre-dealt seats in
+  `RoyaleMatch` and its factory's bout argument. "60 s after landing" counts from the tick the
+  drop ends and every seat lands. An extra random draw in `drawDusk` turns all three red at
+  both points.
 
 ### 1. The engine: the bout seam, the contract and the ledger (the sim)
 
