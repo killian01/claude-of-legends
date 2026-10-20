@@ -285,6 +285,7 @@ describe("a Thornfray bout's line", () => {
       reached: unitIds.map(() => 0),
       fellHp: unitIds.map(() => null),
       goals: [],
+      swept: unitIds.map(() => []),
       prizes: [],
       prizeOffered: false,
       started: false,

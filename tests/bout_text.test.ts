@@ -94,10 +94,10 @@ describe("a bout's top line", () => {
     const r = snap({ tf: { c: 7, pl: 2, bc: 9 } });
     expect(boutTopLine(STARGLEAN, 2, r, 10 + 57)).toBe('Starglean · 0:48 · 7 gleaned, 2nd');
     // Lastwick: those still standing, the clock to the light going out
-    // (92 s), not to its backstop at 120.
+    // (104 s), not to its backstop at 120.
     const l = snap({ v: 'one_life', alive: 5 });
-    expect(boutTopLine(LASTWICK, 1, l, 10 + 51)).toBe('Lastwick · 0:41 · 5 left');
-    expect(boutClockLeft(LASTWICK, l, 10)).toBe(92);
+    expect(boutTopLine(LASTWICK, 1, l, 10 + 51)).toBe('Lastwick · 0:53 · 5 left');
+    expect(boutClockLeft(LASTWICK, l, 10)).toBe(104);
     expect(boutClockLeft(STARGLEAN, r, 10)).toBe(105);
     expect(boutClockLeft(STARGLEAN, r, 400)).toBe(0);
   });
@@ -105,7 +105,7 @@ describe("a bout's top line", () => {
   it('drops the name and the count word on a phone', () => {
     const r = snap({ tf: { c: 7, pl: 2, bc: 9 } });
     expect(boutTopLine(STARGLEAN, 2, r, 10 + 57, true)).toBe('0:48 · 7, 2nd');
-    expect(boutTopLine(LASTWICK, 1, snap({ alive: 5 }), 10 + 51, true)).toBe('0:41 · 5 left');
+    expect(boutTopLine(LASTWICK, 1, snap({ alive: 5 }), 10 + 51, true)).toBe('0:53 · 5 left');
   });
 
   it('reads a count before any tf line, and a count of seconds held to a tenth', () => {

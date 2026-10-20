@@ -233,6 +233,7 @@ that already exists when the first kind lands.
 | `released` | In the pool or not; a kind in progress stays out. |
 | `base` | The death rule: `'one_life'` (out for the bout) or `'respawn'` (back in five seconds). |
 | `playS` | Seconds from landing to the bout's clock end, 90 to 120. |
+| `health` | Every seat's health in the bout as a share of the planet's; the planet's when absent. The Dusk burns a share of the maximum, so it lengthens the fights and leaves the light's times alone. |
 | `thornyard` | Its chord radius and the regions it may stand in (all six when absent). |
 | `dusk` | Its closings inside the Thornyard (radius, closing, hold, burn), numbered from the end; its edge speed; the burn outside the Thornyard before the first closing; when the light goes out (`lightOutS`). |
 | `systems` | Which of the planet's systems run (caches, pads, Seedfalls, the Burr, the Last light, the marks, the Clamors, the Upstart), off unless named; and the Risings with their times, `risings: { pyrefang?: atS; voidmaul?: atS; warden?: atS }`, none when absent. |
@@ -259,6 +260,7 @@ export interface BoutKind {
   released: boolean;
   base: RoyaleVariant;
   playS: number;
+  health?: number; // a share of the planet's, 1 when absent
   thornyard: { radius: number; regions?: readonly RegionId[] };
   dusk: BoutDusk; // closings from the end, edgeSpeed, burnBefore, lightOutS
   systems: BoutSystems; // risings?: { pyrefang?: number; voidmaul?: number; warden?: number }
@@ -319,9 +321,10 @@ The last one standing, fast. One life's death: a fall is out for the bout.
 | | |
 |---|---|
 | Base | One life |
+| Health | 2.1 times the planet's, every seat (`health`) |
 | Thornyard | Chord radius 40 m (about 5,030 m2, a sixteenth of the planet), any region |
-| Clock | The light goes out 92 s after landing (`lightOutS`); the bout ends when one champion stands, about 100 s at the latest; its clock (`playS`) at 120 s only a backstop |
-| Dusk | Calm to 20 s (outside the Thornyard burns 3 percent of maximum health a second). Phase 3 closes to 26 m from 20 to 35 s, holds to 45 (4 percent); phase 4 to 14 m from 45 to 60, holds to 70 (7 percent); phase 5 to 5 m from 70 to 82, holds to 92 (12 percent); then phase 6, dark, 12 percent a second and 12 more every 10 s. Edge speed 1.1 m/s, against the planet's 0.74 |
+| Clock | The light goes out 104 s after landing (`lightOutS`); the bout ends when one champion stands, about 110 s at the latest; its clock (`playS`) at 120 s only a backstop |
+| Dusk | Calm to 15 s (outside the Thornyard burns 3 percent of maximum health a second). Phase 3 closes to 26 m from 15 to 30 s, holds to 45 (7 percent); phase 4 to 14 m from 45 to 62, holds to 75 (8 percent); phase 5 to 5 m from 75 to 92, holds to 104 (12 percent); then phase 6, dark, 12 percent a second and 12 more every 10 s. Edge speed 1.1 m/s, against the planet's 0.74 |
 | Caches | 12 at landing (the golden spot inside first), never back; every region has at least 16 spots within 40 m of its heart |
 | Off | Seedfalls, Risings, camps, pads, the marks, the Reprieve |
 | On | The Clamors, the Dusk's burn, One life's placing |
@@ -335,6 +338,18 @@ forward from the Thornyard's heart toward a final point inside it (`src/sim/roya
 `drawPlannedDusk`), each slide within what the edge speed allows. Each closing shrinks about a
 meter a second; a champion walks 3.7 m/s, so the light is outrun easily and fought over always.
 Its data is `src/sim/content/bouts/lastwick.ts`.
+
+Playing beats idling. A seat that gives no orders lands somewhere quiet, most often in the band
+the first closing takes, and while the house bots fight each other first it is found by their
+hunt (How a bot plays a bout) or burned by that closing: its 7 percent a second ends a champion
+left outside it about fifteen seconds after the edge passes, before half the field has fallen.
+The health keeps the field standing that long: at the planet's, eight house bots felled each
+other in under a minute (0:51, the median) and a seat that gave no orders placed 2.5 of 8. As
+measured (`node scripts/thornfray_report.mjs --bout lastwick`, match seeds 1 to 24, every bout of
+the match, `docs/plan-thornfray.md` slice 9): eight house bots end a bout at 1:27 (the median,
+1:13 to 1:46 between the tenth and ninetieth), by the last fall rather than the dark four in five;
+with a seat that gives no orders, 1:22, and that seat places 5.4 of 8 (5th or worse in 113 of
+144) where it placed 2.5.
 
 ## Starglean
 
@@ -391,7 +406,12 @@ observation's royale block), and fights on sight in every bout.
 - **The observation.** An additive block, `ObsRoyale.bout` (policy contract v0): the kind, the
   bout's index and count, the double flag, the seat's own count and place, the best count, and
   the kind's goal primitives (`goals`, absent when none). Nothing in it is hidden from a person:
-  the HUD reads the same numbers.
+  the HUD reads the same numbers. Beside them, where the seat has looked (`sweep`): the
+  Thornyard's lookouts (every bush in it, then rings 8 m apart around its heart, on walkable
+  ground) and when the seat's own sight last took each in, as it would a champion standing
+  there, so a bush is looked into only from inside it or a step away
+  (`src/sim/royale/bouts/sweep.ts`, written every quarter second). What a person remembers of
+  where they have been: nothing of anyone else's sight or whereabouts.
 - **The landing.** In a bout `pickDropPoint` (`src/sim/royale/bot/drop_pick.ts`) picks inside
   the phase 0 cap the observation shows, the Thornyard, spread around its center; never across
   the planet's regions.
@@ -407,7 +427,13 @@ observation's royale block), and fights on sight in every bout.
   it would ask for odds no fight shows, and nobody would fight), a Dusk margin of half the
   skill's (the Dusk closes faster), a cornered light of 8 m (under the planet's 20 m a bot
   stops fleeing and takes any fight, which would hold from the bout's second closing, half the
-  bout). Its errand is none: the fights and the light are the bout.
+  bout). Their errand is the hunt (`hunt`): a bot with no enemy in sight opens a cache within
+  12 m, then sweeps the light toward the lookouts it has not seen for 20 s or never, the
+  nearest inside the Dusk's next cap first (the ground the light keeps), then the band it takes
+  next, only ground that stays lit for the walk there and back into the next cap; once it has
+  seen every lit one since, the one it saw longest ago. As the Dusk closes the sweep closes on
+  the light's heart with it, so a seat hiding is found the way a person finds one: by looking.
+  With an enemy in sight the fight block has decided first, as in every bout.
 - **Starglean's bots** glean: their errand (`glean`) walks to a called Seedfall anywhere in the
   Thornyard for a bot at 40 percent health and more, takes a cache in sight before a roam, and
   holds a Seedfall cache's opening as the held opening allows. A bot at 45 percent health on a
@@ -563,13 +589,3 @@ The bouts the maintainer has named for the weeks after:
   keep, or count a Thornfray's six as one.
 - **Starglean in the Cypress groves**: 10 caches there against 18 in the Ruins, or Starglean
   kept to the regions with room for 18.
-- **Lastwick's length, and a seat that gives no order.** Measured on match seeds 1 to 12
-  (`node scripts/thornfray_report.mjs --standin`), Lastwick ends at 0:51 (median) against the
-  90 to 120 s it was drawn for, and a seat that gives no order places 2.5 there: it lands
-  somewhere quiet, burns once the first closing passes it (about 47 s), and by then the house
-  bots have felled most of each other. Over the released pool it banks 13.4 bushels a match
-  against an even share of 13.1, placing 7.2 in Starglean. A calm nerve or a pace in
-  `LASTWICK_BOTS` would slow the falls by making the bots shy of a fight, which the house bots
-  never are; an errand walking a bot with nobody in sight to the center of the light to come
-  changed no place and shortened the bout. Left to choose: the bout's health, the arc's level,
-  the Dusk's closings.

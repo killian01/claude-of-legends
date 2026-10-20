@@ -348,6 +348,19 @@ export interface ObsBout {
   place: number;
   best: number;
   goals?: readonly ObsGoal[];
+  // Where the seat has looked (royale/bouts/sweep.ts): the Thornyard's
+  // lookouts and when its own sight last took each in (additive v0 field).
+  sweep?: readonly ObsSweep[];
+}
+
+// One of a bout's lookouts as a seat remembers it: where it stands and the
+// sim time the seat last saw it (null never). What a person remembers of
+// where they have been: nothing about anyone else's whereabouts.
+export interface ObsSweep {
+  x: number;
+  y: number;
+  z: number;
+  seen: number | null;
 }
 
 // The battle royale as any player knows it (additive v0 block, present only

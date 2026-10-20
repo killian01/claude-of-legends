@@ -271,7 +271,7 @@ describe('the bout block', () => {
     expect(obs).not.toHaveProperty('bout');
   });
 
-  it('is observed by every seat of a bout, its goals by primitive', () => {
+  it('is observed by every seat of a bout, its goals by primitive, its lookouts by spot', () => {
     const { sim, unitIds } = buildBout();
     land(sim);
     for (const id of unitIds) {
@@ -285,10 +285,12 @@ describe('the bout block', () => {
         'kind',
         'of',
         'place',
+        'sweep',
       ]);
       for (const g of bout.goals!) {
         expect(Object.keys(g).sort()).toEqual(['holder', 'radius', 'shape', 'x', 'y', 'z']);
       }
+      for (const p of bout.sweep!) expect(Object.keys(p).sort()).toEqual(['seen', 'x', 'y', 'z']);
     }
   });
 

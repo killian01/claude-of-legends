@@ -11,19 +11,28 @@
 // across the Thornyard, races for the seed it is first to, and takes a
 // cache in sight an enemy farther off would reach first, before a roam; a
 // landed seed's held opening a step away is begun by a bot nobody strikes;
-// the drop's pick stands inside the Thornyard on seeds 1 to 100; the
-// planet's Respawn errand never runs. Then whole bouts of eight house
-// bots through buildBoutSim on seeds 1 to 3: Lastwick lands at least four
-// takedowns, the first before its second closing, and mostly ends before
-// the light goes out; Starglean opens every burst's three Seedfall caches.
+// Lastwick's hunt walks a bot with no enemy in sight toward the light it
+// has not swept, the ground the light keeps first, never past a fight or
+// into ground the Dusk takes before it would be back; the drop's pick
+// stands inside the Thornyard on seeds 1 to 100; the planet's Respawn
+// errand never runs. Then whole bouts through buildBoutSim: of eight house
+// bots on seeds 1 to 3, Lastwick lands at least four takedowns, the first
+// before its second closing, and mostly ends before the light goes out;
+// on seeds 1 to 6 it runs 75 to 110 s (the median), and a seat that gives
+// no orders falls in the bottom half; a lone hunter finds a seat that
+// gives no orders across the light, where a bot that does not hunt mostly
+// does not; Starglean opens every burst's three Seedfall caches.
 
 import { describe, expect, it } from 'vitest';
 import { buildBoutSim } from '../src/net/replay';
 import {
   GLEAN_STEP_IN_M,
+  HUNT_CACHE_M,
+  HUNT_STALE_S,
   LASTWICK_BOTS,
   STARGLEAN_BOTS,
 } from '../src/sim/content/bots/bout_skills';
+import { royalePolicy } from '../src/sim/content/bots/royale';
 import {
   CALM_NERVE,
   PACE_NERVE_MAX,
@@ -44,6 +53,7 @@ import type {
   Observation,
   ObsRoyale,
   ObsSeedfall,
+  ObsSweep,
   ObsUnit,
 } from '../src/sim/policy';
 import { Rng } from '../src/sim/rng';
@@ -52,7 +62,9 @@ import {
   boutCall,
   calledSeedfall,
   gleanCall,
+  huntCall,
   raceRank,
+  sweepGoal,
 } from '../src/sim/royale/bot/bout_calls';
 import {
   corneredLightOf,
@@ -65,6 +77,7 @@ import { seedfallErrand } from '../src/sim/royale/bot/calls';
 import { BOUT_DROP_EDGE_M, pickDropPoint } from '../src/sim/royale/bot/drop_pick';
 import { buildSense } from '../src/sim/royale/bot/sense';
 import { beatDusk, duskMarginOf } from '../src/sim/royale/bot/travel';
+import { boutResult } from '../src/sim/royale/bouts/end';
 import { boutSeed, drawBouts } from '../src/sim/royale/bouts/ledger';
 import { thornyardOf } from '../src/sim/royale/bouts/plan';
 import { landingIn } from '../src/sim/royale/drop';
@@ -76,7 +89,7 @@ import { royaleLayoutOf } from '../src/sim/royale/planet_map';
 import type { DuskState } from '../src/sim/royale/types';
 import { fakeLayout, R, sph } from './royale_fixture';
 import { loadPlanet } from './royale_planet';
-import { type BoutArgs, boutReplay, buildBout, land } from './thornfray_fixture';
+import { type BoutArgs, boutPicks, boutReplay, buildBout, land } from './thornfray_fixture';
 
 const layout = fakeLayout();
 const { gentle, normal, strong } = ROYALE_SKILLS;
@@ -85,6 +98,7 @@ const here = sph(1, 0.2, 0.1);
 const east = dirTo(here, sph(0, 0, 1)) as Vec3;
 const north = dirTo(here, sph(0, 1, 0)) as Vec3;
 const south = dirTo(here, sph(0, -1, 0)) as Vec3;
+const west = dirTo(here, sph(0, 0, -1)) as Vec3;
 // The slot's time: ten seconds after the landing (dropEndsAt 10).
 const NOW = 20;
 
@@ -298,15 +312,16 @@ describe('a bout bot fights first', () => {
 });
 
 describe('the glean errand', () => {
-  it('is the Starglean entry of BOUT_CALLS, and every kind names one or none', () => {
+  it("is Starglean's entry of BOUT_CALLS, the hunt Lastwick's, and every kind names one", () => {
     expect(STARGLEAN.bots.errand).toBe('glean');
     expect(BOUT_CALLS.glean).toBe(gleanCall);
+    expect(LASTWICK.bots.errand).toBe('hunt');
+    expect(BOUT_CALLS.hunt).toBe(huntCall);
     for (const kind of BOUT_KINDS) {
       if (kind.bots.errand !== null) expect(Object.hasOwn(BOUT_CALLS, kind.bots.errand)).toBe(true);
     }
-    expect(LASTWICK.bots.errand).toBeNull();
     const o = (kind: BoutKind) => obs([], royale(kind, true, { caches: [cache(3, here)] }));
-    expect(boutCall(sense(o(LASTWICK), normal, LASTWICK_BOTS))).toBeNull();
+    expect(boutCall(sense(o(LASTWICK), normal, LASTWICK_BOTS))?.why).toBe('hunt-cache');
     expect(boutCall(sense(o(STARGLEAN), normal, STARGLEAN_BOTS))?.why).toBe('glean-cache');
     // On the planet no bout's errand is asked, whatever the policy holds.
     const planet = obs([], royale(STARGLEAN, false, { caches: [cache(3, here)] }));
@@ -419,6 +434,91 @@ describe('the held opening begun', () => {
   });
 });
 
+describe('the hunt', () => {
+  // A lookout as the seat remembers it.
+  const look = (at: Vec3, seen: number | null): ObsSweep => ({ x: at.x, y: at.y, z: at.z, seen });
+  // Lastwick's bout with the seat's lookouts, under `dusk`.
+  function swept(sweep: ObsSweep[], over: Partial<ObsRoyale> = {}): ObsRoyale {
+    return royale(LASTWICK, true, { bout: { ...boutOf(LASTWICK), sweep }, ...over });
+  }
+
+  it('walks a bot with no enemy in sight toward the light it has not swept', () => {
+    // Everything around it seen a moment ago; 16 m north never.
+    const unseen = along(here, north, 16, R);
+    const sweep = [
+      look(here, NOW - 1),
+      look(along(here, east, 8, R), NOW - 1),
+      look(along(here, south, 8, R), NOW - 2),
+      look(unseen, null),
+    ];
+    for (const skill of SKILLS) {
+      const { why, a } = play(obs([], swept(sweep)), sure(skill), LASTWICK_BOTS);
+      expect(why).toBe('hunt');
+      expect(dist(point(a), unseen)).toBeLessThan(0.01);
+    }
+    // Seen HUNT_STALE_S ago is unswept again.
+    const again = sweep.map((p, i) => (i === 3 ? { ...p, seen: NOW - HUNT_STALE_S } : p));
+    expect(dist(sweepGoal(sense(obs([], swept(again)), normal, LASTWICK_BOTS), 80)!, unseen)).toBe(
+      0,
+    );
+    // The planet's brain wanders where it stands instead.
+    const planet = royale(LASTWICK, false);
+    expect(play(obs([], planet), sure(normal), null).why).toBe('roam');
+  });
+
+  it('sweeps the ground the light keeps before the band it takes next', () => {
+    // The next cap 14 m around a point 12 m west: 6 m east lies in the band
+    // the Dusk takes next, 14 m west inside what it keeps.
+    const keeps = along(here, west, 14, R);
+    const band = along(here, east, 6, R);
+    const dusk = yard(here, { next: { center: along(here, west, 12, R), radius: 14 } });
+    expect(insideCap(dusk.next!, keeps)).toBe(true);
+    expect(insideCap(dusk.next!, band)).toBe(false);
+    const goal = (sweep: ObsSweep[]) =>
+      sweepGoal(sense(obs([], swept(sweep, { dusk })), normal, LASTWICK_BOTS), 80);
+    expect(dist(goal([look(band, null), look(keeps, null)])!, keeps)).toBe(0);
+    // Once that is seen, the band.
+    expect(dist(goal([look(band, null), look(keeps, NOW - 1)])!, band)).toBe(0);
+  });
+
+  it('never walks to ground the Dusk takes before it would be back', () => {
+    // The first closing three seconds off: 32 m east, outside the next cap,
+    // is dark before the walk there ends; 10 m north, seen 5 s ago, holds.
+    const dusk = yard(here, { phaseEndsAt: NOW + 3 });
+    const far = along(here, east, 32, R);
+    const held = along(here, north, 10, R);
+    expect(insideCap(dusk.now, far)).toBe(true);
+    const goal = (sweep: ObsSweep[]) =>
+      sweepGoal(sense(obs([], swept(sweep, { dusk })), normal, LASTWICK_BOTS), 80);
+    expect(dist(goal([look(far, null), look(held, NOW - 5)])!, held)).toBe(0);
+    expect(goal([look(far, null)])).toBeNull();
+    // With the closing a minute off, the far one is swept first.
+    const calm = yard(here, { phaseEndsAt: NOW + 60 });
+    const o = obs([], swept([look(far, null), look(held, NOW - 5)], { dusk: calm }));
+    expect(dist(sweepGoal(sense(o, normal, LASTWICK_BOTS), 80)!, far)).toBe(0);
+  });
+
+  it('goes back to what it saw longest ago once every lit lookout is fresh', () => {
+    const near = along(here, east, 5, R);
+    const old = along(here, north, 20, R);
+    const o = obs([], swept([look(near, NOW - 3), look(old, NOW - 15)]));
+    expect(dist(sweepGoal(sense(o, normal, LASTWICK_BOTS), 80)!, old)).toBe(0);
+  });
+
+  it('takes a cache in sight first, and fights an enemy in sight before any sweep', () => {
+    const sweep = [look(along(here, north, 16, R), null)];
+    const c = (d: number) => cache(3, along(here, east, d, R));
+    const at = (d: number) => obs([], swept(sweep, { caches: [c(d)] }));
+    expect(play(at(8), sure(normal), LASTWICK_BOTS).why).toBe('hunt-cache');
+    expect(play(at(HUNT_CACHE_M + 5), sure(normal), LASTWICK_BOTS).why).toBe('hunt');
+    // An enemy in sight: the fight block decides, and the hunt asks nothing.
+    const foe = enemy(9, along(here, south, 9, R));
+    const o = obs([foe], swept(sweep));
+    expect(huntCall(sense(o, normal, LASTWICK_BOTS), LASTWICK_BOTS)).toBeNull();
+    expect(play(o, sure(normal), LASTWICK_BOTS).why).toBe('fight');
+  });
+});
+
 describe("a bout's numbers", () => {
   it('reads the calm nerve and the pace from the kind, never the fifty seat ones', () => {
     // Thirty seconds after the landing, four of eight standing.
@@ -513,6 +613,71 @@ describe('eight house bots in a bout', () => {
       if (sim.time - landAt < LASTWICK.dusk.lightOutS) beforeDark++;
     }
     expect(beforeDark).toBeGreaterThanOrEqual(2);
+  });
+
+  // Bout 1 of match `seed` played out, seat 0 a seat that gives no orders
+  // when `idle`: its length from the landing and seat 0's place.
+  function lastwickBout(seed: number, idle: boolean): { lengthS: number; place: number } {
+    const picks = boutPicks(seed);
+    if (idle) {
+      const { bot: _bot, ...person } = picks[0]!;
+      picks[0] = person;
+    }
+    const { sim } = buildBout({ ...firstBout(LASTWICK, seed), picks });
+    land(sim);
+    const landAt = sim.royale!.dropEndsAt;
+    while (sim.royale!.stage !== 'over' && sim.time < landAt + 200) sim.tick();
+    expect(sim.royale!.stage).toBe('over');
+    const r = boutResult(sim.royaleMode!, sim);
+    return { lengthS: sim.time - landAt, place: r.ranking.indexOf(0) + 1 };
+  }
+
+  it('runs Lastwick a minute and a half, and a seat that gives no orders falls in the bottom half', () => {
+    const seeds = [1, 2, 3, 4, 5, 6];
+    const lengths = seeds.map((seed) => lastwickBout(seed, false).lengthS).sort((a, b) => a - b);
+    const median = (lengths[2]! + lengths[3]!) / 2;
+    expect(median).toBeGreaterThanOrEqual(75);
+    expect(median).toBeLessThanOrEqual(110);
+    // Never before the bout's first minute, never past the dark's own end.
+    expect(lengths[0]).toBeGreaterThan(60);
+    expect(lengths[5]).toBeLessThan(LASTWICK.playS);
+    // Landed somewhere quiet and left there, it is found or burned before
+    // half the field has fallen, and never outlasts them all.
+    const places = seeds.map((seed) => lastwickBout(seed, true).place);
+    expect(places.reduce((a, b) => a + b, 0) / places.length).toBeGreaterThanOrEqual(5);
+    expect(places).not.toContain(1);
+  });
+
+  it('finds a seat that gives no orders across the light, where a bot that does not hunt mostly does not', () => {
+    // Two seats and no caches: a bot, and a seat that gives no orders set
+    // down at the heart of the Dusk's second cap, the light it keeps longest
+    // but one. Found: in the bot's sight within SEARCH_S of the landing,
+    // the first closing's sweep under way.
+    const SEARCH_S = 16;
+    const bare: BoutKind = { ...LASTWICK, caches: { count: 0, backS: null } };
+    const foundBy = (seed: number, bots: BoutBots): number | null => {
+      const picks = boutPicks(seed, 2);
+      const { bot: _bot, ...person } = picks[0]!;
+      picks[0] = person;
+      const { sim, unitIds } = buildBout({ ...firstBout(bare, seed), picks });
+      const mode = sim.royaleMode!;
+      const [idle, bot] = [sim.units.get(unitIds[0]!)!, sim.units.get(unitIds[1]!)!];
+      sim.attachPolicy(bot.id, royalePolicy(mode.layout, mode.skillOf(bot.id), bots));
+      land(sim);
+      idle.pos = { ...mode.schedule.caps[2]!.center };
+      idle.path = [];
+      const landAt = mode.state.dropEndsAt;
+      while (sim.time < landAt + SEARCH_S) {
+        if (sim.isVisible(bot.team, idle.id)) return sim.time - landAt;
+        sim.tick();
+      }
+      return null;
+    };
+    const seeds = Array.from({ length: 12 }, (_, i) => i + 1);
+    const hunting = seeds.map((seed) => foundBy(seed, LASTWICK_BOTS));
+    const wandering = seeds.map((seed) => foundBy(seed, { ...LASTWICK_BOTS, errand: null }));
+    expect(hunting.filter((t) => t === null)).toEqual([]);
+    expect(wandering.filter((t) => t === null).length).toBeGreaterThanOrEqual(3);
   });
 
   for (const seed of [1, 2, 3]) {

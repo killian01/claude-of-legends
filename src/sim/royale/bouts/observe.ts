@@ -2,8 +2,10 @@
 // additive; ADR 0035): the kind, the bout's index and how many there are,
 // the Final's double, the seat's own count and its place as the bout
 // stands, the best count, and the kind's goal primitives (absent when it
-// stands none), each holder named by its unit id. What the HUD shows a
-// person, no more: a bot reads a bout's goal from here alone.
+// stands none), each holder named by its unit id; and the seat's own
+// memory of where it has looked (sweep.ts). What the HUD shows a person
+// and what a person remembers, no more: a bot reads a bout's goal from
+// here alone.
 
 import { BOUTS } from '../../content/bouts/match';
 import type { ObsGoal, ObsRoyale } from '../../policy';
@@ -12,6 +14,7 @@ import type { Unit } from '../../unit';
 import type { RoyaleMode } from '../mode';
 import { boutRanking } from './end';
 import { boutPrimitives } from './goals';
+import { observeSweep } from './sweep';
 
 export function observeBout(mode: RoyaleMode, sim: Sim, u: Unit): Pick<ObsRoyale, 'bout'> {
   const b = mode.state.bout;
@@ -38,6 +41,7 @@ export function observeBout(mode: RoyaleMode, sim: Sim, u: Unit): Pick<ObsRoyale
       place: seat >= 0 ? ranking.indexOf(seat) + 1 : 0,
       best,
       ...(goals.length > 0 ? { goals } : {}),
+      ...(seat >= 0 && mode.lookouts.length > 0 ? { sweep: observeSweep(mode, seat) } : {}),
     },
   };
 }

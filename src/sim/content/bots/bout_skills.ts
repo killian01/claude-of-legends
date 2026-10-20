@@ -36,17 +36,19 @@ export const BOUT_BOTS: BoutBots = {
   pace: null,
 };
 
-// Lastwick: One life's brain with no errand; the fights and the light are
-// the bout. No calm nerve and no pace: the pace's curve counts fifty seats,
-// and held against eight it asks for odds no fight shows, so nobody would
-// fight. Half the skill's Dusk margin, the Dusk closing faster than on the
-// planet. Cornered under 8 m: under the planet's 20 m a bot stops fleeing
-// and takes any fight, which would hold from the bout's second closing,
-// half the bout.
+// Lastwick: One life's brain with the hunt (bout_calls.ts huntCall): with
+// no enemy in sight a bot sweeps the lit Thornyard toward what it has not
+// seen, the whole Thornyard in reach, from any health (it heals out of a
+// fight while it walks). No calm nerve and no pace: the pace's curve
+// counts fifty seats, and held against eight it asks for odds no fight
+// shows, so nobody would fight. Half the skill's Dusk margin, the Dusk
+// closing faster than on the planet. Cornered under 8 m: under the
+// planet's 20 m a bot stops fleeing and takes any fight, which would hold
+// from the bout's second closing, half the bout.
 export const LASTWICK_BOTS: BoutBots = {
-  errand: null,
+  errand: 'hunt',
   floor: 0,
-  reach: 0,
+  reach: 80,
   duskMargin: 0.5,
   cornered: 8,
   calm: 0,
@@ -81,3 +83,11 @@ export const GLEAN_LIT_MARGIN_S = 4;
 // opening begun (bout_calls.ts beginHeldOpening): the standoff a bot waits
 // at before the landing, and a little more.
 export const GLEAN_STEP_IN_M = 6;
+
+// The hunt errand (bout_calls.ts huntCall): a cache this near (in sight)
+// is opened before the sweep goes on; a lookout the seat has not seen for
+// this long is swept again; the light a lookout must hold past the walk
+// there.
+export const HUNT_CACHE_M = 12;
+export const HUNT_STALE_S = 20;
+export const HUNT_LIT_MARGIN_S = 4;

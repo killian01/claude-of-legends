@@ -382,6 +382,7 @@ function boutState(args: RoyaleBoutArgs, unitIds: readonly number[]) {
     reached: zeros(),
     fellHp: unitIds.map(() => null),
     goals: [],
+    swept: unitIds.map(() => []),
     prizes: [],
     prizeOffered: false,
     started: false,

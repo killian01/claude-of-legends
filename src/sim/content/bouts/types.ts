@@ -199,6 +199,11 @@ export interface BoutKind {
   base: RoyaleVariant;
   // Seconds from landing to the bout's clock end, 90 to 120.
   playS: number;
+  // Every seat's health in the bout, as a share of the planet's (the
+  // planet's ROYALE_HP_SCALE and the champion's own tuning times this); the
+  // planet's when absent. The Dusk burns a share of the maximum, so it
+  // lengthens the fights and leaves the light's times alone.
+  health?: number;
   // Its chord radius and the regions it may stand in (all six when absent).
   thornyard: { radius: number; regions?: readonly RegionId[] };
   dusk: BoutDusk;

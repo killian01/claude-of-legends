@@ -43,6 +43,7 @@ import { startBout, stepBout } from './bouts/goals';
 import type { PendingPrize } from './bouts/ledger';
 import { observeBout } from './bouts/observe';
 import { type BoutPlan, boutPlan, type Thornyard } from './bouts/plan';
+import { boutLookouts, stepSweep, unseen } from './bouts/sweep';
 import { burrTakedown, clearBurrs, observeBurr, stepBurrs } from './burr';
 import { boutCacheCount, drawCacheSpots, openingBy, stepCaches } from './caches';
 import { noteClamor, observeClamors, stepClamors } from './clamors';
@@ -221,6 +222,9 @@ export class RoyaleMode {
   // start like the Dusk's schedule (seedfall.ts).
   readonly seedfallCalls: readonly SeedfallCall[];
   readonly seedfallSpots: readonly Vec3[];
+  // A bout's lookouts (bouts/sweep.ts), fixed at the start from its
+  // Thornyard; none in a battle royale.
+  readonly lookouts: readonly Vec3[];
   // The Sim's own seed, the stream's state before the mode's first draw:
   // what a bout's prize cards are drawn from (grafts.ts offerPrize), on a
   // stream of their own, so no seat's decision moves them.
@@ -295,6 +299,7 @@ export class RoyaleMode {
     const plan = this.plan;
     const landAt = DROP_S;
     this.schedule = drawDusk(rng, this.layout, this.ground, landAt, plan?.dusk);
+    this.lookouts = plan ? boutLookouts(plan.thornyard, this.layout, this.ground) : [];
     const drawn = plan
       ? drawCacheSpots(
           this.layout.cacheSpots,
@@ -359,6 +364,7 @@ export class RoyaleMode {
         reached: [],
         fellHp: [],
         goals: [],
+        swept: [],
         prizes: [
           ...(b.pendingPrize ?? []).map((p) => ({ seat: p.seat, cards: [...p.cards] })),
           ...(b.prize !== undefined && b.prize !== null ? [{ seat: b.prize, cards: null }] : []),
@@ -399,6 +405,9 @@ export class RoyaleMode {
     u.gold = 0;
     u.outOfCombatBonus = OUT_OF_COMBAT_SPEED;
     u.hpScale = ROYALE_HP_SCALE * tuning.hp;
+    // A bout's own health (BoutKind.health), when its kind names one.
+    const health = this.bout?.kind.health;
+    if (health !== undefined) u.hpScale *= health;
     u.dmgScale = tuning.dmg;
     landingLevels(u);
     this.builds.set(u.id, seatBuild(u.championId, kitBuild));
@@ -415,6 +424,7 @@ export class RoyaleMode {
       b.seedfalls.push(0);
       b.reached.push(0);
       b.fellHp.push(null);
+      b.swept.push(unseen(this));
       const carried = this.bout.grafts?.[seat] ?? [];
       seatAtBout(this, u, this.builds.get(u.id)!, this.bout.index, carried);
     }
@@ -978,6 +988,7 @@ export class RoyaleMode {
     stepLastLight(this, sim);
     // A bout: its count and goals fed the tick's events, then its own end.
     if (this.bout) {
+      stepSweep(this, sim);
       stepBout(this, sim, sim.tickEvents());
       if (s.stage === 'play' && boutOver(this, sim)) this.endBout(sim);
       return;

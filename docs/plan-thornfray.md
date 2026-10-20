@@ -20,9 +20,9 @@ on its own, with its tests green, and changes nothing a player sees until slice 
 | Arc | Every seat lands bout k (1 to 6) at level 5 + k with 2k pieces of its planet build. |
 | Prize | The bout's winner: three Boughs over the next Lull, the pick held for the next bout only (`PRIZE_LASTS = 'next'`); never lost to a fall or a bout's end (carried as `pendingPrize`). No other Graft offer. |
 | Ladder | Bout actions as the battle royale (takedown 10, assist 5, cache 1); the end 40 to the first, 20 to the second and third; bushels never banked. |
-| Lastwick | One life; closings as phases 3, 4, 5, the Thornyard closed to 5 m by 82 s, dark (phase 6) at 92 s; 12 caches, never back; places by the order of the falls. |
+| Lastwick | One life at 2.1 times the planet's health; closings as phases 3, 4, 5 from 15 s, the Thornyard closed to 5 m by 92 s, dark (phase 6) at 104 s; 12 caches, never back; places by the order of the falls. |
 | Starglean | Respawn; 105 s; one closing (phase 5), the light held to 120 s; up to 18 caches (the spots inside less six), back after 30 s; Seedfall bursts of three at 25, 55, 85 s called 12 s ahead, read 15 s past the impact, every seed 18 m from every other; a cache 1, golden 2, Seedfall 3, a takedown takes one. |
-| Bots | The house brain with the bout's data; the drop inside the Thornyard; the planet's Respawn errand off; one errand per kind in `BOUT_CALLS`, asked after the fight block; fight on sight in every bout. |
+| Bots | The house brain with the bout's data; the drop inside the Thornyard; the planet's Respawn errand off; one errand per kind in `BOUT_CALLS` (Starglean's glean, Lastwick's hunt), asked after the fight block; fight on sight in every bout. |
 | Versions | `ROYALE_RULES_VERSION` moves only if the golden checksums move. Each bout record carries its kind's `version`, its computed `boutFingerprint` and `BOUT_ENGINE_VERSION`; each released kind's first bout and Final pinned at their ends, and the engine's shared data. |
 
 ## The build
@@ -709,17 +709,77 @@ on the tick's `damage` events, plays the whole chain. The battle royale does not
     wins the next 27 of 150 (18.0 percent) when the prize lasts the next bout, 28 of 150 (18.7)
     when it lasts the match, against an even chance of 12.5; the leader before the Final wins
     13 of 30 and 14 of 30. The two lengths do not measure apart on house bots.
-  - Open, the stand-in (`--standin`, seeds 1 to 6): a seat that gives no order places 2.5 on
-    average in Lastwick (never first: the last bot standing ends the bout) and 6.9 in
-    Starglean, and ends a match on 13.8 bushels, more than an even share (105 bushels over
-    eight seats, 13.1). It lands somewhere quiet inside the Thornyard and the bots, fighting on
-    sight, fight each other first. Whether an idle seat should outlast the fighters is the
-    maintainer's call (One life's placing, the Dusk's closings, or the bots' search).
-  - Open, from the figures: Lastwick still lasts about 50 s against the design's 90 to 120;
-    Starglean opens about 18 caches a bout against its 30 to 40, the fewest in the Cypress
-    groves (1.92 a seat over 34 bouts of the sixty matches above, 3.00 in the Ruins); the bots'
-    skills hardly part in a bout (mean place over those matches: strong 4.3 to 4.5, gentle 4.4
-    to 4.7).
+  - The stand-in (`--standin`, seeds 1 to 6): a seat that gives no order placed 2.5 on average
+    in Lastwick (never first: the last bot standing ends the bout) and 6.9 in Starglean, and
+    ended a match on 13.8 bushels, more than an even share (105 bushels over eight seats,
+    13.1): it lands somewhere quiet inside the Thornyard and the bots, fighting on sight, fight
+    each other first. Lastwick lasted about 50 s against the design's 90 to 120. Both settled
+    in slice 9.
+  - Open, from the figures: Starglean opens about 18 caches a bout against its 30 to 40, the
+    fewest in the Cypress groves (1.92 a seat over 34 bouts of the sixty matches above, 3.00 in
+    the Ruins); the bots' skills hardly part in a bout (mean place over those matches: strong
+    4.3 to 4.5, gentle 4.4 to 4.7).
+
+### 9. Lastwick's length and the hunt
+
+Playing beats idling. The slice 8 report found Lastwick over at 0:51 (the median) against the
+design's 90 to 120 s, and a seat that gives no order placing 2.5 of 8 there and banking more
+than an even share: it lands somewhere quiet while the house bots fell each other.
+
+- **The hunt.** `src/sim/royale/bouts/sweep.ts`: the Thornyard's lookouts, fixed at the start
+  (every bush inside it, then rings 8 m apart around its heart, each on walkable ground; 80 to
+  90 of them), and each seat's memory of them, the sim time each was last in its own sight as
+  a champion standing there would be (`vision.ts` `seesSpot`, `computeVisibility`'s rule: a
+  bush is looked into only from inside it or within the 4 m close sight, a rock stops the
+  line), on `RoyaleState.bout.swept`, written every quarter second in every bout, carried by
+  the checkpoint, read by no rule. Observed as `ObsBout.sweep` (additive v0), the seat's own
+  and nobody else's. `huntCall` in `src/sim/royale/bot/bout_calls.ts` (`BOUT_CALLS.hunt`,
+  Lastwick's errand, asked after the fight block): with no enemy in sight, a cache within 12 m
+  first, then the nearest lookout unseen for 20 s or never inside the Dusk's next cap, then in
+  the band the next closing takes; only ground lit for the walk there and back into the next
+  cap (`backS`, what `beatDusk` asks there: without it the walk out and the walk back took turns
+  at the band's edge); once every lit one has been seen since, the one seen longest ago.
+- **The bout's health.** `BoutKind.health`, optional, the planet's when absent (Starglean's data
+  and fingerprint do not move), multiplying every seat's `hpScale` at seating. The Dusk burns a
+  share of the maximum, so it lengthens the fights alone. Lastwick: 2.1.
+- **Lastwick's Dusk.** Calm to 15 s (was 20); 26 m from 15 to 30 s, held to 45, at 7 percent
+  (was 4); 14 m from 45 to 62, held to 75, at 8 percent (was 7); 5 m from 75 to 92, held to
+  104, at 12 percent; dark at 104 s (was 92). `playS` stays 120.
+- How the numbers were reached (match seeds 1 to 24, every bout a Lastwick, with the stand-in):
+  the hunt alone moved nothing (the median 0:53, the stand-in 2.7): in a 40 m Thornyard a
+  house bot nearly always has an enemy in sight, and a quiet landing is most often in the band
+  the first closing takes. The health at 2 gave 1:18 and 4.2; at 2.5, 1:33, most bouts ended
+  by the dark. The first closing's burn decides the stand-in's fall: at 4 percent
+  it placed 4.7, at 7 percent 5.4 to 5.7. On the shipped numbers the hunt adds a little (5.44
+  against 5.3 with no errand), and finds what stands in the light: a lone bot finds a seat that
+  gives no orders set at the second cap's heart within 16 s on 12 seeds of 12, where a bot that
+  does not hunt finds it on 7.
+- **Tests.** `tests/thornfray_sweep.test.ts` (the lookouts in every region, a seat's memory by
+  the sight rule, the bush, the seat's own observation, none in a battle royale, a checkpoint
+  restored midway); `tests/thornfray_bots.test.ts` (the hunt on faked observations: toward the
+  light it has not swept, the kept ground before the band, never ground the Dusk takes before
+  it would be back, the oldest once all are fresh, a cache in sight first and a fight first;
+  then whole bouts: Lastwick's median on seeds 1 to 6 within 75 to 110 s, a seat that gives no
+  orders 5th or worse on average and never first, the lone hunter against a bot that does not
+  hunt); `tests/thornfray_bout_lastwick.test.ts` (the health, the new Dusk);
+  `tests/thornfray_bout_versions.test.ts` (Lastwick's two pinned bouts captured again, 1706 and
+  1641 ticks; Starglean's unchanged; no version moves, no Thornfray having reached a player);
+  `tests/bout_text.test.ts` (the top line's clock to 104 s) and `tests/royale_contract.test.ts`
+  (the bout block's `sweep`). `tests/royale_golden.test.ts` is green: every new read stands
+  behind a bout.
+- Measured (`node scripts/thornfray_report.mjs`, match seeds 1 to 24, the same seeds before and
+  after):
+  - `--bout lastwick`, eight house bots (144 bouts): before 0:35 to 1:16, the median 0:51, the
+    first fall 0:09; after 0:57 to 1:49, the median 1:27 (1:13 to 1:46 between the tenth and the
+    ninetieth), the first fall 0:16, 112 of 144 over by the last fall before the light went out.
+    Seven takedowns a bout either way; the bots fight 86.3 percent of the seconds an enemy is
+    within 8 m in sight (86.6 before). The hunt asks 1.6 percent of their slots, its cache 3.9.
+  - `--bout lastwick --standin`: before the median 0:52 and the stand-in's place 2.48 (5th or
+    worse in 2 of 144); after 1:22 and 5.44 (5th or worse in 113 of 144), never first. Over a
+    match of Lastwick alone it banks 5.7 bushels where it banked 25.0.
+  - `--standin`, the released pool: the stand-in banks 2.9 bushels a match where it banked 12.3
+    (an even share 13.1), placing 5.4 in Lastwick (2.7) and 7.3 in Starglean (7.3).
+  - `--bout starglean` prints the same summary before and after.
 
 ## After the first release
 

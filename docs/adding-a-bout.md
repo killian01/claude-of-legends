@@ -22,9 +22,11 @@ contract and Adding a bout) and the build plan (`docs/plan-thornfray.md`).
 | `tests/thornfray_bout_versions.test.ts` | Its first bout's and its Final's ends on match seed 1. |
 | `CONTEXT.md` | Its entry, written with the design before any code. |
 
-No module of its own: its count is the shared survival scorer, it stands no goal, and its bots
-have no errand. Nothing under `src/sim/royale/` moved, and neither did `BOUT_ENGINE_VERSION`
-nor `ROYALE_RULES_VERSION`.
+No module of its own: its count is the shared survival scorer and it stands no goal. Nothing
+under `src/sim/royale/` moved, and neither did `BOUT_ENGINE_VERSION` nor `ROYALE_RULES_VERSION`.
+Its bots' errand, the hunt (`huntCall` in `src/sim/royale/bot/bout_calls.ts`), came later
+(`docs/plan-thornfray.md` slice 9) with engine work every bout shares: each seat's memory of
+where it has looked (`src/sim/royale/bouts/sweep.ts`, `ObsBout.sweep`) and a kind's `health`.
 
 ## The checklist
 
@@ -77,8 +79,11 @@ Field by field, with Lastwick's choices:
 - `base`: `'one_life'` or `'respawn'`. Lastwick is One life: a fall is out for the bout.
 - `playS`: 90 to 120 seconds from landing to the clock's end. Every bout stops at its clock,
   and a One life bout also stops as soon as one champion stands. Lastwick's light goes out at
-  92 s and the dark's burn (12 percent a second, more every 10 s) ends it by about 100 s, so its
+  104 s and the dark's burn (12 percent a second, more every 10 s) ends it by about 110 s, so its
   clock stands at 120 s as a backstop that never decides a bout the dark can.
+- `health`: every seat's health as a share of the planet's, absent for the planet's. The Dusk
+  burns a share of the maximum, so it lengthens the fights alone. Lastwick: 2.1, which with its
+  Dusk makes eight house bots last about a minute and a half rather than fifty seconds.
 - `thornyard`: the chord radius (40 m, about 5,030 m2) and the regions it may stand in (absent
   for all six).
 - `dusk`: the closings inside the Thornyard, first to last, each smaller than the light before
@@ -86,7 +91,7 @@ Field by field, with Lastwick's choices:
   from the landing. They are numbered from the end: the last closing is always phase 5 and the
   dark always phase 6, so Lastwick's three are phases 3, 4 and 5. `edgeSpeed` (1.1 m/s for a
   bout's small caps), `burnBefore` (the outside of the Thornyard burns from the first second:
-  3 percent), `lightOutS` (92). With Seedfalls the light is held at least to the clock plus their
+  3 percent), `lightOutS` (104). With Seedfalls the light is held at least to the clock plus their
   forecast whatever this says.
 - `systems`: every system of the planet is off unless named (`pads`, `burr`, `lastLight`,
   `marks`, `clamors`, `upstart`, `camps`), and the Risings rise only at the times named in
@@ -99,8 +104,8 @@ Field by field, with Lastwick's choices:
 - `bots`: the kind's entry in `src/sim/content/bots/bout_skills.ts` (step 5): the errand's id in
   `BOUT_CALLS` or `null`, its health floor and reach, the Dusk margin as a share of the skill's,
   the cornered light in meters, the calm nerve (`0` for none), the pace (`null` for none).
-  Lastwick: `LASTWICK_BOTS`, no errand, half the Dusk margin, cornered under 8 m, no calm and no
-  pace.
+  Lastwick: `LASTWICK_BOTS`, the hunt from any health across the whole Thornyard, half the Dusk
+  margin, cornered under 8 m, no calm and no pace.
 - `hud`: the count's word on the top line and whether the count reads as a place (Lastwick:
   `'left'`, a place).
 
@@ -139,8 +144,9 @@ place of the fifty seat tunings: its policy carries them as it carries the seat'
   `{ why, action }` or `null`, answering the goal from the observation alone (`sense.r.bout` and
   its `goals`). The brain asks it only after the fight block, where the planet's calls are
   asked, so it never walks a bot past a fight. Starglean's is `glean` (`gleanCall`): from its
-  floor, the called Seedfall it would reach first, else a cache in reach. A kind with no errand
-  says `errand: null`, as Lastwick does: the fights and the light are the bout.
+  floor, the called Seedfall it would reach first, else a cache in reach. Lastwick's is `hunt`
+  (`huntCall`): with no enemy in sight, a cache in sight, then the light it has not swept
+  (`sense.r.bout.sweep`). A kind with no errand says `errand: null`.
 - **Nothing before the fight**: the one rule asked before the fight block is the engine's
   (`beginHeldOpening`, a landed Seedfall's held opening a step away); a kind adds none.
 
@@ -169,11 +175,11 @@ Wanderseed. Every kind's test covers at least:
 - the errand walks to the goal, and a bot in reach of an enemy still fights;
 - a replay of the bout, loaded from the registry, matches its checksum and its counts.
 
-Lastwick's adds its own rule: the Thornyard's cap and its three closings as phases 3, 4 and 5;
-the light out at 92 s (phase 6); twelve caches inside it, none back; nobody landing outside it;
-the outside burning 3 percent a second from the first tick; the places the order of the falls,
-a same-tick pair by the health before; its clock a backstop that ranks those standing by
-health; no Seedfall, Rising, camp, pad, mark, Burr or Upstart.
+Lastwick's adds its own rule: the Thornyard's cap and its three closings as phases 3, 4 and 5; the
+light out at 104 s (phase 6); every seat at its health; twelve caches inside it, none back; nobody
+landing outside it; the outside burning 3 percent a second from the first tick; the places the order
+of the falls, a same-tick pair by the health before; its clock a backstop that ranks those standing
+by health; no Seedfall, Rising, camp, pad, mark, Burr or Upstart.
 
 Run before the PR:
 

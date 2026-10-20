@@ -242,6 +242,9 @@ export interface BoutState {
   fellHp: (number | null)[];
   // The kind's goals' state, in the kind's order.
   goals: ({ id: string } & GoalSlot)[];
+  // Where each seat has looked (bouts/sweep.ts): by seat, the sim time
+  // each of the Thornyard's lookouts was last in its sight, -1 never.
+  swept: number[][];
   // The prizes offered at the drop, in order: those carried unpicked from
   // the bout before with their cards, then the last bout's winner's, its
   // cards drawn then (null).

@@ -4,11 +4,14 @@
 // observation alone. The brain (brain.ts) asks the kind's errand only after
 // its whole fight block, where the planet's calls are asked: a bot with an
 // enemy in sight decides that fight by its odds first, every time, and
-// only a bot that passed on it walks on. In a bout the planet's Respawn
-// Seedfall errand never runs, so no errand walks a bot past a fight. One
-// rule is asked before the fight block, beside the held opening it begins
-// (beginHeldOpening): a landed Seedfall's cache a step away, for a bot no
-// enemy is striking. Numbers are data (content/bots/bout_skills.ts).
+// only a bot that passed on it walks on. Starglean's bots glean (gleanCall),
+// Lastwick's hunt (huntCall): with no enemy in sight they sweep the light
+// toward what their own sight has not taken in (royale/bouts/sweep.ts). In
+// a bout the planet's Respawn Seedfall errand never runs, so no errand
+// walks a bot past a fight. One rule is asked before the fight block,
+// beside the held opening it begins (beginHeldOpening): a landed
+// Seedfall's cache a step away, for a bot no enemy is striking. Numbers
+// are data (content/bots/bout_skills.ts).
 
 import {
   GLEAN_BESIDE_M,
@@ -16,6 +19,9 @@ import {
   GLEAN_LIT_MARGIN_S,
   GLEAN_SEEDFALL_M,
   GLEAN_STEP_IN_M,
+  HUNT_CACHE_M,
+  HUNT_LIT_MARGIN_S,
+  HUNT_STALE_S,
 } from '../../content/bots/bout_skills';
 import type { BoutBots } from '../../content/bouts/types';
 import { dist, type Vec3 } from '../../geo';
@@ -25,11 +31,15 @@ import { depthInside, insideCap } from '../dusk';
 import { p3, type Sense } from './sense';
 import {
   approachSeedfall,
+  duskMarginOf,
   holdStill,
   lootCache,
   moveTo,
+  pickCache,
+  SAFE_DEPTH_M,
   secondsToDarkAt,
   seedfallCache,
+  walkVia,
 } from './travel';
 
 // Whether the light holds a point for `seconds` more, as far as the
@@ -180,9 +190,74 @@ export function beginHeldOpening(sense: Sense): BoutErrand | null {
   return { why: 'step-in', action: moveTo(sense, p3(best)) };
 }
 
+// Seconds the bot would need from `p` back into the Dusk's next cap with
+// its margin, as beatDusk (travel.ts) asks of where it stands: a lookout in
+// the band is worth walking to only while the light holds it that much
+// longer, or the walk there is turned back at once.
+export function backS(sense: Sense, p: Vec3): number {
+  const next = sense.next;
+  if (!next) return 0;
+  const out = SAFE_DEPTH_M - depthInside(next, p);
+  return out > 0 ? out / Math.max(1, sense.speed) + duskMarginOf(sense) : 0;
+}
+
+// Where the hunt sweeps next (Lastwick's errand): of the Thornyard's
+// lookouts the seat remembers (ObsBout.sweep, bouts/sweep.ts), within
+// `reach` and lit until the bot would have stood there HUNT_LIT_MARGIN_S
+// and walked back into the next cap (litFor, backS), one it has not seen
+// for HUNT_STALE_S or never: the nearest inside the Dusk's next cap first
+// (the ground the light keeps), then the nearest in the band it takes
+// next; when it has seen every lit one since, the one it saw longest ago,
+// then the nearest; ties to the lower index. Only ground the light holds
+// is asked, so the sweep closes on the light's heart as the Dusk does.
+// Null when no lookout is lit.
+export function sweepGoal(sense: Sense, reach: number): Vec3 | null {
+  const now = sense.obs.time;
+  const next = sense.next;
+  let best: Vec3 | null = null;
+  // 0 a stale lookout inside the next cap, 1 a stale one in the band, 2
+  // one seen since.
+  let bestTier = 3;
+  let bestSeen = Number.POSITIVE_INFINITY;
+  let bestD = Number.POSITIVE_INFINITY;
+  for (const p of sense.r.bout?.sweep ?? []) {
+    const at = p3(p);
+    const d = dist(sense.me, at);
+    if (d > reach) continue;
+    const stale = p.seen === null || now - p.seen >= HUNT_STALE_S;
+    const tier = !stale ? 2 : next && !insideCap(next, at) ? 1 : 0;
+    if (tier > bestTier) continue;
+    const seen = stale ? Number.NEGATIVE_INFINITY : p.seen!;
+    if (tier === bestTier && (seen > bestSeen || (seen === bestSeen && d >= bestD))) continue;
+    if (!litFor(sense, at, walkS(sense, at) + backS(sense, at) + HUNT_LIT_MARGIN_S)) continue;
+    best = at;
+    bestTier = tier;
+    bestSeen = seen;
+    bestD = d;
+  }
+  return best;
+}
+
+// Lastwick's errand, the hunt: a bot with no enemy in sight opens a cache
+// within HUNT_CACHE_M first (pickCache: on safe ground, a golden one
+// counted 10 m nearer), then sweeps the lit Thornyard toward what it has
+// not seen (sweepGoal), so a champion hiding is found the way a person
+// finds one: by looking, the bushes from inside. Its memory is its own
+// sight's and nothing else's. With an enemy in sight, or under the kind's
+// floor, none: the fight block has decided, and the brain's own walk goes
+// on.
+export function huntCall(sense: Sense, bots: BoutBots): BoutErrand | null {
+  if (sense.enemies.length > 0 || sense.s.hpFrac < bots.floor) return null;
+  const c = pickCache(sense, HUNT_CACHE_M);
+  if (c) return { why: 'hunt-cache', action: lootCache(sense, c) };
+  const goal = sweepGoal(sense, bots.reach);
+  return goal ? { why: 'hunt', action: walkVia(sense, goal) } : null;
+}
+
 // Every errand a kind may name, by its id.
 export const BOUT_CALLS: Readonly<Record<string, BoutCall>> = {
   glean: gleanCall,
+  hunt: huntCall,
 };
 
 // The errand the bout's kind names, asked for this slot; null on the

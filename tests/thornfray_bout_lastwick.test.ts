@@ -2,7 +2,8 @@
 // docs/plan-thornfray.md slice 2), on the real Wanderseed through the one
 // construction (src/net/replay.ts buildBoutSim): the Thornyard a cap of
 // 40 m around its region's heart, its three closings phases 3, 4 and 5 and
-// the light out at 92 s (phase 6); twelve caches inside it, none back;
+// the light out at 104 s (phase 6); every seat at the kind's health;
+// twelve caches inside it, none back;
 // nobody landing outside it; the outside burning 3 percent a second from
 // the first tick; eight house bots ending the bout by its rule by 115 s;
 // the places the order of the falls, a same-tick pair placed by the health
@@ -15,6 +16,7 @@ import { loadRoyaleReplay, royaleReplayPlayable } from '../src/net/replay';
 import { BOUT_KINDS } from '../src/sim/content/bouts';
 import { LASTWICK } from '../src/sim/content/bouts/lastwick';
 import { BOUT_SEATS } from '../src/sim/content/bouts/match';
+import type { BoutKind } from '../src/sim/content/bouts/types';
 import { DARK_BURN } from '../src/sim/content/dusk';
 import type { Vec3 } from '../src/sim/geo';
 import { Rng } from '../src/sim/rng';
@@ -77,42 +79,43 @@ describe('the Lastwick Dusk', () => {
         const at = (t: number) => duskAt(s, DROP_S + t);
         // The calm: the Thornyard lit, the outside burning 3 percent.
         expect(at(0)).toMatchObject({ phase: 0, burn: 0.03, now: s.caps[0] });
-        expect(at(19.9).phase).toBe(0);
-        // Phase 3 closes to 26 m from 20 to 35 s and holds to 45.
-        expect(at(20)).toMatchObject({ phase: 3, shrinking: true, burn: 0.04 });
-        expect(at(35)).toMatchObject({ phase: 3, shrinking: false, burn: 0.04 });
-        expect(at(35).now.radius).toBe(26);
-        // Phase 4 to 14 m from 45 to 60, holds to 70.
-        expect(at(45)).toMatchObject({ phase: 4, shrinking: true, burn: 0.07 });
-        expect(at(60).now.radius).toBe(14);
-        expect(at(69.9).phase).toBe(4);
-        // Phase 5 to 5 m from 70 to 82, holds to 92.
-        expect(at(70)).toMatchObject({ phase: 5, shrinking: true, burn: 0.12 });
-        expect(at(81.9).now.radius).toBeGreaterThan(5);
-        expect(at(82)).toMatchObject({ phase: 5, shrinking: false, burn: 0.12 });
-        expect(at(82).now.radius).toBe(5);
-        expect(at(91.9).phase).toBe(5);
+        expect(at(14.9).phase).toBe(0);
+        // Phase 3 closes to 26 m from 15 to 30 s and holds to 45, at 7
+        // percent.
+        expect(at(15)).toMatchObject({ phase: 3, shrinking: true, burn: 0.07 });
+        expect(at(30)).toMatchObject({ phase: 3, shrinking: false, burn: 0.07 });
+        expect(at(30).now.radius).toBe(26);
+        // Phase 4 to 14 m from 45 to 62, holds to 75, at 8 percent.
+        expect(at(45)).toMatchObject({ phase: 4, shrinking: true, burn: 0.08 });
+        expect(at(62).now.radius).toBe(14);
+        expect(at(74.9).phase).toBe(4);
+        // Phase 5 to 5 m from 75 to 92, holds to 104.
+        expect(at(75)).toMatchObject({ phase: 5, shrinking: true, burn: 0.12 });
+        expect(at(91.9).now.radius).toBeGreaterThan(5);
+        expect(at(92)).toMatchObject({ phase: 5, shrinking: false, burn: 0.12 });
+        expect(at(92).now.radius).toBe(5);
+        expect(at(103.9).phase).toBe(5);
       }
     }
   });
 
-  it('puts the light out at 92 s, phase 6, burning harder every 10 s', () => {
+  it('puts the light out at 104 s, phase 6, burning harder every 10 s', () => {
     const plan = boutPlan(LASTWICK, thornyardOf(layout, 'lakes', 40));
-    expect(plan.dusk.lightOutS).toBe(92);
+    expect(plan.dusk.lightOutS).toBe(104);
     const s = drawDusk(new Rng(4), layout, ground, DROP_S, plan.dusk);
-    const dark = duskAt(s, DROP_S + 92);
+    const dark = duskAt(s, DROP_S + 104);
     expect(dark.phase).toBe(DARK_PHASE);
     expect(dark.now.radius).toBe(0);
-    expect(dark.phaseEndsAt).toBe(DROP_S + 92);
+    expect(dark.phaseEndsAt).toBe(DROP_S + 104);
     expect(dark.burn).toBeCloseTo(DARK_BURN, 9);
-    expect(duskAt(s, DROP_S + 102).burn).toBeCloseTo(2 * DARK_BURN, 9);
+    expect(duskAt(s, DROP_S + 114).burn).toBeCloseTo(2 * DARK_BURN, 9);
 
     // On the bout's own clock: every phase told on its tick.
     const { sim, unitIds } = buildBout({ kind: LASTWICK, region: 'lakes', seed: 4 });
     idle(sim, unitIds);
     land(sim);
     const told: { phase: number; at: number }[] = [];
-    while (sim.time < DROP_S + 95) {
+    while (sim.time < DROP_S + 107) {
       const at = sim.time - DROP_S;
       // Kept alive: the light's times are the test, not the falls.
       for (const u of champions(sim)) u.hp = u.maxHp;
@@ -121,9 +124,25 @@ describe('the Lastwick Dusk', () => {
     expect(told.map((t) => t.phase)).toEqual([3, 4, 5, DARK_PHASE]);
     // On the first tick at or past each time (the clock adds DT a tick).
     told.forEach((t, i) => {
-      const want = [20, 45, 70, 92][i]!;
+      const want = [15, 45, 75, 104][i]!;
       expect(t.at).toBeGreaterThan(want - 1e-6);
       expect(t.at).toBeLessThan(want + DT + 1e-6);
+    });
+  });
+});
+
+describe('a Lastwick seat', () => {
+  it("lands at 2.1 times the planet's health, full", () => {
+    expect(LASTWICK.health).toBe(2.1);
+    const { health: _health, ...plain } = LASTWICK;
+    const seats = (kind: BoutKind) => {
+      const { sim, unitIds } = buildBout({ kind, region: 'ruins', seed: 5 });
+      return unitIds.map((id) => sim.units.get(id)!);
+    };
+    const planetHealth = seats(plain);
+    seats(LASTWICK).forEach((u, i) => {
+      expect(u.maxHp / planetHealth[i]!.maxHp).toBeCloseTo(2.1, 9);
+      expect(u.hp).toBe(u.maxHp);
     });
   });
 });

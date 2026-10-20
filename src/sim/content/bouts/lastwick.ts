@@ -1,13 +1,18 @@
 // Lastwick (CONTEXT.md: Lastwick; docs/design/thornfray.md, Lastwick): the
-// last one standing, fast. One life's death, a fall out for the bout,
-// under a Dusk that closes on its Thornyard in three closings (phases 3, 4
-// and 5, numbered from the end) to five meters by 82 s, the outside burning
-// from the first second, the light out at 92 s. Twelve caches at landing,
-// none back. Its count is the shared survival scorer (royale/bouts/count.ts):
-// the order of the falls, a same-tick pair placed by the health it had the
-// tick before, as One life places its fallen (royale/score.ts placeFallen
-// and oneLifeRanking). Its clock stands past the dark as a backstop: the
-// dark's burn ends the bout by its rule well before it.
+// last one standing. One life's death, a fall out for the bout, every seat
+// at 2.1 times the planet's health, under a Dusk that closes on its
+// Thornyard in three closings (phases 3, 4 and 5, numbered from the end)
+// to five meters by 92 s, the outside burning from the first second, the
+// light out at 104 s. Twelve caches at landing, none back. Its count is the
+// shared survival scorer (royale/bouts/count.ts): the order of the falls,
+// a same-tick pair placed by the health it had the tick before, as One
+// life places its fallen (royale/score.ts placeFallen and oneLifeRanking).
+// Its clock stands past the dark as a backstop: the dark's burn ends the
+// bout by its rule well before it. The numbers are measured
+// (scripts/thornfray_report.mjs, docs/plan-thornfray.md slice 9): the
+// health makes a bout of eight house bots last about a minute and a half
+// rather than fifty seconds, and the first closing's burn ends a seat that
+// gives no orders, standing outside it, before half the field.
 
 import { survivalScorer } from '../../royale/bouts/count';
 import { LASTWICK_BOTS } from '../bots/bout_skills';
@@ -26,16 +31,17 @@ export const LASTWICK: BoutKind = {
   released: true,
   base: 'one_life',
   playS: 120,
+  health: 2.1,
   thornyard: { radius: 40 },
   dusk: {
     closings: [
-      { radius: 26, closeFrom: 20, closeTo: 35, holdTo: 45, burn: 0.04 },
-      { radius: 14, closeFrom: 45, closeTo: 60, holdTo: 70, burn: 0.07 },
-      { radius: 5, closeFrom: 70, closeTo: 82, holdTo: 92, burn: 0.12 },
+      { radius: 26, closeFrom: 15, closeTo: 30, holdTo: 45, burn: 0.07 },
+      { radius: 14, closeFrom: 45, closeTo: 62, holdTo: 75, burn: 0.08 },
+      { radius: 5, closeFrom: 75, closeTo: 92, holdTo: 104, burn: 0.12 },
     ],
     edgeSpeed: 1.1,
     burnBefore: 0.03,
-    lightOutS: 92,
+    lightOutS: 104,
   },
   systems: { clamors: true },
   caches: { count: 12, backS: null },

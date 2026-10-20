@@ -51,6 +51,27 @@ export function seesPoint(map: GameMap, u: Unit, p: Vec2, time: number): boolean
   return !sightBlocked(map, u.pos, p);
 }
 
+// Whether `u` would see a champion standing at `p`, by computeVisibility's
+// rules: within its sight range (blinds shrink it); within the map's close
+// sight always; past it, `p` out of brush (`pBrush`, brushIndexAt) or in
+// the observer's own bush (`uBrush`), and no wall on the line. What a bout
+// seat's memory of where it has looked reads (royale/bouts/sweep.ts): a
+// spot in a bush is looked into only from inside it or a step away.
+export function seesSpot(
+  map: GameMap,
+  u: Unit,
+  uBrush: number,
+  p: Vec2,
+  pBrush: number,
+  time: number,
+): boolean {
+  const d = dist(u.pos, p);
+  if (d > u.sightRange * sightFactor(u, time)) return false;
+  if (map.closeSight !== undefined && d <= map.closeSight) return true;
+  if (pBrush !== -1 && uBrush !== pBrush) return false;
+  return !sightBlocked(map, u.pos, p);
+}
+
 // Sim.isPointVisible for many points at one moment (every camp spot for
 // every team, once a tick): each team's alive units gathered once instead
 // of every unit walked for each point and team. The same answers, by the
