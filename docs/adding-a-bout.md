@@ -191,9 +191,21 @@ node scripts/thornfray_report.mjs --bout <id> --seeds 6
 
 Its length against 90 to 120 s, whether its rule or its clock ended it, the spread of its
 places, the fighting share against Lastwick's, its own counts; the numbers go in the PR. The
-report lands with slice 8 of `docs/plan-thornfray.md`; until then the PR carries the test's own
-figures. Lastwick's, with its bots fighting on sight: on seeds 1 to 6 its rule ended it at 50, 52,
-50, 63, 66 and 61 s, seven takedowns each, the first fall at 10 to 15 s.
+report (`scripts/thornfray_report.ts`, its figures in `scripts/thornfray_measure.ts`) plays six
+whole matches of that kind alone, built as the server builds them, and a battle royale in its
+death rule beside them for the planet's fighting share; `--standin` adds a seat that gives no
+order, `--prize all` keeps the prize all match. Lastwick's and Starglean's on seeds 1 to 6, to
+hold a new kind against:
+
+| | Lastwick | Starglean |
+|---|---|---|
+| Ended by | its rule, 36 of 36 | its clock, 36 of 36 |
+| Length | 35 to 71 s, median 51 s | 105 s |
+| First fall (median) | 10 s | 9 s |
+| A bout | 7 takedowns, 0.53 caches a seat | 19.8 takedowns, 2.26 caches a seat, 8.8 Seedfall caches |
+| The winner's count (median) | 8 left | 11 gleaned |
+| Fighting, an enemy in reach | 86.7 percent | 84.7 percent |
+| The planet's (seed 1) | 29.7 percent, One life | 63.1 percent, Respawn |
 
 ### 9. Release
 

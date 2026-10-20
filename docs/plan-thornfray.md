@@ -660,6 +660,60 @@ on the tick's `damage` events, plays the whole chain. The battle royale does not
 - `scripts/*.ts` is outside `pnpm check`: the slice runs the report once on seeds 1 to 6 and
   puts the numbers in the PR. Slices 2 to 4 measure with it once it lands; until then their PRs
   carry the tests' figures.
+- As built:
+  - Three files, not two: `scripts/thornfray_report.ts` is the command line alone, and what it
+    plays and prints is `scripts/thornfray_measure.ts`. A test importing
+    `scripts/thornfray_report` reaches the bundling wrapper of the same name first (Vite takes
+    `.mjs` before `.ts`) and runs the whole report, so the measure has its own name, as
+    `scripts/meta_report.ts` has `meta.mjs`. Imported by a test, the measure is under
+    `pnpm check` after all.
+  - Each match is built the way the server builds one nobody joined: `dealThornfray` and
+    `nextBoutBuild` (`server/thornfray_match.ts`) over the ledger, each bout through
+    `royaleFactory`, so through `buildBoutSim`. Two departures from the server's build, both
+    the report's options: the stand-in's seat has no bot (the factory seats it as a person's,
+    and nobody gives it an order), and the Grafts carried in follow `--prize` rather than the
+    shipped `PRIZE_LASTS`. Each bot seat's policy is attached again with the brain's trace
+    (the same `decide` call `royalePolicy` makes, its labels counted), so the report also
+    prints what the bots decided. `tests/thornfray_report.test.ts` checks that the bout the
+    report plays has the server's checksum and ranking in each kind; dropping the bout's
+    numbers from that call turns it red.
+  - The planet's figure is played, not quoted: `--planet N` (default 1) plays N battle royales
+    of fifty house bots in each death rule the kinds use, dealt as the server deals one, and
+    reads the same share the same way (`royale_report.ts`'s yardstick: an enemy in sight
+    within 8 m, fighting when the bot dealt a champion damage in the last 3 s); 0 skips them.
+    `--standin` puts the seat that gives no order on seat 0, the seat a person is dealt first.
+    The summary groups "a bout's winner wins the next" by the `--prize` each match was played
+    under, so dumps of both lengths merged print the two side by side.
+  - `tests/thornfray_report.test.ts`: the command line, the next bout's build (the stand-in's
+    seat, the prize's length), the report's bout against the server's in Lastwick and
+    Starglean, a whole match with the stand-in chained through the ledger (six bouts, every
+    ranking whole, every bout paying 15 bushels and the Final 30, the totals and the table, a
+    bot winner taking a card of its prize in the next Lull), and the summary's figures on rows
+    written by hand. About 4 s.
+  - Measured on seeds 1 to 6, the released pool, the shipped prize (`node
+    scripts/thornfray_report.mjs`, 27 s with the two battle royales): Lastwick (18 bouts) ended
+    by its rule every time, at 37 to 64 s (median 52 s), the first fall at 9 s (median), seven
+    takedowns, 0.1 falls to the Dusk, 0.40 caches a seat; Starglean (18 bouts) at its clock
+    every time, 20.2 takedowns, 8.9 of 9 Seedfall caches, 2.28 caches a seat (about 18 a bout),
+    the winner's count 11 (median); the bots fighting 86.8 and 85.2 percent of the seconds an
+    enemy is in reach, against 29.7 (One life) and 63.1 (Respawn) in a battle royale on seed 1;
+    bushels by final place 23.8, 21.2, 17.2, 14.7, 10.5, 8.5, 5.7, 3.5; the leader before the
+    Final wins 1 of 6; a bout's winner wins the next 9 of 30; a tick 0.04 to 0.08 ms.
+  - Measured for the prize's open question, seeds 1 to 30 under each length: a bout's winner
+    wins the next 27 of 150 (18.0 percent) when the prize lasts the next bout, 28 of 150 (18.7)
+    when it lasts the match, against an even chance of 12.5; the leader before the Final wins
+    13 of 30 and 14 of 30. The two lengths do not measure apart on house bots.
+  - Open, the stand-in (`--standin`, seeds 1 to 6): a seat that gives no order places 2.5 on
+    average in Lastwick (never first: the last bot standing ends the bout) and 6.9 in
+    Starglean, and ends a match on 13.8 bushels, more than an even share (105 bushels over
+    eight seats, 13.1). It lands somewhere quiet inside the Thornyard and the bots, fighting on
+    sight, fight each other first. Whether an idle seat should outlast the fighters is the
+    maintainer's call (One life's placing, the Dusk's closings, or the bots' search).
+  - Open, from the figures: Lastwick still lasts about 50 s against the design's 90 to 120;
+    Starglean opens about 18 caches a bout against its 30 to 40, the fewest in the Cypress
+    groves (1.92 a seat over 34 bouts of the sixty matches above, 3.00 in the Ruins); the bots'
+    skills hardly part in a bout (mean place over those matches: strong 4.3 to 4.5, gentle 4.4
+    to 4.7).
 
 ## After the first release
 
