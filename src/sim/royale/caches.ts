@@ -268,3 +268,15 @@ export function standingCaches(caches: readonly CacheState[]): CacheState[] {
 export function openingBy(caches: readonly CacheState[], unitId: number): CacheState | null {
   return caches.find((c) => c.present && c.opener === unitId) ?? null;
 }
+
+// Whether the idle defense (idle_defense.ts) holds a champion's fire: while
+// it opens a cache and nothing has struck it for a plain opening's time.
+// An enemy walking by does not break the opening with an unasked swing; one
+// that strikes is fought back, for a person and a bot alike.
+export function openingHoldsFire(
+  caches: readonly CacheState[],
+  u: { id: number; lastDamagedAt: number },
+  time: number,
+): boolean {
+  return time - u.lastDamagedAt > CACHE_OPEN_S && openingBy(caches, u.id) !== null;
+}

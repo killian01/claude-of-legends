@@ -105,7 +105,9 @@ export const CLAMOR_S = 3;
 // champions in crews that land, come back and arrive together and score
 // and fall as one; in every crew size an Arrival's foe, a return's and an
 // Arrival's clearance and a bot's hunt read only other crews.
-export const ROYALE_RULES_VERSION = 13;
+// 14: a champion opening a cache holds its idle fire until something
+// strikes it (caches.ts openingHoldsFire, idle_defense.ts).
+export const ROYALE_RULES_VERSION = 14;
 
 // One of the Dusk's caps: a circle on the sphere, its radius a chord.
 export interface DuskCap {

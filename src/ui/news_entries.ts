@@ -35,6 +35,16 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
+    day: '2026-10-21',
+    title: 'A cache opening keeps through a passing enemy',
+    body: [
+      'Standing by a cache to open it, your champion no longer swings by itself at an enemy ' +
+        'who walks into reach, a swing that used to break the opening. The champion holds its ' +
+        'fire until the cache opens, unless something strikes it: then it fights back as before. ' +
+        'The same rule holds for every champion, the house bots included.',
+    ],
+  },
+  {
     day: '2026-10-20',
     title: 'Thornfray: eight champions, six bouts',
     body: [
