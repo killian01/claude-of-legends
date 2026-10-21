@@ -176,7 +176,14 @@ export class BotStore {
   constructor(file: string) {
     if (file !== ':memory:') mkdirSync(path.dirname(file), { recursive: true });
     this.db = new DatabaseSync(file);
-    this.db.exec('pragma journal_mode = wal');
+    try {
+      this.db.exec('pragma journal_mode = wal');
+    } catch (err) {
+      // A file that fails here is opened again by the caller; this
+      // handle must not stay open beside the next one.
+      this.db.close();
+      throw err;
+    }
     this.db.exec(SCHEMA);
     // A store created before the night coach gains its columns in place;
     // create-if-not-exists alone never alters an existing table.
