@@ -55,6 +55,9 @@ export type Status =
   // Marks are keyed per SOURCE: two casters stacking marks on one target
   // build separate pools, so their trigger thresholds never cross.
   | { kind: 'mark'; until: number; stacks: number; sourceId: number }
+  // The holder is Ostrand's Sworn (sworn.ts): one per source, renewed by
+  // the source's hits.
+  | { kind: 'sworn'; until: number; sourceId: number }
   | {
       kind: 'dot';
       until: number;

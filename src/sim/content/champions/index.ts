@@ -16,6 +16,7 @@ import { FENN } from './fenn';
 import { KORRATH } from './korrath';
 import { MAERA } from './maera';
 import { NISK } from './nisk';
+import { OSTRAND } from './ostrand';
 import { RHOKA } from './rhoka';
 import { SYLRA } from './sylra';
 import { TORV } from './torv';
@@ -99,6 +100,11 @@ export interface ChampionDef {
   // The basic attack's sound, one of the palette (content/sounds.ts): a
   // forged creator's pick. Absent, the model's weapon decides.
   attackSound?: AttackSoundId;
+  // The release switch: a champion still being built carries `false` and
+  // is dealt nowhere (no select screen, no bot seat, no royale pool, no
+  // id a host accepts); only UNRELEASED_CHAMPIONS, which the match's
+  // champion registry reads for tests, knows it. Absent means released.
+  released?: boolean;
 }
 
 const ALL: readonly ChampionDef[] = [
@@ -113,12 +119,21 @@ const ALL: readonly ChampionDef[] = [
   TORV,
   RHOKA,
   NISK,
+  OSTRAND,
 ];
 
+const RELEASED: readonly ChampionDef[] = ALL.filter((c) => c.released !== false);
+
 export const CHAMPIONS: Readonly<Record<string, ChampionDef>> = Object.fromEntries(
-  ALL.map((c) => [c.id, c]),
+  RELEASED.map((c) => [c.id, c]),
 );
 
-export const CHAMPION_LIST: readonly ChampionDef[] = ALL;
+export const CHAMPION_LIST: readonly ChampionDef[] = RELEASED;
+
+// The champions still behind the switch, by id: built and tested, never
+// dealt (docs/design/ostrand.md, the slices).
+export const UNRELEASED_CHAMPIONS: Readonly<Record<string, ChampionDef>> = Object.fromEntries(
+  ALL.filter((c) => c.released === false).map((c) => [c.id, c]),
+);
 
 export const DEFAULT_CHAMPION_ID = SYLRA.id;

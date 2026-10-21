@@ -52,6 +52,7 @@ falls back to the in-engine cinematic render when a file is missing
 | `korrath.webp` | Generated with Google Gemini from the Korrath prompt in docs/design/portrait-prompts.md | Google Gemini output terms |
 | `dain.webp`, `sylra.webp`, `fenn.webp`, `elowen.webp`, `ashvyn.webp`, `maera.webp`, `torv.webp`, `rhoka.webp` | Generated with Google Gemini from the prompts in docs/design/portrait-prompts.md | Google Gemini output terms |
 | `nisk.webp` | Generated with an image model from the Nisk prompt in docs/design/portrait-prompts.md, supplied by killian01 | The generator's output terms |
+| `ostrand.webp` | Generated with an image model from the Ostrand prompt in docs/design/portrait-prompts.md, supplied by killian01 | The generator's output terms |
 
 ## Tier emblems (`public/icons/tiers/`)
 

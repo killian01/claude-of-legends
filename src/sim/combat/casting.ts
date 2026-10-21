@@ -8,11 +8,13 @@ import type { CastSoundId } from '../content/sounds';
 import { cos } from '../exact';
 import { away, basis, copy, delta, dirTo, dist, dot, norm, offset, onSphere, settle } from '../geo';
 import { landingOn } from '../ground';
+import { raiseOathfield } from '../oathfield';
 import { passiveOf, runGraftCast } from '../passives';
 import type { CombatCtx } from '../sim_context';
 import type { SpellLook } from '../spell_look';
 import { isSpellTarget } from '../spell_targets';
 import { effectiveRank, RANK_BASE_SCALE, RANK_CD_SCALE } from '../stats';
+import { swear } from '../sworn';
 import { plantTrap, type TrapSpec } from '../traps';
 import type { AbilityKey, Vec2 } from '../types';
 import { hostile, type Unit } from '../unit';
@@ -113,6 +115,10 @@ export type CastSpec =
     }
   // A temporary rampart perpendicular to the cast direction (walls.ts).
   | { kind: 'wall'; length: number; duration: number }
+  // Ostrand's Oathfield (oathfield.ts): needs an enemy champion within
+  // `reach`, the nearest of which becomes the Sworn, then a closed ring of
+  // wall of `radius` rises around the caster for `duration` seconds.
+  | { kind: 'oathfield'; reach: number; radius: number; duration: number }
   // A hidden pod planted at the aim (traps.ts): unseen by enemies but
   // under their own reveal zone, it bursts into a field when one steps on
   // it.
@@ -185,6 +191,22 @@ function clampToRange(from: Vec2, aim: Vec2, range: number): Vec2 {
 // is the caster's own spot.
 function headingTo(from: Vec2, to: Vec2): Vec2 {
   return dirTo(from, aimOnGround(from, to)) ?? basis(from).east;
+}
+
+// The living enemy champion nearest the caster within `reach`, if any.
+export function nearestEnemyChampion(ctx: CombatCtx, caster: Unit, reach: number): Unit | null {
+  let best: Unit | null = null;
+  let bestD = reach;
+  for (const u of ctx.units.values()) {
+    if (u.kind !== 'champion' || !hostile(caster, u) || u.dead || ctx.dead.has(u.id)) continue;
+    if (isUntargetable(u, ctx.time)) continue;
+    const d = dist(caster.pos, u.pos);
+    if (d <= bestD) {
+      bestD = d;
+      best = u;
+    }
+  }
+  return best;
 }
 
 function findEnemyTarget(
@@ -409,6 +431,13 @@ export function executeCast(
       raiseWall(ctx, caster.id, caster.team, at, away(at, caster.pos), spec.length, spec.duration);
       return true;
     }
+    case 'oathfield': {
+      const sworn = nearestEnemyChampion(ctx, caster, spec.reach);
+      if (!sworn) return false;
+      swear(ctx, caster, sworn, true);
+      raiseOathfield(ctx, caster.id, caster.team, copy(caster.pos), spec.radius, spec.duration);
+      return true;
+    }
     case 'trap':
       plantTrap(ctx, caster, spec, clampToRange(caster.pos, aim, castRange), power, vfx);
       return true;
@@ -465,6 +494,8 @@ export function castAbility(
     const at = clampToRange(caster.pos, aim, def.castRange);
     if (!findEnemyTarget(ctx, caster, at, spec.searchRadius, def.castRange)) return false;
   }
+  // The Oathfield needs an enemy champion in reach the same way.
+  if (spec.kind === 'oathfield' && !nearestEnemyChampion(ctx, caster, spec.reach)) return false;
   // An ally-seeking dash needs an ally the same way: no jump, no charge.
   if (spec.kind === 'dash' && spec.toAlly) {
     const at = clampToRange(caster.pos, aim, def.castRange);

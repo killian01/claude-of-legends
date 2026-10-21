@@ -109,6 +109,7 @@ export function burstOfSpec(spec: CastSpec): number {
     case 'dash':
       return burstOfEffects(spec.onLand) + burstOfEffects(spec.passThrough);
     case 'wall':
+    case 'oathfield':
       return 0;
     // One pod bursts under one step: its entry payload and the cloud's
     // ticks inside the window, like a zone's.

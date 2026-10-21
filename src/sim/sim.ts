@@ -48,6 +48,7 @@ import { createMapUnits } from './map_units';
 import { stepMinionAi } from './minion_ai';
 import { stepMovement } from './movement';
 import { NavGrid } from './navgrid';
+import { ringGoal } from './oathfield';
 import { initialObjectiveState, onWardenSlain, stepObjectives, wardenPitOf } from './objectives';
 import { passiveOf, runGraftTakedown, stepPassives } from './passives';
 import { playbookPolicy } from './playbook/interpreter';
@@ -831,7 +832,7 @@ export class Sim {
     u.holding = false;
     u.attackTargetId = null;
     u.attackMoveTarget = null;
-    u.path = this.ground.findPath(u.pos, point(x, z, y));
+    u.path = this.ground.findPath(u.pos, ringGoal(this.walls, u.pos, point(x, z, y)));
     if (this.royaleMode) noteOrder(this.royaleMode, unitId);
   }
 
@@ -866,7 +867,7 @@ export class Sim {
   orderPath(unitId: number, x: number, z: number, y?: number): void {
     const u = this.units.get(unitId);
     if (!u || u.moveSpeed <= 0 || u.dead) return;
-    u.path = this.ground.findPath(u.pos, point(x, z, y));
+    u.path = this.ground.findPath(u.pos, ringGoal(this.walls, u.pos, point(x, z, y)));
   }
 
   orderAttack(unitId: number, targetId: number): void {
@@ -891,7 +892,7 @@ export class Sim {
     u.holding = false;
     u.attackTargetId = null;
     u.attackMoveTarget = point(x, z, y);
-    u.path = this.ground.findPath(u.pos, point(x, z, y));
+    u.path = this.ground.findPath(u.pos, ringGoal(this.walls, u.pos, point(x, z, y)));
     if (this.royaleMode) noteOrder(this.royaleMode, unitId);
   }
 

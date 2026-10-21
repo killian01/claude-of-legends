@@ -202,6 +202,9 @@ export function costOfEffect(e: EffectSpec): number {
     }
     case 'cooldownRefund':
       return e.pctOfRemaining * P.cooldownRefundPerPct;
+    // A roster-only effect: the forge's bounds never admit it.
+    case 'swear':
+      return 0;
     case 'empower': {
       // Several strikes are paid one each, up to the window's pace; a
       // refreshing dot never stacks, so the strikes keep one running for
@@ -284,6 +287,9 @@ export function costOfCast(spec: CastSpec, castRange: number): number {
     }
     case 'wall':
       return spec.length * spec.duration * C.wallPerLengthSecond;
+    // A roster-only ring, priced as its walls: the forge never admits it.
+    case 'oathfield':
+      return 2 * Math.PI * spec.radius * spec.duration * C.wallPerLengthSecond;
     case 'trap': {
       const b = spec.burst;
       const ticks = b.duration / (b.tickEvery ?? 0.5);

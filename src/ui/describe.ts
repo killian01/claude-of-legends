@@ -70,6 +70,8 @@ function predicatePhrase(p: EffectPredicate): string {
       return 'against prey you set bleeding';
     case 'withinCenter':
       return `at the epicenter (within ${p.radius})`;
+    case 'targetSworn':
+      return 'against your Sworn';
   }
 }
 
@@ -154,6 +156,8 @@ function clause(e: EffectSpec): string {
       if (e.otherwise?.length) s += `; otherwise ${joinAnd(e.otherwise.map(clause))}`;
       return s;
     }
+    case 'swear':
+      return `makes it your ${span('tt-util', 'Sworn')}`;
     case 'cooldownRefund':
       return `refunds ${span('tt-util', pct(e.pctOfRemaining))} of ${e.key}'s remaining cooldown`;
     case 'empower': {
@@ -263,6 +267,12 @@ function describeCast(spec: CastSpec, castRange: number): string[] {
       return [
         `Raises a stone rampart (length ${spec.length}) across your aim for ${spec.duration}s.`,
         'It blocks walking and dashes; shots pass over it.',
+      ];
+    case 'oathfield':
+      return [
+        `Needs an enemy champion within ${spec.reach}; the nearest becomes your Sworn.`,
+        `Raises a ring of stone (radius ${spec.radius}) around you for ${spec.duration}s.`,
+        'Nobody walks or dashes across it; shots pass over it.',
       ];
     case 'trap': {
       const b = spec.burst;

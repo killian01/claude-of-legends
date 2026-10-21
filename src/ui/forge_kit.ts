@@ -170,6 +170,8 @@ export function defaultEffect(kind: EffectSpec['kind']): EffectSpec {
       };
     case 'cooldownRefund':
       return { kind, key: 'Q', pctOfRemaining: 0.5 };
+    case 'swear':
+      return { kind };
     case 'empower':
       return {
         kind,
@@ -363,6 +365,8 @@ export function defaultCast(kind: CastSpec['kind']): CastSpec {
       };
     case 'wall':
       return { kind, length: 4, duration: 4 };
+    case 'oathfield':
+      return { kind, reach: 4.5, radius: 5, duration: 4 };
     case 'trap':
       return {
         kind,
@@ -385,6 +389,7 @@ const CAST_KINDS = Object.keys(CAST_BOUNDS) as CastSpec['kind'][];
 // nests like chain, aftershock, and shield bursts wait for a later pass).
 const CAST_LISTS: Record<CastSpec['kind'], readonly { key: string; label: string }[]> = {
   skillshot: [{ key: 'onHit', label: 'on hit' }],
+  oathfield: [],
   zone: [
     { key: 'onEnter', label: 'on enter' },
     { key: 'onTick', label: 'each tick (enemies)' },
