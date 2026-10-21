@@ -9,7 +9,7 @@
 // (crewSeats(3)). Captured on c456598, under ROYALE_RULES_VERSION 13, before
 // Thornfray's bout seams (ADR 0035, docs/plan-thornfray.md) moved anything;
 // Respawn's and Trios' captured again under 14, a cache's opener holding its
-// idle fire.
+// idle fire; all three again under 15, Sylra's planet damage share.
 //
 // A red run means a seam moved the battle royale: a changed order of random
 // draws in the Dusk, the Seedfalls, the caches, the Grafts, the drop or the
@@ -38,9 +38,9 @@ interface Golden {
 }
 
 const GOLDEN = {
-  respawnSolo7: { landed60: 4222425139, end: 3067917388 },
-  oneLifeSolo7: { landed60: 2246274888, end: 3754226507 },
-  oneLifeTrios5: { landed60: 3103804265, end: 1263686581 },
+  respawnSolo7: { landed60: 3644220283, end: 2502181076 },
+  oneLifeSolo7: { landed60: 139977847, end: 1682199831 },
+  oneLifeTrios5: { landed60: 2796478872, end: 2163694926 },
 } satisfies Record<string, Golden>;
 
 const AFTER_LANDING_TICKS = Math.round(60 / DT);
