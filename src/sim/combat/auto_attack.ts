@@ -11,6 +11,7 @@
 
 import { CREATURES } from '../content/rings';
 import { copy, dist } from '../geo';
+import { ringGoal } from '../oathfield';
 import { passiveOf, runItemAttackHits } from '../passives';
 import type { CombatCtx } from '../sim_context';
 import { hostile, type Unit } from '../unit';
@@ -264,7 +265,7 @@ export function stepAutoAttacks(ctx: CombatCtx): void {
       if (u.moveSpeed <= 0) continue;
       const end = u.path[u.path.length - 1];
       if (!end || dist(end, target.pos) > REPATH_DISTANCE) {
-        u.path = ctx.ground.findPath(u.pos, target.pos);
+        u.path = ctx.ground.findPath(u.pos, ringGoal(ctx.walls, u.pos, target.pos));
       }
     } else {
       u.path = [];

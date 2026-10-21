@@ -24,6 +24,9 @@ export interface Wall {
   until: number;
   // The exact points blocked at creation, replayed by the unblock.
   samples: readonly Vec2[];
+  // A chord of a closed ring (oathfield.ts): the ring's center and radius,
+  // which a walk across it is aimed at the rim by.
+  ring?: { center: Vec2; radius: number };
 }
 
 // Raises a wall centered on `center`, perpendicular to `castDir` (a heading

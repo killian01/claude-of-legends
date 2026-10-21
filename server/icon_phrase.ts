@@ -19,6 +19,7 @@ const DELIVERY: Record<CastSpec['kind'], string> = {
   dash: 'a swift dash',
   wall: 'a conjured wall that blocks the path',
   trap: 'a hidden pod that bursts underfoot',
+  oathfield: 'a ring of stone raised around the caster',
 };
 
 // The effect kinds worth drawing, in the order they should be mentioned;
@@ -64,6 +65,7 @@ function effectLists(spec: CastSpec): readonly (readonly EffectSpec[] | undefine
     case 'dash':
       return [spec.onLand, spec.selfEffects, spec.passThrough];
     case 'wall':
+    case 'oathfield':
       return [];
     case 'trap':
       return [spec.burst.onEnter, spec.burst.onTick];

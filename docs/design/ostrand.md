@@ -103,7 +103,21 @@ person and bot alike (a person's click inside a ring walks to the rim).
    `released: false` (filtered out of select, the bot pool and the royale pool, with a test
    that it is); tests for the Sworn, the ring's push, dashes stopped at the rim, and bots and
    persons outside a ring.
+   Landed 2026-10-22: `content/champions/ostrand.ts` behind `released: false`
+   (`ChampionDef.released`; `CHAMPIONS` and `CHAMPION_LIST` hold released champions only,
+   `UNRELEASED_CHAMPIONS` is read by the match's champion registry alone), the Sworn
+   (`sim/sworn.ts`, a `sworn` status keyed by its source), the Oathfield (`sim/oathfield.ts`,
+   sixteen chords with a side-keeping push), and `ringGoal`: a walk or a chase whose goal
+   is across a standing ring aims at the point where its line meets the rim, on the
+   walker's side, so a click into a ring and a bot's chase end at the stone. Tests:
+   `tests/ostrand.test.ts`. Two first-pass simplifications, to revisit in slice 4: the
+   Sworn stride holds while the Sworn is within 8 (not only while walking toward it), and
+   Standard gives allies 15 armor and 15 magic resist instead of a damage share.
 3. Render and bots: the manifest entry and props, the mark and the ring's look, the hints and
-   the playbook, the royale build and tuning.
+   the playbook, the royale build and tuning. Carried over from slice 2: Gauntlet Throw's
+   recast (a traveling dash to the Sworn, a new recast kind beside `returnBlink`), the
+   Oathfield's damage reduction against champions outside the ring, and the ring falling
+   when Ostrand dies; a bot outside a ring picking the nearest reachable enemy. The portrait
+   is already in `public/portraits/ostrand.webp` (credited), shown once he is released.
 4. Balance with the headless tools, skins and laurel price, the portrait, the news entry, phone
    and desktop checked, and `released: true`.

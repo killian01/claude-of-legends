@@ -35,6 +35,7 @@ const STATUS_WORDS: Readonly<Record<Status['kind'], [word: string, tip: string]>
   slow: ['Slow', 'Slowed'],
   shield: ['Shield', 'Shield'],
   mark: ['Mark', 'Marked'],
+  sworn: ['Sworn', 'Sworn: Ostrand hunts this champion'],
   dot: ['Burn', 'Burning'],
   grievous: ['Grievous', 'Grievous wounds, less healing'],
   stealth: ['Hidden', 'Hidden'],

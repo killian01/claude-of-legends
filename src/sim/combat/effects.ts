@@ -23,6 +23,7 @@ import { landingOn } from '../ground';
 import type { DamageVia } from '../passive_types';
 import { passiveOf } from '../passives';
 import type { CombatCtx } from '../sim_context';
+import { isSwornBy, swear } from '../sworn';
 import type { AbilityKey, DamageType, Vec2 } from '../types';
 import type { Unit } from '../unit';
 import { dealDamage } from './damage';
@@ -87,7 +88,9 @@ export type EffectPredicate =
   // The target carries a damage-over-time from this effect's source.
   | { kind: 'targetHasSourceDot' }
   // The target stands within `radius` of the resolved shape's center.
-  | { kind: 'withinCenter'; radius: number };
+  | { kind: 'withinCenter'; radius: number }
+  // The target is the source's Sworn (sworn.ts).
+  | { kind: 'targetSworn' };
 
 export function evaluatePredicate(
   ctx: CombatCtx,
@@ -137,6 +140,8 @@ export function evaluatePredicate(
       if (!fx.center) return false;
       return dist(target.pos, fx.center) <= p.radius + target.radius;
     }
+    case 'targetSworn':
+      return isSwornBy(target, sourceId, ctx.time);
   }
 }
 
@@ -215,6 +220,8 @@ export type EffectSpec =
   // Refunds part of the SOURCE's remaining cooldown on `key` (kits-v2
   // cooldown events: aim and target selection become resources).
   | { kind: 'cooldownRefund'; key: AbilityKey; pctOfRemaining: number }
+  // Names the target the source's Sworn, over any Sworn it held (sworn.ts).
+  | { kind: 'swear' }
   // Arms the target's next auto attack within `duration` with rider
   // effects, optionally splashing around the struck victim; `hits` arms
   // that many attacks inside the window instead of one.
@@ -454,6 +461,11 @@ export function applyEffects(
           clearMarks(target, sourceId);
           applyEffects(ctx, sourceId, power, target, spec.onTrigger, via, fx);
         }
+        break;
+      }
+      case 'swear': {
+        const source = ctx.units.get(sourceId);
+        if (source) swear(ctx, source, target, true);
         break;
       }
       case 'conditional': {

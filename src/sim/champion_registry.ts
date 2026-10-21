@@ -4,7 +4,7 @@
 // replay, the headless env) resolves through an instance of this registry,
 // and two matches in one process never share forged state.
 
-import { CHAMPIONS, type ChampionDef } from './content/champions';
+import { CHAMPIONS, type ChampionDef, UNRELEASED_CHAMPIONS } from './content/champions';
 import type { ForgedChampionDef } from './forge/forged_def';
 import { resolveForgedChampion } from './forge/resolve';
 import { validateForged } from './forge/validate';
@@ -17,8 +17,15 @@ export class ChampionRegistry {
 
   // Roster first: a forged id can never shadow a roster champion (the
   // validator's forged_ prefix already guarantees no collision).
+  // A champion behind the release switch resolves too, so a test can field
+  // it; no host admits its id into a match (they check CHAMPIONS).
   get(championId: string): ChampionDef | null {
-    return CHAMPIONS[championId] ?? this.forged.get(championId)?.resolved ?? null;
+    return (
+      CHAMPIONS[championId] ??
+      UNRELEASED_CHAMPIONS[championId] ??
+      this.forged.get(championId)?.resolved ??
+      null
+    );
   }
 
   // Registers one forged definition for this match. The deterministic
