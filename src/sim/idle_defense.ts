@@ -3,9 +3,12 @@
 // and bots identically (review section C: a champion standing still never
 // fought back). A champion in its Grace (royale/grace.ts) holds its fire
 // whatever it was last ordered: only its own attack or cast ends the Grace.
+// A champion opening a cache holds it too until something strikes it
+// (royale/caches.ts openingHoldsFire).
 
 import { isRecalling, isStunned } from './combat/status';
 import { dist } from './geo';
+import { openingHoldsFire } from './royale/caches';
 import { inGrace } from './royale/grace';
 import type { Sim } from './sim';
 
@@ -15,6 +18,7 @@ export function stepIdleDefense(sim: Sim): void {
     if (u.attackTargetId !== null || u.attackMoveTarget !== null || u.path.length > 0) continue;
     if (isRecalling(u, sim.time) || isStunned(u, sim.time)) continue;
     if (sim.royaleMode && inGrace(sim.royaleMode, u.id, sim.time)) continue;
+    if (sim.royaleMode && openingHoldsFire(sim.royaleMode.state.caches, u, sim.time)) continue;
     let best: number | null = null;
     let bestD = Number.POSITIVE_INFINITY;
     for (const o of sim.units.values()) {

@@ -16,8 +16,10 @@ import { planetTuning } from '../src/sim/content/royale_tuning';
 import { clampSkin } from '../src/sim/content/skins';
 import { basis, dirTo, dist, offset, type Vec3 } from '../src/sim/geo';
 import { buildObservation } from '../src/sim/observe';
+import { Rng } from '../src/sim/rng';
 import { snapLanding } from '../src/sim/royale/drop';
 import { insideCap } from '../src/sim/royale/dusk';
+import { along, randomHeading } from '../src/sim/royale/layout';
 import { royaleGround } from '../src/sim/royale/mode';
 import {
   PLANET_CLOSE_SIGHT_M,
@@ -26,6 +28,7 @@ import {
 } from '../src/sim/royale/planet_map';
 import {
   CACHE_OPEN_S,
+  CACHE_REACH_M,
   DROP_S,
   OUT_OF_COMBAT_HEAL,
   OUT_OF_COMBAT_MANA,
@@ -208,6 +211,57 @@ describe('the rules of play', () => {
     expect(royaleEvents(events, 'royale_loot')).toHaveLength(1);
     expect(u.items.length).toBe(items + 1);
     expect(cache.present).toBe(false);
+  });
+
+  // A champion opening a cache beside an enemy who does not strike it, the
+  // enemy just out of the cache's reach and inside the opener's attack range.
+  function openingBesideFoe() {
+    const { sim, unitIds } = build(2);
+    land(sim);
+    const u = sim.units.get(unitIds[0]!)!;
+    const foe = sim.units.get(unitIds[1]!)!;
+    const cache = sim.royale!.caches.find((c) => c.kind === 'plain' && c.present)!;
+    const R = sim.royaleMode!.layout.radius;
+    place(
+      u,
+      near(sim, along(cache.pos as Vec3, randomHeading(new Rng(5), cache.pos as Vec3), 1, R)),
+    );
+    const away = dirTo(cache.pos, u.pos)!;
+    const gap = Math.min(u.stats.attackRange * 0.8, CACHE_REACH_M);
+    place(foe, along(u.pos as Vec3, away as Vec3, u.radius + foe.radius + gap, R));
+    foe.holding = true;
+    expect(dist(u.pos, cache.pos)).toBeLessThan(CACHE_REACH_M);
+    expect(dist(foe.pos, cache.pos)).toBeGreaterThan(CACHE_REACH_M);
+    return { sim, u, foe, cache };
+  }
+
+  it('holds the idle fire of a champion opening a cache, so the opening is kept', () => {
+    const { sim, u, foe, cache } = openingBesideFoe();
+    const events = run(sim, CACHE_OPEN_S - 0.2);
+    expect(u.attackTargetId).toBeNull();
+    expect(cache.opener).toBe(u.id);
+    events.push(...run(sim, 0.4));
+    expect(royaleEvents(events, 'royale_cache')).toEqual([
+      { type: 'royale_cache', unitId: u.id, cacheId: cache.id },
+    ]);
+    // The cache opened, the idle defense is the champion's own again.
+    run(sim, 0.2);
+    expect(u.attackTargetId).toBe(foe.id);
+  });
+
+  it('lets a champion opening a cache fight back once it is struck', () => {
+    const { sim, u, foe, cache } = openingBesideFoe();
+    run(sim, 0.5);
+    expect(cache.opener).toBe(u.id);
+    dealDamage(
+      { ...(sim as unknown as { ctx(): Parameters<typeof dealDamage>[0] }).ctx() },
+      foe.id,
+      u,
+      10,
+      'physical',
+    );
+    run(sim, 0.2);
+    expect(u.attackTargetId).toBe(foe.id);
   });
 
   it('throws a champion sent onto a launch pad, untouchable, exactly to its point', () => {

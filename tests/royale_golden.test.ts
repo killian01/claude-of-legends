@@ -7,7 +7,9 @@
 // pinned as constants. Seed 7 in Respawn and in One life, Solo, fifty seats
 // each; seed 5 in Trios, One life, the forty-eight seats of sixteen crews
 // (crewSeats(3)). Captured on c456598, under ROYALE_RULES_VERSION 13, before
-// Thornfray's bout seams (ADR 0035, docs/plan-thornfray.md) moved anything.
+// Thornfray's bout seams (ADR 0035, docs/plan-thornfray.md) moved anything;
+// Respawn's and Trios' captured again under 14, a cache's opener holding its
+// idle fire.
 //
 // A red run means a seam moved the battle royale: a changed order of random
 // draws in the Dusk, the Seedfalls, the caches, the Grafts, the drop or the
@@ -36,9 +38,9 @@ interface Golden {
 }
 
 const GOLDEN = {
-  respawnSolo7: { landed60: 2667667365, end: 3013969516 },
+  respawnSolo7: { landed60: 4222425139, end: 3067917388 },
   oneLifeSolo7: { landed60: 2246274888, end: 3754226507 },
-  oneLifeTrios5: { landed60: 3103804265, end: 1869504368 },
+  oneLifeTrios5: { landed60: 3103804265, end: 1263686581 },
 } satisfies Record<string, Golden>;
 
 const AFTER_LANDING_TICKS = Math.round(60 / DT);
