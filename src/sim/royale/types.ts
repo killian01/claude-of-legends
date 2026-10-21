@@ -107,7 +107,9 @@ export const CLAMOR_S = 3;
 // Arrival's clearance and a bot's hunt read only other crews.
 // 14: a champion opening a cache holds its idle fire until something
 // strikes it (caches.ts openingHoldsFire, idle_defense.ts).
-export const ROYALE_RULES_VERSION = 14;
+// 15: Sylra's damage share on the planet goes from 1.5 to 1.4
+// (content/royale_tuning.ts).
+export const ROYALE_RULES_VERSION = 15;
 
 // One of the Dusk's caps: a circle on the sphere, its radius a chord.
 export interface DuskCap {
