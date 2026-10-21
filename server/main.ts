@@ -177,6 +177,7 @@ import {
   seeQuality,
 } from './seat_report';
 import { COOKIE_NAME, SESSION_TTL_MS, SessionStore } from './sessions';
+import { BOOT_OPEN_RETRY, openWithRetry } from './sqlite_open';
 import { starOrchard } from './star_orchard';
 import { planStatic, readFileStamps, type StaticRequest, statStaticFile } from './static_files';
 import { isWebsiteId, STATS_SCRIPT, withStatsTag } from './stats_tag';
@@ -374,10 +375,18 @@ const discordFlows = new DiscordFlows();
 // The Forge's own store (ADR 0011): SQLite for forged champions, the
 // creation ledger, and generation jobs; accounts stay in their JSON
 // registry and rows here reference their ids.
-const forgeStore = new ForgeStore(path.join(DATA_DIR, 'forge.sqlite3'));
+const forgeStore = openWithRetry(
+  'forge.sqlite3',
+  () => new ForgeStore(path.join(DATA_DIR, 'forge.sqlite3')),
+  BOOT_OPEN_RETRY,
+);
 // Bots on the account (ADR 0013): their own SQLite beside the Forge's, so
 // the two land in parallel without sharing a file or a module.
-const botStore = new BotStore(path.join(DATA_DIR, 'bots.sqlite3'));
+const botStore = openWithRetry(
+  'bots.sqlite3',
+  () => new BotStore(path.join(DATA_DIR, 'bots.sqlite3')),
+  BOOT_OPEN_RETRY,
+);
 // The audience counter's site (PRIVACY.md, docs/deploy.md): the id Umami
 // gave this deployment, and the one value from the environment that
 // reaches the page. Empty, or not an id, and the page goes out without
