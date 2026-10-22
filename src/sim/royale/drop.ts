@@ -304,8 +304,9 @@ export function resolveLandings(
 // quietest spot there is. One in One life,
 // where a fall is final; two in Respawn. The mode deals a normal bot
 // first, one that also fights the other escort, so the first fight is a
-// three-way and not two victims waiting in line; gentle ones only on a
-// person's very first royale (mode.ts).
+// three-way and not two victims waiting in line; gentle ones on a
+// person's very first royale, and One life's lone escort for everyone
+// (mode.ts escortOrder).
 export const ESCORTS: Readonly<Record<RoyaleVariant, number>> = { one_life: 1, respawn: 2 };
 export const ESCORT_MIN_M = 8;
 export const ESCORT_MAX_M = 13;
