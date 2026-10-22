@@ -159,6 +159,7 @@ import { buildMatchRecord, type MatchRecord } from './records';
 import { checkReference, refusalMessage } from './reference_check';
 import { setForgedAttackRange } from './reforge';
 import { RejoinRegistry } from './rejoin';
+import { failureReply } from './route_failure';
 import { royaleFactory as royaleSimFactory } from './royale_build';
 import { isRoyaleNewcomer, RoyaleVeterans } from './royale_join';
 import { RoyaleService } from './royale_service';
@@ -2798,9 +2799,17 @@ const server = http.createServer(async (req, res) => {
     }
     // Streamed, and past the headers a failed read can only cut the reply.
     pipeline(createReadStream(plan.gzip ? `${filePath}.gz` : filePath), res, () => undefined);
-  } catch {
-    res.writeHead(404, { 'content-type': 'text/plain' });
-    res.end('not found');
+  } catch (err) {
+    const url = (req.url ?? '/').split('?')[0]!;
+    const reply = failureReply(url, err);
+    if (reply.log) console.error(`request failed: ${req.method} ${url}`, err);
+    // Past the headers a reply can only be cut.
+    if (res.headersSent) {
+      res.destroy();
+      return;
+    }
+    res.writeHead(reply.status, reply.headers);
+    res.end(reply.body);
   }
 });
 
