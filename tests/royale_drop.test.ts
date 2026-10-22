@@ -1,7 +1,9 @@
 // The company at the landing (src/sim/royale/drop.ts, mode.ts stepDrop):
-// one house bot beside each person in One life and two in Respawn, a
-// normal one first so the first fight is a three-way, the gentle first
-// only for a newcomer (a person who never banked a battle royale award),
+// one house bot beside each person in One life and two in Respawn. In
+// Respawn a normal one comes first so the first fight is a three-way, the
+// gentle first only for a newcomer (a person who never banked a battle
+// royale award); One life's lone escort, a duel where a fall is final, is
+// a gentle one for everyone,
 // and a replay that records the newcomers seats the same escorts; and who
 // is a newcomer (server/royale_join.ts).
 
@@ -18,7 +20,7 @@ import {
 } from '../src/net/replay';
 import { dist } from '../src/sim/geo';
 import { dealEscorts, ESCORT_MAX_M, ESCORTS } from '../src/sim/royale/drop';
-import { ESCORT_ORDER, NEWCOMER_ESCORT_ORDER } from '../src/sim/royale/mode';
+import { ESCORT_ORDER, escortOrder, NEWCOMER_ESCORT_ORDER } from '../src/sim/royale/mode';
 import { DROP_S, ROYALE_RULES_VERSION, type RoyaleVariant } from '../src/sim/royale/types';
 import type { Sim } from '../src/sim/sim';
 import { loadPlanet } from './royale_planet';
@@ -72,18 +74,37 @@ describe('the escorts', () => {
     expect(dealEscorts([1], [10], 2, () => (a, b) => a - b)).toEqual([{ person: 1, bots: [10] }]);
   });
 
-  it('brings one down in One life and two in Respawn, a normal bot first', () => {
+  it('brings one down in One life and two in Respawn, a normal bot first in Respawn', () => {
     expect(ESCORTS).toEqual({ one_life: 1, respawn: 2 });
     expect(ESCORT_ORDER[0]).toBe('normal');
+    expect(escortOrder('respawn', false)).toBe(ESCORT_ORDER);
     for (const variant of ['one_life', 'respawn'] as const) {
       const { sim, unitIds } = escortsOf(variant, false);
       const me = sim.units.get(unitIds[PERSON]!)!;
-      const escorts = expected(sim, unitIds, ESCORT_ORDER, ESCORTS[variant]);
+      const escorts = expected(sim, unitIds, escortOrder(variant, false), ESCORTS[variant]);
       expect(escorts).toHaveLength(ESCORTS[variant]);
-      expect(sim.royaleMode!.skillOf(escorts[0]!)).toBe('normal');
+      expect(sim.royaleMode!.skillOf(escorts[0]!)).toBe(
+        variant === 'respawn' ? 'normal' : 'gentle',
+      );
       for (const id of escorts) {
         expect(dist(sim.units.get(id)!.pos, me.pos)).toBeLessThanOrEqual(ESCORT_MAX_M + 2);
       }
+    }
+  });
+
+  it('brings everyone a gentle escort in One life, newcomer or not', () => {
+    expect(escortOrder('one_life', false)).toBe(NEWCOMER_ESCORT_ORDER);
+    expect(escortOrder('one_life', true)).toBe(NEWCOMER_ESCORT_ORDER);
+    for (const seed of [3, 5, 8]) {
+      const { sim, unitIds } = escortsOf('one_life', false, seed);
+      const me = sim.units.get(unitIds[PERSON]!)!;
+      const near = unitIds.filter(
+        (id) => id !== unitIds[PERSON] && dist(sim.units.get(id)!.pos, me.pos) <= ESCORT_MAX_M + 2,
+      );
+      expect(near.some((id) => sim.royaleMode!.skillOf(id) === 'gentle')).toBe(true);
+      const [escort] = expected(sim, unitIds, NEWCOMER_ESCORT_ORDER, 1);
+      expect(sim.royaleMode!.skillOf(escort!)).toBe('gentle');
+      expect(dist(sim.units.get(escort!)!.pos, me.pos)).toBeLessThanOrEqual(ESCORT_MAX_M + 2);
     }
   });
 

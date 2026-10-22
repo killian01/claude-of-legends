@@ -205,6 +205,13 @@ export function royaleGround(ground: Ground): RoyaleGround {
 export const ESCORT_ORDER: readonly RoyaleSkillId[] = ['normal', 'strong', 'gentle'];
 export const NEWCOMER_ESCORT_ORDER: readonly RoyaleSkillId[] = ['gentle', 'normal', 'strong'];
 
+// The order a person's company is dealt in. One life brings a single
+// escort, so there is no three-way to make: its first fight is a duel where
+// a fall is final, and everyone's lone escort is dealt gentle first.
+export function escortOrder(variant: RoyaleVariant, newcomer: boolean): readonly RoyaleSkillId[] {
+  return newcomer || variant === 'one_life' ? NEWCOMER_ESCORT_ORDER : ESCORT_ORDER;
+}
+
 export class RoyaleMode {
   readonly variant: RoyaleVariant;
   // A Thornfray's bout and its plan, null in a battle royale.
@@ -555,7 +562,8 @@ export class RoyaleMode {
 
   // The drop's tick: at its end every seat lands, in id order, and house
   // bots come down beside each person (a seat no policy plays): a normal
-  // one first, the gentle first for a newcomer. In Crews every crew lands
+  // one first, the gentle first for a newcomer and in One life
+  // (escortOrder). In Crews every crew lands
   // around its leader's pick and a crew of house bots beside each crew
   // with a person in it (crewDrop).
   stepDrop(sim: Sim): void {
@@ -591,7 +599,7 @@ export class RoyaleMode {
     const people = seats.filter((id) => !sim.policies.has(id));
     const bots = seats.filter((id) => sim.policies.has(id));
     const groups = dealEscorts(people, bots, ESCORTS[this.variant], (person) => {
-      const order = this.newcomers.has(person) ? NEWCOMER_ESCORT_ORDER : ESCORT_ORDER;
+      const order = escortOrder(this.variant, this.newcomers.has(person));
       const rank = (id: number): number => order.indexOf(this.skillOf(id));
       return (a, b) => rank(a) - rank(b) || a - b;
     });

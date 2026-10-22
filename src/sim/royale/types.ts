@@ -109,7 +109,9 @@ export const CLAMOR_S = 3;
 // strikes it (caches.ts openingHoldsFire, idle_defense.ts).
 // 15: Sylra's damage share on the planet goes from 1.5 to 1.4
 // (content/royale_tuning.ts).
-export const ROYALE_RULES_VERSION = 15;
+// 16: One life's lone escort is dealt gentle first for every person, not
+// only a newcomer (mode.ts escortOrder).
+export const ROYALE_RULES_VERSION = 16;
 
 // One of the Dusk's caps: a circle on the sphere, its radius a chord.
 export interface DuskCap {
