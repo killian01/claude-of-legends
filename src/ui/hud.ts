@@ -116,6 +116,7 @@ import {
   stepLaneCard,
 } from './lane_guide';
 import { openingShop } from './opening_shop';
+import { HIDE_ARM_S, type HideArm, pressHide, STEPS_HIDE_SURE } from './steps_hide';
 import { thumbClusterCss } from './thumb_cluster';
 
 interface ChipLook {
@@ -2009,9 +2010,25 @@ export class Hud {
     stepsWords.append(el('b', '', STEPS_TITLE), this.stepsLineEl);
     const stepsHide = el('button', 'hud-steps-hide', STEPS_HIDE);
     stepsHide.type = 'button';
+    // On a touchscreen the first tap asks and a second one hides
+    // (ui/steps_hide.ts); the label comes back when the ask lapses.
+    let hideArmed: HideArm = null;
+    let hideLapse: ReturnType<typeof setTimeout> | undefined;
     stepsHide.addEventListener('click', (e) => {
       e.stopPropagation();
-      this.hideFirstSteps();
+      const press = pressHide(hideArmed, performance.now() / 1000, coarsePointer);
+      hideArmed = press.armed;
+      clearTimeout(hideLapse);
+      if (press.hide) {
+        stepsHide.textContent = STEPS_HIDE;
+        this.hideFirstSteps();
+        return;
+      }
+      stepsHide.textContent = STEPS_HIDE_SURE;
+      hideLapse = setTimeout(() => {
+        hideArmed = null;
+        stepsHide.textContent = STEPS_HIDE;
+      }, HIDE_ARM_S * 1000);
     });
     this.stepsEl.append(stepsWords, stepsHide);
 
