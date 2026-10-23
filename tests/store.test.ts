@@ -1,7 +1,15 @@
 // The disk layer: junk in, fallback out; a torn JSONL line loses one
 // record, never the file.
 
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -37,6 +45,27 @@ describe('json store', () => {
     const file = path.join(tmp(), 'bad.json');
     writeFileSync(file, '{nope');
     expect(loadJson(file, { ok: true })).toEqual({ ok: true });
+  });
+
+  // The next whole-file save would otherwise write the fallback over the
+  // only copy of what the file held: every account, every session.
+  it('sets a corrupt file aside before falling back', () => {
+    const dir = tmp();
+    const file = path.join(dir, 'accounts.json');
+    writeFileSync(file, '{"accounts":[{"id":1');
+    expect(loadJson(file, { accounts: [] })).toEqual({ accounts: [] });
+    const aside = readdirSync(dir).filter((f) => f.startsWith('accounts.json.corrupt-'));
+    expect(aside).toHaveLength(1);
+    expect(readFileSync(path.join(dir, aside[0] ?? ''), 'utf8')).toBe('{"accounts":[{"id":1');
+    expect(existsSync(file)).toBe(false);
+  });
+
+  it('throws when a file is there but cannot be read, rather than reading it as empty', () => {
+    const dir = tmp();
+    const file = path.join(dir, 'accounts.json');
+    mkdirSync(file);
+    expect(() => loadJson(file, { accounts: [] })).toThrow();
+    expect(existsSync(file)).toBe(true);
   });
 
   it('prunes numbered json files, keeping the highest numbers', () => {

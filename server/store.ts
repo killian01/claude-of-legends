@@ -20,10 +20,26 @@ import {
 } from 'node:fs';
 import path from 'node:path';
 
+// Every caller rewrites its file whole from memory, so a fallback read
+// from a file that does hold records is a promise to overwrite them. Only
+// a missing file reads as the fallback quietly. A file that is there but
+// cannot be read (a failing disk at boot) throws, so the server stops
+// instead of starting empty. One that reads but does not parse is set
+// aside under `<file>.corrupt-<ms>`, kept for a hand, before the fallback.
 export function loadJson<T>(file: string, fallback: T): T {
+  let text: string;
   try {
-    return JSON.parse(readFileSync(file, 'utf8')) as T;
+    text = readFileSync(file, 'utf8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return fallback;
+    throw err;
+  }
+  try {
+    return JSON.parse(text) as T;
   } catch {
+    const aside = `${file}.corrupt-${Date.now()}`;
+    renameSync(file, aside);
+    console.error(`unreadable json set aside: ${file} -> ${aside}`);
     return fallback;
   }
 }
