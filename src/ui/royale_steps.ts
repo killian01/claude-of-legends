@@ -198,7 +198,8 @@ export function hideRoyaleSteps(s: RoyaleStepsState): RoyaleStepsState {
 
 const MOUSE: Readonly<Record<RoyaleStepId, string>> = {
   br_fight: 'Click an enemy champion to attack it, and press Q, W or E to cast at your cursor.',
-  br_cache: 'Stand by a glowing cache to open it: it holds the next piece of your build.',
+  br_cache:
+    'Click a glowing cache to walk to it, and stand there to open it: it holds the next piece of your build.',
   br_pad: 'Step on a launch pad to fly 50 m.',
   br_dusk: 'Stay in the light: the Dusk burns.',
   br_takedown: 'Takedowns heal you and give you the next piece.',
@@ -208,7 +209,7 @@ const MOUSE: Readonly<Record<RoyaleStepId, string>> = {
 const TAP: Readonly<Partial<Record<RoyaleStepId, string>>> = {
   br_fight: 'Tap an enemy champion to attack it, then tap a spell and where to cast it.',
   br_cache:
-    'Tap beside a glowing cache and stand there to open it: it holds the next piece of your build.',
+    'Tap a glowing cache to walk to it, and stand there to open it: it holds the next piece of your build.',
   br_pad: 'Tap a launch pad to step on it and fly 50 m.',
   br_ult: 'Level 6: your ultimate is ready: tap R, then where to cast it.',
 };

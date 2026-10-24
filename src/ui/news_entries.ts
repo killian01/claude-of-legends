@@ -35,6 +35,16 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
+    day: '2026-10-24',
+    title: 'Click a cache to open it',
+    body: [
+      'A click or a tap on a glowing cache, or on the ground just beside it, now walks your ' +
+        'champion right up to it, close enough to open it. Before, a click on the chest itself ' +
+        'could stop you a step short, where standing opened nothing. Stand still there and the ' +
+        'cache opens.',
+    ],
+  },
+  {
     day: '2026-10-21',
     title: 'A cache opening keeps through a passing enemy',
     body: [
