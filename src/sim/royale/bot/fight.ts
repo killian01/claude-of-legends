@@ -206,7 +206,8 @@ export function pickCast(
       (hints.ult.minEnemies !== undefined && cluster >= hints.ult.minEnemies) ||
       (hints.ult.targetHpBelow !== undefined && target.hpFrac < hints.ult.targetHpBelow) ||
       (target.hpFrac < 0.6 && target.hpFrac < s.hpFrac);
-    if (gate && d <= range && d >= minR) return cast('R', aimAt(sense, target, r, rng));
+    const ahead = !hints.ult.whenHealthier || s.hpFrac >= target.hpFrac;
+    if (gate && ahead && d <= range && d >= minR) return cast('R', aimAt(sense, target, r, rng));
   }
   for (const key of ['Q', 'W', 'E'] as const) {
     if (!s.abilityReady[key]) continue;

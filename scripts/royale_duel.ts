@@ -13,13 +13,14 @@
 // and run by scripts/royale_duel.mjs:
 //   node scripts/royale_duel.mjs [--seeds 10] [--from 1]
 //     [--variant respawn|one_life] [--skill normal|gentle|strong]
-//     [--stage both|landing|post-calm] [--only fenn]
+//     [--stage both|landing|post-calm] [--only fenn] [--with ostrand]
+// `--with` adds a champion still behind its release switch to the field.
 
 import { readFileSync } from 'node:fs';
 import { buildRoyaleSim, type ReplayPick, type RoyalePlanet } from '../src/net/replay';
 import { royalePolicy } from '../src/sim/content/bots/royale';
 import type { RoyaleSkillId } from '../src/sim/content/bots/royale_skills';
-import { CHAMPION_LIST } from '../src/sim/content/champions';
+import { CHAMPION_LIST, UNRELEASED_CHAMPIONS } from '../src/sim/content/champions';
 import { assemblePlanet } from '../src/sim/content/planet';
 import { dist, heading, type Vec3 } from '../src/sim/geo';
 import { SphereGround } from '../src/sim/ground';
@@ -43,6 +44,9 @@ const variant = opt('--variant', 'respawn') as RoyaleVariant;
 const skill = opt('--skill', 'normal') as RoyaleSkillId;
 const stageArg = opt('--stage', 'both');
 const only = opt('--only', '');
+const withIds = opt('--with', '')
+  .split(',')
+  .filter((id) => UNRELEASED_CHAMPIONS[id]);
 
 // The cap on one duel: past it the duel has no result.
 const CAP_S = 120;
@@ -186,7 +190,7 @@ function duel(planet: RoyalePlanet, a: string, b: string, seed: number, stage: S
 const pct = (x: number) => `${Math.round(100 * x)}%`;
 
 function runStage(planet: RoyalePlanet, stage: Stage): void {
-  const champs = CHAMPION_LIST.map((c) => c.id).sort();
+  const champs = [...CHAMPION_LIST.map((c) => c.id), ...withIds].sort();
   const wins = new Map<string, number>();
   const games = new Map<string, number>();
   const rows: string[] = [];

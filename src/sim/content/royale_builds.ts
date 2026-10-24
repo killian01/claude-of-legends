@@ -36,6 +36,7 @@ export const PLANET_BUILDS: Readonly<Record<string, readonly string[]>> = {
   dain: ['doombrand', 'worldheart', 'rendfang', 'swiftplate', 'clarity_stone', 'swift_treads'],
   torv: ['doombrand', 'worldheart', 'rendfang', 'swiftplate', 'clarity_stone', 'swift_treads'],
   korrath: ['doombrand', 'worldheart', 'rendfang', 'swiftplate', 'clarity_stone', 'swift_treads'],
+  ostrand: ['doombrand', 'worldheart', 'rendfang', 'swiftplate', 'clarity_stone', 'swift_treads'],
   // Maera's ranged attack carries her on the planet, where her heals and
   // shields find no ally: the attack speed line and its Gale, the
   // execute, then the Heartbeat's two Heart Gems.

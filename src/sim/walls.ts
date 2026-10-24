@@ -100,9 +100,11 @@ export function unblockWall(ground: Pick<Ground, 'unblockCircle'>, samples: read
   for (const s of samples) ground.unblockCircle(s, SAMPLE_RADIUS);
 }
 
+// A wall falls at its time; a ring (oathfield.ts) also falls the moment
+// the champion who raised it dies.
 export function stepWalls(ctx: CombatCtx): void {
   for (const w of [...ctx.walls.values()]) {
-    if (ctx.time < w.until) continue;
+    if (ctx.time < w.until && !(w.ring && raiserDown(ctx, w.sourceId))) continue;
     unblockWall(ctx.ground, w.samples);
     ctx.walls.delete(w.id);
   }
@@ -128,4 +130,9 @@ export function clampThroughWalls(
       return;
     }
   }
+}
+
+function raiserDown(ctx: CombatCtx, id: number): boolean {
+  const u = ctx.units.get(id);
+  return !u || u.dead || ctx.dead.has(id);
 }

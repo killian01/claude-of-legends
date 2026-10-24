@@ -10,7 +10,7 @@ import { type ChampionHints, hintsFor } from '../../content/bots/hints';
 import type { RoyaleSkill } from '../../content/bots/royale_skills';
 import type { BoutBots } from '../../content/bouts/types';
 import type { ChampionDef } from '../../content/champions';
-import { CHAMPIONS } from '../../content/champions';
+import { championDef } from '../../content/champions';
 import { dist, type Vec3 } from '../../geo';
 import type { ObsBurr, Observation, ObsRoyale, ObsSelf, ObsUnit } from '../../policy';
 import type { RoyaleLayout } from '../layout';
@@ -76,7 +76,7 @@ export function buildSense(
     layout,
     skill,
     me,
-    def: s.championId ? CHAMPIONS[s.championId] : undefined,
+    def: s.championId ? championDef(s.championId) : undefined,
     hints: hintsFor(s.championId),
     enemies,
     allies,
