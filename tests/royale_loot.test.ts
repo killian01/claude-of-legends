@@ -5,7 +5,12 @@
 // themselves, experience to the last hit on the sim's own curve.
 
 import { describe, expect, it } from 'vitest';
-import { CHAMPION_LIST, CHAMPIONS } from '../src/sim/content/champions';
+import {
+  CHAMPION_LIST,
+  CHAMPIONS,
+  championDef,
+  UNRELEASED_CHAMPIONS,
+} from '../src/sim/content/champions';
 import { ITEM_PASSIVES } from '../src/sim/content/item_passives';
 import { ITEMS } from '../src/sim/content/items';
 import { PASSIVE_BY_PIECE, PASSIVE_ITEMS, PLANET_BUILDS } from '../src/sim/content/royale_builds';
@@ -33,8 +38,12 @@ import { Sim } from '../src/sim/sim';
 import { effectiveRank, xpForNext } from '../src/sim/stats';
 import { createChampion, type Unit } from '../src/sim/unit';
 
+// Released or still behind the switch: a champion's planet data lands
+// before the release does.
+const FIELD = [...CHAMPION_LIST, ...Object.values(UNRELEASED_CHAMPIONS)];
+
 function champ(id: string): Unit {
-  const def = CHAMPIONS[id]!;
+  const def = championDef(id)!;
   const u = createChampion(1, 0, { x: 0, z: 0 }, def);
   u.gold = 0;
   return u;
@@ -102,8 +111,8 @@ describe('the next piece', () => {
   });
 
   it('walks a planet build for every champion, six real items, to the end', () => {
-    expect(Object.keys(PLANET_BUILDS).sort()).toEqual(CHAMPION_LIST.map((c) => c.id).sort());
-    for (const c of CHAMPION_LIST) {
+    expect(Object.keys(PLANET_BUILDS).sort()).toEqual(FIELD.map((c) => c.id).sort());
+    for (const c of FIELD) {
       const build = PLANET_BUILDS[c.id]!;
       expect(build, c.id).toHaveLength(6);
       for (const id of build) expect(ITEMS[id], `${c.id} ${id}`).toBeDefined();

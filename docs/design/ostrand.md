@@ -119,5 +119,15 @@ person and bot alike (a person's click inside a ring walks to the rim).
    Oathfield's damage reduction against champions outside the ring, and the ring falling
    when Ostrand dies; a bot outside a ring picking the nearest reachable enemy. The portrait
    is already in `public/portraits/ostrand.webp` (credited), shown once he is released.
+   Split in two nights. The bots' half landed 2026-10-25: a bot seated on him plays his kit
+   behind the switch (`championDef` in `content/champions/index.ts`, read by both bot brains),
+   his hints (Q poke, W steroid, E engage, R on an enemy in reach), a new hint gate
+   `ult.whenHealthier` (the ring only in a duel the bot is ahead in, on the Star Orchard and
+   the Wanderseed alike), the ring falling the moment he dies (`stepWalls`), his planet build
+   (the shells' bruiser line) and a first planet tuning, hp 1 and damage 1.15: 48% of his
+   landing duels and 56% after the calm (`royale_duel --with ostrand`, seeds 1 to 10).
+   Tests: `tests/ostrand_bots.test.ts`, `tests/royale_bot.test.ts`. The render half is the
+   next night: the manifest entry on knight.glb, the Sworn pennant (`sworn` on the wire), the
+   ring's look, and with it the E recast dash and R's outside-champion damage reduction.
 4. Balance with the headless tools, skins and laurel price, the portrait, the news entry, phone
    and desktop checked, and `released: true`.

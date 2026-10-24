@@ -9,7 +9,7 @@
 
 import type { AbilityDef } from '../combat/casting';
 import { type ChampionHints, hintsFor } from '../content/bots/hints';
-import { CHAMPIONS } from '../content/champions';
+import { type CHAMPIONS, championDef } from '../content/champions';
 import { GAME_MAP, type GameMap } from '../content/map';
 import { hypot } from '../exact';
 import { onFountain } from '../fountain';
@@ -186,7 +186,8 @@ export function pickCast(ctx: SlotContext, champ: ObsUnit, engage = true): Actio
     const gate =
       (hints.ult.minEnemies !== undefined && cluster >= hints.ult.minEnemies) ||
       (hints.ult.targetHpBelow !== undefined && champ.hpFrac < hints.ult.targetHpBelow);
-    if (gate && dc <= range && dc >= minR) {
+    const ahead = !hints.ult.whenHealthier || s.hpFrac >= champ.hpFrac;
+    if (gate && ahead && dc <= range && dc >= minR) {
       const aim = aimAt(s, champ, r, obs.time);
       return { kind: 'cast', key: 'R', x: aim.x, z: aim.z };
     }
@@ -345,7 +346,7 @@ export function buildSlotContext(
     obs,
     s,
     map,
-    def: s.championId ? CHAMPIONS[s.championId] : undefined,
+    def: s.championId ? championDef(s.championId) : undefined,
     attackRange: s.attackRange ?? ATTACK_RANGE_FALLBACK,
     hints: hintsFor(s.championId),
     fountain,

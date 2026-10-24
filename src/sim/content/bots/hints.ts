@@ -21,8 +21,10 @@ export interface ChampionHints {
   // Distance sweet spots: never cast this key under this range (Vesk's
   // rounds, Ashvyn's pin: point blank is the weak case by design).
   minRange?: Partial<Record<AbilityKey, number>>;
-  // The ultimate is spent when EITHER gate opens (both optional).
-  ult: { minEnemies?: number; radius?: number; targetHpBelow?: number };
+  // The ultimate is spent when EITHER gate opens (both optional), and with
+  // `whenHealthier` only while the bot's own health share is at least the
+  // target's: a duel it means to win.
+  ult: { minEnemies?: number; radius?: number; targetHpBelow?: number; whenHealthier?: boolean };
   // ADR 0005: press the armed recast home when own health drops below this.
   recastHomeBelow?: number;
 }
@@ -86,6 +88,13 @@ export const BOT_HINTS: Record<string, ChampionHints> = {
   nisk: {
     keys: { Q: 'poke', W: 'escape', E: 'steroid' },
     ult: { minEnemies: 1, radius: 4 },
+  },
+  // Lance Drive is the trade, the gauntlet names the Sworn from range
+  // while healthy, the banner goes down where the fight is. The ring is
+  // raised on an enemy in reach and only in a duel the bot is ahead in.
+  ostrand: {
+    keys: { Q: 'poke', W: 'steroid', E: 'engage' },
+    ult: { minEnemies: 1, radius: 4.5, whenHealthier: true },
   },
 };
 

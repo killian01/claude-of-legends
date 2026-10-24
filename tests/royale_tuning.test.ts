@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { buildRoyaleSim, type ReplayPick } from '../src/net/replay';
 import { dealDamage } from '../src/sim/combat/damage';
 import { CAMPS } from '../src/sim/content/camps';
-import { CHAMPION_LIST, CHAMPIONS } from '../src/sim/content/champions';
+import { CHAMPION_LIST, CHAMPIONS, UNRELEASED_CHAMPIONS } from '../src/sim/content/champions';
 import { PLANET_TUNING, planetTuning } from '../src/sim/content/royale_tuning';
 import { DROP_S, ROYALE_HP_SCALE, START_LEVEL } from '../src/sim/royale/types';
 import { UPSTART_DAMAGE, UPSTART_S } from '../src/sim/royale/upstart';
@@ -17,6 +17,10 @@ import type { CombatCtx } from '../src/sim/sim_context';
 import { recalcChampion } from '../src/sim/stats';
 import { createCamp, type Unit } from '../src/sim/unit';
 import { loadPlanet } from './royale_planet';
+
+// Released or still behind the switch: a champion's planet data lands
+// before the release does.
+const FIELD = [...CHAMPION_LIST, ...Object.values(UNRELEASED_CHAMPIONS)];
 
 function ctxOf(sim: Sim): CombatCtx {
   return (sim as unknown as { ctx(): CombatCtx }).ctx();
@@ -55,7 +59,7 @@ function hitTaken(dmgScale: number, amount: number, target: 'champion' | 'camp')
 
 describe('the planet tuning table', () => {
   it('has an entry for every champion, each share within a half and a double', () => {
-    for (const c of CHAMPION_LIST) {
+    for (const c of FIELD) {
       const t = PLANET_TUNING[c.id];
       expect(t, c.id).toBeDefined();
       for (const v of [t!.hp, t!.dmg]) {
@@ -63,7 +67,7 @@ describe('the planet tuning table', () => {
         expect(v).toBeLessThanOrEqual(2);
       }
     }
-    expect(Object.keys(PLANET_TUNING).sort()).toEqual(CHAMPION_LIST.map((c) => c.id).sort());
+    expect(Object.keys(PLANET_TUNING).sort()).toEqual(FIELD.map((c) => c.id).sort());
     expect(planetTuning(null)).toEqual({ hp: 1, dmg: 1 });
     expect(planetTuning('nobody')).toEqual({ hp: 1, dmg: 1 });
   });

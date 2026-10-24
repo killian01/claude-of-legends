@@ -136,4 +136,11 @@ export const UNRELEASED_CHAMPIONS: Readonly<Record<string, ChampionDef>> = Objec
   ALL.filter((c) => c.released === false).map((c) => [c.id, c]),
 );
 
+// The kit of a champion already in a match, released or not: what a bot
+// seated on it plays by. Nothing deals an unreleased champion, so live
+// matches only ever reach the first table.
+export function championDef(id: string): ChampionDef | undefined {
+  return CHAMPIONS[id] ?? UNRELEASED_CHAMPIONS[id];
+}
+
 export const DEFAULT_CHAMPION_ID = SYLRA.id;

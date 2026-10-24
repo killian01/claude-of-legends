@@ -71,7 +71,7 @@ import {
 } from '../src/sim/royale/bot/brain';
 import { markOdds, royaleCall, seedfallErrand } from '../src/sim/royale/bot/calls';
 import { HOT_DROP_M, pickDropPoint } from '../src/sim/royale/bot/drop_pick';
-import { aimAt, royaleOdds } from '../src/sim/royale/bot/fight';
+import { aimAt, pickCast, royaleOdds } from '../src/sim/royale/bot/fight';
 import { buildSense } from '../src/sim/royale/bot/sense';
 import { skillMix } from '../src/sim/royale/bot/skill';
 import { ARRIVED_M, moveTo } from '../src/sim/royale/bot/travel';
@@ -1485,5 +1485,28 @@ describe('pods and the fumble on the planet', () => {
       { struckAt: 19.8, abilityReady: spent, sigilReady: [false, false] },
     );
     expect(decide(plain, new Rng(1), layout, strong).kind).toBe('attack');
+  });
+});
+
+describe('an Ostrand bot on the planet', () => {
+  // Every key spent but the ring, so the only cast left is the Oathfield.
+  const ringOnly = {
+    championId: 'ostrand',
+    attackRange: 2,
+    abilityReady: { Q: false, W: false, E: false, R: true },
+    abilityRanks: { Q: 1, W: 1, E: 1, R: 1 },
+  };
+
+  it('raises the ring on an enemy in reach in a duel it is ahead in, and not behind', () => {
+    const target = enemy(9, along(here, east, 3, R), { hpFrac: 0.8 });
+    const ahead = buildSense(obs(here, { units: [target] }, ringOnly), royale(), layout, normal);
+    const cast = pickCast(ahead, target, new Rng(1));
+    expect(cast?.kind === 'cast' && cast.key).toBe('R');
+    const hurt = { ...ringOnly, hp: 300, hpFrac: 0.5 };
+    const behind = buildSense(obs(here, { units: [target] }, hurt), royale(), layout, normal);
+    expect(pickCast(behind, target, new Rng(1))).toBeNull();
+    const far = enemy(9, along(here, east, 7, R), { hpFrac: 0.8 });
+    const out = buildSense(obs(here, { units: [far] }, ringOnly), royale(), layout, normal);
+    expect(pickCast(out, far, new Rng(1))).toBeNull();
   });
 });
