@@ -45,6 +45,12 @@
 // field's first at both, and the most Respawn matches; two steps (1.5 to
 // 1.4) take her to 76% and 51%, and the Respawn spread of the eleven from
 // 2.26 to 1.93 (seeds 1 to 6, 2026-10-21).
+// Elowen then took the most takedowns a seat in Respawn and won most of
+// its matches while losing most of her duels: two steps of damage became
+// two of health (1 and 1.4 to 1.1 and 1.3), and she wins more of her duels
+// and fewer of her free-for-alls (2026-10-24). A third step of health (1.15)
+// evens her duels and takes her to mid-field, but lengthens Lastwick's
+// bouts into its dark.
 //
 // Data, but planet rules only: the 5v5 never reads it, so it stays out of
 // the content fingerprint (fingerprint.ts) and a change moves
@@ -61,7 +67,7 @@ export const PLANET_TUNING: Readonly<Record<string, PlanetTuning>> = {
   rhoka: { hp: 1, dmg: 0.92 },
   vesk: { hp: 1.3, dmg: 0.95 },
   sylra: { hp: 1, dmg: 1.4 },
-  elowen: { hp: 1, dmg: 1.4 },
+  elowen: { hp: 1.1, dmg: 1.3 },
   dain: { hp: 1.05, dmg: 0.95 },
   torv: { hp: 0.95, dmg: 1.55 },
   korrath: { hp: 0.9, dmg: 1.3 },

@@ -111,7 +111,9 @@ export const CLAMOR_S = 3;
 // (content/royale_tuning.ts).
 // 16: One life's lone escort is dealt gentle first for every person, not
 // only a newcomer (mode.ts escortOrder).
-export const ROYALE_RULES_VERSION = 16;
+// 17: Elowen's health share on the planet goes from 1 to 1.1 and her
+// damage share from 1.4 to 1.3 (content/royale_tuning.ts).
+export const ROYALE_RULES_VERSION = 17;
 
 // One of the Dusk's caps: a circle on the sphere, its radius a chord.
 export interface DuskCap {
