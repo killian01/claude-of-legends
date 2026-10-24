@@ -43,6 +43,7 @@ import { buildTouchBar, drinkButton } from '../ui/touch_bar';
 import { unlearnedLine } from '../ui/unlearned_line';
 import type { IWorld } from '../world_api';
 import type { AttackNote } from './attack_notes';
+import { cacheGoal } from './cache_pick';
 import { castSoundOf } from './champion_sounds';
 import { CrewCamera } from './crew_watch';
 import { installCursorLock } from './cursor_lock';
@@ -490,9 +491,11 @@ export function startPresentation(
       // frame, like the genre; left-click on ground clears that. Touch
       // has no left-click, so there a ground tap clears the frame too,
       // or a tapped target would cover the top of the screen forever.
-      world.orderMove(selfId, p.x, p.z, p.y);
+      // A walk onto or beside a cache ends in its reach (cache_pick.ts).
+      const to = cacheGoal(p, world.royaleView?.()?.caches) ?? p;
+      world.orderMove(selfId, to.x, to.z, to.y);
       renderer.setAttackTarget(null);
-      renderer.flashMarker(p.x, p.z, undefined, p.y);
+      renderer.flashMarker(to.x, to.z, undefined, to.y);
       if (coarsePointer) hud.setTarget(null);
     }
   };

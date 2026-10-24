@@ -182,7 +182,7 @@ describe('the battle royale first steps', () => {
 
   it('say each step in the words of the hands on the screen', () => {
     expect(royaleStepLine('br_cache', 'mouse')).toBe(
-      'Stand by a glowing cache to open it: it holds the next piece of your build.',
+      'Click a glowing cache to walk to it, and stand there to open it: it holds the next piece of your build.',
     );
     expect(royaleStepLine('br_pad', 'mouse')).toBe('Step on a launch pad to fly 50 m.');
     expect(royaleStepLine('br_dusk', 'mouse')).toBe('Stay in the light: the Dusk burns.');
