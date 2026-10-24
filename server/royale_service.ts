@@ -436,7 +436,7 @@ export class RoyaleService {
     this.report(client, entry, how);
     const left = entry.match.leave(client.id, false);
     this.unseat(client.id);
-    this.reservations.delete(client.accountId);
+    this.forget(client.accountId);
     if (left) this.tellSeat(entry, 'left', left, client.id);
     this.noteEmpty(entry);
   }
@@ -450,6 +450,7 @@ export class RoyaleService {
     const left = entry.match.leave(client.id, hold);
     this.unseat(client.id);
     if (left && hold) {
+      this.forget(client.accountId);
       this.reservations.set(client.accountId, {
         matchId: entry.match.id,
         unitId: left.unitId,
@@ -459,6 +460,15 @@ export class RoyaleService {
     }
     this.picks.delete(client.id);
     this.noteEmpty(entry);
+  }
+
+  // An owner holds one seat at most: the one held before is anyone's to
+  // take again, as when its grace runs out.
+  private forget(owner: number): void {
+    const r = this.reservations.get(owner);
+    if (!r) return;
+    this.reservations.delete(owner);
+    this.matches.get(r.matchId)?.match.release(r.unitId);
   }
 
   // A reconnected socket claims the seat held for its owner (the 'hello'
