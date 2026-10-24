@@ -558,6 +558,37 @@ describe('leaving and coming back', () => {
     h.enter(c, 'respawn', 'fenn');
     expect(h.last(3, 'match_start')?.selfUnitId).toBe(self);
   });
+
+  // One account in two matches at once, on two sockets: a seat holds for
+  // its owner only while the owner may still claim it.
+  const twoMatches = () => {
+    const h = harness();
+    const a = h.connect(1, 'alice');
+    const b = h.connect(5, 'alice');
+    (b as { accountId: number }).accountId = 1;
+    h.enter(a, 'respawn');
+    h.enter(b, 'one_life');
+    const first = h.service.matches.get(a.matchId!)!;
+    expect(b.matchId).not.toBe(a.matchId);
+    return { h, a, b, first };
+  };
+
+  it('a second dropped seat frees the first one for a newcomer', () => {
+    const { h, a, b, first } = twoMatches();
+    const open = first.match.openBotSeats;
+    h.service.disconnect(a);
+    expect(first.match.openBotSeats).toBe(open);
+    h.service.disconnect(b);
+    expect(first.match.openBotSeats).toBe(open + 1);
+  });
+
+  it('leaving the other match from the menu frees the dropped seat too', () => {
+    const { h, a, b, first } = twoMatches();
+    const open = first.match.openBotSeats;
+    h.service.disconnect(a);
+    h.say(b, { t: 'leave' });
+    expect(first.match.openBotSeats).toBe(open + 1);
+  });
 });
 
 describe('the seat changing hands on the wire', () => {
