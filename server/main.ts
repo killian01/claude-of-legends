@@ -153,7 +153,7 @@ import { buildPointsLadder, type PointsEntry, type PointsReader } from './points
 import { PracticeReportStore, parsePracticeReport } from './practice_reports';
 import { buildProfile } from './profile';
 import { CEILING_DEFAULTS, checkQuota, DAY_MS, spendQuota } from './quotas';
-import { BASE_RATING, LEAVER_LOCKOUT_MS, leaverPenalty } from './rating';
+import { BASE_RATING, LEAVER_LOCKOUT_MS } from './rating';
 import { talliesOf } from './record_tally';
 import { buildMatchRecord, type MatchRecord } from './records';
 import { checkReference, refusalMessage } from './reference_check';
@@ -203,6 +203,7 @@ import {
   visitIdOf,
   withVisitTag,
 } from './visit_cookie';
+import { walkOutPenalty } from './walk_out';
 import { type WayStats, wayStatsOf } from './way_stats';
 import { playedByHand, seatWay, type Way } from './ways';
 
@@ -1178,24 +1179,25 @@ function walkOutOfMatch(
   const coach = entry.match.players.get(client.id)?.coach === true;
   // A seat taken mid-match was never rated, so leaving it costs nothing.
   const droppedIn = entry.dropIns.has(client.accountId);
-  if (entry.ratedEligible && entry.match.sim.winner === null && !coach && !droppedIn) {
-    const humansByTeam = [0, 0];
-    for (const p of entry.match.players.values()) {
-      if (clients.has(p.clientId)) humansByTeam[p.team] = (humansByTeam[p.team] ?? 0) + 1;
-    }
-    const penalty = leaverPenalty(humansByTeam);
-    const account = registry.findById(client.accountId);
-    if (penalty > 0 && account) {
-      // The walk-out costs the ladder it was climbing: the Forge queue's
-      // own rating for a Forge match, the classic one otherwise. The
-      // lockout is shared; leaving is leaving.
-      if (entry.forge) forgeStore.penalizeForgeRating(account.id, penalty);
-      else registry.penalize(account.id, penalty);
-      rejoins.lockQueue(client.accountId, Date.now() + LEAVER_LOCKOUT_MS);
-      console.log(
-        `match ${matchId}: ${client.name} left a rated match (-${penalty}, queue locked)`,
-      );
-    }
+  const penalty = walkOutPenalty({
+    ratedEligible: entry.ratedEligible,
+    decided: entry.match.sim.winner !== null,
+    coach,
+    droppedIn,
+    seats: [...entry.match.players.values()].map((p) => ({
+      team: p.team,
+      connected: clients.has(p.clientId),
+    })),
+  });
+  const account = penalty > 0 ? registry.findById(client.accountId) : undefined;
+  if (account) {
+    // The walk-out costs the ladder it was climbing: the Forge queue's
+    // own rating for a Forge match, the classic one otherwise. The
+    // lockout is shared; leaving is leaving.
+    if (entry.forge) forgeStore.penalizeForgeRating(account.id, penalty);
+    else registry.penalize(account.id, penalty);
+    rejoins.lockQueue(client.accountId, Date.now() + LEAVER_LOCKOUT_MS);
+    console.log(`match ${matchId}: ${client.name} left a rated match (-${penalty}, queue locked)`);
   }
   const left = entry.match.handleDisconnect(client.id);
   if (left) tellSeat(entry, 'left', left, client.id);
