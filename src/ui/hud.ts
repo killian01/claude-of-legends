@@ -1350,6 +1350,15 @@ export class Hud {
   private landscapeLock: LockAnswer = 'asking';
   private readonly portrait: MediaQueryList | null;
   private readonly onSettings: () => void;
+  // When a touch last pressed the game's canvas, in seconds: the first
+  // steps' hide button does not hear a tap in the middle of walking by
+  // taps (ui/steps_hide.ts).
+  private lastGroundTap: number | null = null;
+  private readonly onGroundTap = (e: PointerEvent): void => {
+    if (e.pointerType === 'touch' && e.target instanceof HTMLCanvasElement) {
+      this.lastGroundTap = performance.now() / 1000;
+    }
+  };
   private endPlayed = false;
   // No account behind this match: a Guest's (ADR 0024) or a visitor's
   // practice.
@@ -1525,6 +1534,7 @@ export class Hud {
     // wall follows it at once, as the stage does.
     this.onSettings = (): void => this.syncTurnNeeded();
     window.addEventListener(SETTINGS_EVENT, this.onSettings);
+    window.addEventListener('pointerdown', this.onGroundTap, true);
     const el = <K extends keyof HTMLElementTagNameMap>(
       tag: K,
       cls: string,
@@ -2016,7 +2026,9 @@ export class Hud {
     let hideLapse: ReturnType<typeof setTimeout> | undefined;
     stepsHide.addEventListener('click', (e) => {
       e.stopPropagation();
-      const press = pressHide(hideArmed, performance.now() / 1000, coarsePointer);
+      const now = performance.now() / 1000;
+      const press = pressHide(hideArmed, now, coarsePointer, this.lastGroundTap);
+      if (!press.heard) return;
       hideArmed = press.armed;
       clearTimeout(hideLapse);
       if (press.hide) {
@@ -2369,6 +2381,7 @@ export class Hud {
     this.stopScale();
     this.stopThumbScale();
     window.removeEventListener(SETTINGS_EVENT, this.onSettings);
+    window.removeEventListener('pointerdown', this.onGroundTap, true);
     this.rootEl.remove();
     this.styleEl.remove();
   }
