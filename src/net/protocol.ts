@@ -252,6 +252,9 @@ export interface SnapWall {
   y2?: number;
   t: TeamId;
   u: number;
+  // A chord of an Oathfield: the ring's center and radius, drawn as the
+  // oath's stone and walked round as the sim does.
+  rg?: { x: number; z: number; y?: number; r: number };
 }
 
 export interface SelfSnap {

@@ -59,6 +59,9 @@ function toStatus(k: string, until: number, v: number | undefined): Status | nul
       return { kind: 'stealth', until };
     case 'fumble':
       return { kind: 'fumble', until };
+    case 'sworn':
+      // Display-only mirror: whose oath it is stays server business.
+      return { kind: 'sworn', until, sourceId: 0 };
     case 'slow':
       return { kind: 'slow', until, pct: v ?? 0 };
     case 'shield':
@@ -829,6 +832,17 @@ export class ClientWorld implements IWorld {
           // The mirror's record blocks nothing: pathing is server truth, and
           // the prediction blocks its own grid (standWalls, below).
           samples: [],
+          ...(w.rg
+            ? {
+                ring: {
+                  center:
+                    w.rg.y !== undefined
+                      ? { x: w.rg.x, y: w.rg.y, z: w.rg.z }
+                      : { x: w.rg.x, z: w.rg.z },
+                  radius: w.rg.r,
+                },
+              }
+            : {}),
         });
       }
     }

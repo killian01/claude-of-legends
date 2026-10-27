@@ -144,6 +144,11 @@ export function isFumbled(u: Unit, time: number): boolean {
   return has(u, 'fumble', time);
 }
 
+// Whether any Ostrand has sworn this unit (sworn.ts reads whose).
+export function isSworn(u: Unit, time: number): boolean {
+  return has(u, 'sworn', time);
+}
+
 export function breakStealth(u: Unit): void {
   u.statuses = u.statuses.filter((s) => s.kind !== 'stealth');
 }
