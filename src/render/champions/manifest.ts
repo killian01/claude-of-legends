@@ -4,6 +4,8 @@
 // plain node. The models are CC0 packs (KayKit, Quaternius) recorded in
 // CREDITS.md; the loader lives in assets.ts, the runtime in visual.ts.
 
+import { UNRELEASED_CHAMPIONS } from '../../sim/content/champions';
+
 // Clip names as they appear inside the GLB. `windup` holds (loops) while a
 // cast is charging; the others are one-shots except idle/run.
 export interface ChampionClipNames {
@@ -143,7 +145,7 @@ const KAYKIT_CLIPS = {
   hit: 'Hit_A',
 } as const;
 
-export const CHAMPION_VISUALS: Readonly<Record<string, ChampionVisualDef>> = {
+const ALL_VISUALS: Readonly<Record<string, ChampionVisualDef>> = {
   // Korrath, the Bulwark: a living rampart golem forged from fortress iron
   // and masonry. Meshy-generated model; the tower shield and siege maul are
   // separate Meshy GLB props riding the hands (CREDITS.md).
@@ -444,7 +446,35 @@ export const CHAMPION_VISUALS: Readonly<Record<string, ChampionVisualDef>> = {
     portrait: { clip: 'idle', time: 0.3, yaw: -0.4, zoom: 0.75 },
     props: [{ kind: 'blowgun', bone: 'Arm.R', rot: [-1.35, 0, 0.15] }],
   },
+  // Ostrand, the Pledgeblade: a knight in steel plate, a long blade in his
+  // sword hand. KayKit's knight (CREDITS.md), scaled up a little over the
+  // other adventurers; the cape takes the skin's body color.
+  ostrand: {
+    url: '/models/champions/knight.glb',
+    height: 2.6,
+    barY: 3.3,
+    clips: {
+      ...KAYKIT_CLIPS,
+      attack: '1H_Melee_Attack_Slice_Diagonal',
+      cast: '1H_Melee_Attack_Chop',
+      windup: 'Block',
+    },
+    teamMeshes: ['Knight_Cape'],
+    runSpeed: 3.9,
+    portrait: { clip: 'attack', time: 0.4, yaw: 0.5 },
+    props: [{ kind: 'sword', bone: 'handslot.r' }],
+  },
 };
+
+// The roster's visuals, every host's preload and readiness list: a champion
+// behind the release switch (ChampionDef.released) is left out, so no player
+// downloads a model nobody can pick yet. It joins the moment it is released.
+export const CHAMPION_VISUALS: Readonly<Record<string, ChampionVisualDef>> = Object.fromEntries(
+  Object.entries(ALL_VISUALS).filter(([id]) => UNRELEASED_CHAMPIONS[id] === undefined),
+);
+
+// Every def, released or not: the clip contract test pins them all.
+export const ALL_CHAMPION_VISUALS = ALL_VISUALS;
 
 export function championVisualDef(championId: string | null): ChampionVisualDef | null {
   return (championId && CHAMPION_VISUALS[championId]) || null;

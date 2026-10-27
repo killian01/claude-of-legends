@@ -8,9 +8,9 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { desiredBaseState } from '../src/render/champions/anim';
-import { CHAMPION_VISUALS } from '../src/render/champions/manifest';
+import { ALL_CHAMPION_VISUALS, CHAMPION_VISUALS } from '../src/render/champions/manifest';
 import { pinTrackToFirstKey } from '../src/render/champions/tracks';
-import { CHAMPIONS } from '../src/sim/content/champions';
+import { CHAMPIONS, UNRELEASED_CHAMPIONS } from '../src/sim/content/champions';
 
 interface GlbMeta {
   animations: string[];
@@ -53,7 +53,14 @@ describe('champion visual manifest', () => {
     expect(Object.keys(CHAMPION_VISUALS).sort()).toEqual(Object.keys(CHAMPIONS).sort());
   });
 
-  for (const [championId, def] of Object.entries(CHAMPION_VISUALS)) {
+  it('holds a def for every champion behind the release switch, kept out of the preload', () => {
+    const all = { ...CHAMPIONS, ...UNRELEASED_CHAMPIONS };
+    expect(Object.keys(ALL_CHAMPION_VISUALS).sort()).toEqual(Object.keys(all).sort());
+    for (const id of Object.keys(UNRELEASED_CHAMPIONS))
+      expect(CHAMPION_VISUALS[id]).toBeUndefined();
+  });
+
+  for (const [championId, def] of Object.entries(ALL_CHAMPION_VISUALS)) {
     describe(championId, () => {
       const meta = readGlbMeta(def.url);
 

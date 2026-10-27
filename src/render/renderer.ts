@@ -21,7 +21,7 @@ import {
   strikeWindupSeconds,
 } from '../sim/combat/auto_attack';
 import type { CastSpec } from '../sim/combat/casting';
-import { isFumbled, isRooted, isStealthed, isStunned } from '../sim/combat/status';
+import { isFumbled, isRooted, isStealthed, isStunned, isSworn } from '../sim/combat/status';
 import { stoneArena, voidmaulStones } from '../sim/combat/voidmaul_stones';
 import { heartwoodOf } from '../sim/content/grafts';
 import { creatureOfRing, WRATH_EXECUTE_FRAC } from '../sim/content/rings';
@@ -90,6 +90,7 @@ import { buildPostMesh } from './post_shapes';
 import { closeRenderer, ProgramKeeper } from './program_keeper';
 import { ProgramWarmup, whenLinked } from './program_warmup';
 import { QualityDial } from './quality_dial';
+import { buildRampart } from './rampart';
 import { RING_FOG_EDGE, ringFogOpening } from './ring_fog';
 import {
   clearRoyaleProjector,
@@ -102,6 +103,7 @@ import { ShaderHold } from './shader_hold';
 import { pickShieldHolder, type ShieldCandidate } from './shield_holder';
 import { fumbleSwirl, StealthVeils } from './status_veils';
 import { crownHeight, crownLift, flightProgress, isStill } from './structure_fire';
+import { buildSwornPennant, flutterPennant } from './sworn_pennant';
 import type { RenderTerrain } from './terrain';
 import { CHARGE_S, nextChargeDelayS } from './tower_shot';
 import {
@@ -209,6 +211,8 @@ interface TrackedUnit {
   stunMark: THREE.Sprite | null;
   // A fumbling champion's "?" (CONTEXT.md: Fumble), where a stun's "!" sits.
   fumbleMark: THREE.Sprite | null;
+  // Ostrand's Sworn: a red pennant over the hunted head (sworn_pennant.ts).
+  swornMark: THREE.Group | null;
   rootMark: THREE.Mesh | null;
   // The battle royale's hunted (ui/royale_hunted.ts markAuras): a ring at
   // the feet in the color of the mark the champion carries (the Wrath, the
@@ -2418,6 +2422,7 @@ export class Renderer {
           lastHp: u.hp,
           stunMark: null,
           fumbleMark: null,
+          swornMark: null,
           rootMark: null,
           markAura: null,
           wrathMark: null,
@@ -2734,6 +2739,17 @@ export class Renderer {
         }
       }
       if (t.fumbleMark) t.fumbleMark.visible = fumbling;
+      const sworn = visible && u.kind === 'champion' && isSworn(u, this.world.time);
+      if (sworn && !t.swornMark) {
+        const pennant = buildSwornPennant();
+        pennant.position.set(0.3, t.barY + 1.15, 0);
+        t.overhead.add(pennant);
+        t.swornMark = pennant;
+      }
+      if (t.swornMark) {
+        t.swornMark.visible = sworn;
+        if (sworn) flutterPennant(t.swornMark, nowMs);
+      }
       const rooted = visible && !stunned && isRooted(u, this.world.time);
       if (rooted && !t.rootMark) {
         const ring = new THREE.Mesh(
@@ -3110,46 +3126,15 @@ export class Renderer {
       }
     }
 
-    // Ability walls: a rampart of jagged stone blocks along the segment,
-    // gone with the wall. The sim already blocks the ground; this is purely
-    // the read. Block shapes vary deterministically per wall id so a wall
-    // never reshuffles between frames.
+    // Ability walls: a rampart along the segment (rampart.ts: Korrath's
+    // jagged stone, the Oathfield's banded ashlar), gone with the wall. The
+    // sim already blocks the ground; this is purely the read.
     for (const [id, w] of this.world.walls) {
       if (this.trackedWalls.has(id)) continue;
       const dx = w.b.x - w.a.x;
       const dz = w.b.z - w.a.z;
       const length = Math.max(0.8, Math.hypot(dx, dz));
-      const holder = new THREE.Group();
-      const jitter = (i: number, k: number): number => {
-        const s = Math.sin((id + 1) * 374.61 + i * 12.9898 + k * 78.233) * 43758.5453;
-        return s - Math.floor(s);
-      };
-      const blocks = Math.max(3, Math.round(length / 0.75));
-      const pitch = length / blocks;
-      for (let i = 0; i < blocks; i++) {
-        const bw = pitch * (0.9 + jitter(i, 1) * 0.35);
-        const bh = 1.15 + jitter(i, 2) * 0.85;
-        const bd = 0.55 + jitter(i, 3) * 0.4;
-        const shade = 0.82 + jitter(i, 4) * 0.3;
-        const mat = new THREE.MeshLambertMaterial({
-          color: new THREE.Color(0x8d8877).multiplyScalar(shade),
-        });
-        const block = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), mat);
-        block.position.set(-length / 2 + (i + 0.5) * pitch, bh / 2, (jitter(i, 5) - 0.5) * 0.35);
-        block.rotation.y = (jitter(i, 6) - 0.5) * 0.5;
-        block.rotation.z = (jitter(i, 7) - 0.5) * 0.18;
-        holder.add(block);
-        // A jagged crown tooth on some stones.
-        if (jitter(i, 8) > 0.45) {
-          const tooth = new THREE.Mesh(
-            new THREE.ConeGeometry(bw * 0.34, 0.45 + jitter(i, 9) * 0.5, 4),
-            mat,
-          );
-          tooth.position.set(block.position.x, bh + 0.15, block.position.z);
-          tooth.rotation.y = jitter(i, 10) * Math.PI;
-          holder.add(tooth);
-        }
-      }
+      const holder = buildRampart(id, length, w.ring !== undefined);
       holder.position.set((w.a.x + w.b.x) / 2, -1.3, (w.a.z + w.b.z) / 2);
       holder.position.y += this.groundHeight(holder.position.x, holder.position.z);
       holder.rotation.y = -Math.atan2(dz, dx);

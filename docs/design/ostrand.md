@@ -129,5 +129,14 @@ person and bot alike (a person's click inside a ring walks to the rim).
    Tests: `tests/ostrand_bots.test.ts`, `tests/royale_bot.test.ts`. The render half is the
    next night: the manifest entry on knight.glb, the Sworn pennant (`sworn` on the wire), the
    ring's look, and with it the E recast dash and R's outside-champion damage reduction.
+   The render half landed 2026-10-27: his def on knight.glb (a sword on the right hand
+   slot, the cape in the skin's body color) in `render/champions/manifest.ts`, which keeps a
+   champion behind the switch out of `CHAMPION_VISUALS` (the preload and readiness list) so
+   nobody downloads the model before he is released; the Sworn on the wire to every viewer
+   and its red pennant over the head (`render/sworn_pennant.ts`); an Oathfield chord's ring
+   on the wire (`SnapWall.rg`) and its look, pale squared ashlar under a thin red line
+   (`render/rampart.ts`, where Korrath's jagged rampart moved too). Tests:
+   `tests/ostrand_wire.test.ts`, `tests/champion_visuals.test.ts`. Still to land before
+   release: the E recast dash and R's outside-champion damage reduction.
 4. Balance with the headless tools, skins and laurel price, the portrait, the news entry, phone
    and desktop checked, and `released: true`.

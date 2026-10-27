@@ -41,8 +41,9 @@ export const NO_ACK: SeatAck = { ack: 0, ackAt: 0 };
 
 // Display-relevant statuses carried on every visible unit: crowd control,
 // the total mark stacks (Sylra's thorns, Elowen's mist) so a marked victim
-// can SEE the trigger building, and live shields so every health bar can
-// draw the grey overlay, both teams alike.
+// can SEE the trigger building, live shields so every health bar can
+// draw the grey overlay, and Ostrand's Sworn so everyone sees who he
+// hunts, both teams alike.
 export function ccChips(u: Unit, time: number): { k: string; v?: number }[] {
   const out: { k: string; v?: number }[] = [];
   let markStacks = 0;
@@ -57,7 +58,8 @@ export function ccChips(u: Unit, time: number): { k: string; v?: number }[] {
       s.kind === 'airborne' ||
       s.kind === 'untargetable' ||
       s.kind === 'fumble' ||
-      s.kind === 'stealth'
+      s.kind === 'stealth' ||
+      s.kind === 'sworn'
     ) {
       out.push({ k: s.kind });
     } else if (s.kind === 'slow') out.push({ k: 'slow', v: round2(s.pct) });
@@ -182,6 +184,11 @@ export function wallRecord(w: Wall): SnapWall {
   };
   if (w.a.y !== undefined) rec.y1 = round2(w.a.y);
   if (w.b.y !== undefined) rec.y2 = round2(w.b.y);
+  if (w.ring) {
+    const c = w.ring.center;
+    rec.rg = { x: round2(c.x), z: round2(c.z), r: round2(w.ring.radius) };
+    if (c.y !== undefined) rec.rg.y = round2(c.y);
+  }
   return rec;
 }
 
