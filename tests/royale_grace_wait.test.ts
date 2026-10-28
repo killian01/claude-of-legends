@@ -92,6 +92,19 @@ describe("a Respawn Arrival's Grace waits on the person", () => {
     expect(u.statuses.some((s) => s.kind === 'untargetable')).toBe(false);
   });
 
+  it('gives a person beside a fair first fight twelve seconds to take in the screen', () => {
+    // Seed 23 at 0:20: the drop-in comes down with its foe in sight.
+    const { match, sim, u, t } = droppedIn('respawn', 23, 20);
+    expect(sim.royaleMode!.tally.fairArrivals).toBe(1);
+    tickTo(match, t + 12);
+    expect(graced(sim, u)).toBe(true);
+    expect(u.hp).toBe(u.maxHp);
+    // Its first move ends it, as before.
+    match.handleCommand(2, moveOrder(sim, u));
+    match.tick();
+    expect(graced(sim, u)).toBe(false);
+  });
+
   it('ends at the first order past ARRIVAL_GRACE_S, a move, an attack-move or a Stop', () => {
     for (const verb of ['move', 'attack_move', 'stop'] as const) {
       const { match, sim, u, t } = droppedIn();

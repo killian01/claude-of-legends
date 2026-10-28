@@ -48,9 +48,10 @@ import type { DuskCap } from './types';
 // Arrival's floor.
 export const ARRIVAL_GRACE_S = 3;
 // The longest a Respawn Arrival's Grace waits for the seat's first order:
-// the joining card's bound (FIRST_FRAME_WAIT_MS, 4 s) and two seconds to
-// take in the world.
-export const ARRIVAL_GRACE_MAX_S = 6;
+// the joining card's bound (FIRST_FRAME_WAIT_MS, 4 s) and time for a
+// newcomer to read the screen it lands on (the steps card, the Graft offer)
+// before the foe beside it may strike.
+export const ARRIVAL_GRACE_MAX_S = 15;
 
 // One Grace: when it began (an act at or after it ends it), when it runs
 // out, from when an order of any kind ends it (a Respawn Arrival's floor;

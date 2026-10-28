@@ -35,6 +35,16 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
+    day: '2026-10-28',
+    title: 'More time to look around when you join',
+    body: [
+      'When you join a Respawn match already under way, your champion now stays Untouchable ' +
+        'for up to 15 seconds until your first order, up from 6. Take your time with the guide ' +
+        'and the screen before the fight beside you begins. Your first move, attack or spell ' +
+        'ends it as before.',
+    ],
+  },
+  {
     day: '2026-10-24',
     title: 'Click a cache to open it',
     body: [

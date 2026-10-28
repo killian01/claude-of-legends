@@ -378,3 +378,16 @@ variants above with a kind's rules read through `RoyaleOptions.bout`, its places
 It is the landing's fourth way to play and a tile on the home beside Respawn and One life.
 ADR 0035 records it; without a bout every seam reads what it read before, and both variants
 are unchanged, match for match (`tests/royale_golden.test.ts`).
+
+## Amended: the waiting Grace waits fifteen seconds (2026-10-28)
+
+The waiting Grace's six seconds covered the joining card and two seconds more, but a person new
+to the planet spends longer than that reading the screen it lands on (the steps card, the Graft
+offer) before giving a first order, while its fair first foe stands 9 to 11 m off and fights
+on sight the moment the Grace runs out. A Respawn Arrival's Grace now waits up to fifteen
+seconds for the seat's first order, not six. Nothing else moves: three seconds at least, the
+first order of any kind past them ends it, its own first attack, cast or sigil ends it at once,
+and a bot playing the seat orders on its first decision, so a bot's seat still ends its Grace at
+three seconds. A graced champion cannot act without ending its Grace, so the longer wait shelters
+only a seat that stands still. One life and every Respawn return are unchanged. Rules 18
+(`src/sim/royale/grace.ts` ARRIVAL_GRACE_MAX_S, `tests/royale_grace_wait.test.ts`).
