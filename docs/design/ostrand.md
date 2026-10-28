@@ -138,5 +138,13 @@ person and bot alike (a person's click inside a ring walks to the rim).
    (`render/rampart.ts`, where Korrath's jagged rampart moved too). Tests:
    `tests/ostrand_wire.test.ts`, `tests/champion_visuals.test.ts`. Still to land before
    release: the E recast dash and R's outside-champion damage reduction.
+   The kit's last two pieces landed 2026-10-29: Gauntlet Throw's recast (`recast.toSworn` in
+   `combat/casting.ts`, a traveling dash at speed 18 to just short of a Sworn within 11, the
+   window 3 s; it reads as ready only while such a Sworn stands, so a missed gauntlet leaves
+   nothing to press), and the Oathfield's guard (`guard: 0.2` on the spec, carried on the ring,
+   read by `oathfieldGuard` in the damage pipeline: inside his own ring he takes a fifth less
+   from champions outside it). A bot charges only while it is the healthier, on both maps.
+   Tests: `tests/ostrand_kit.test.ts`, `tests/ostrand_bots.test.ts`. Left for the release
+   night: skins, laurel price, balance with the whole kit, news, `released: true`.
 4. Balance with the headless tools, skins and laurel price, the portrait, the news entry, phone
    and desktop checked, and `released: true`.

@@ -108,11 +108,13 @@ export const OSTRAND: ChampionDef = {
     },
     E: {
       // A thrown gauntlet: the first enemy champion struck is sworn, over
-      // any Sworn he held.
+      // any Sworn he held. Pressed again within 3 s he charges at the
+      // Sworn, and a wall or a cliff stops him like any dash.
       name: 'Gauntlet Throw',
       manaCost: 40,
       cooldown: 12,
       castRange: 9,
+      recast: { window: 3, toSworn: { speed: 18, range: 11 } },
       spec: {
         kind: 'skillshot',
         speed: 24,
@@ -129,10 +131,11 @@ export const OSTRAND: ChampionDef = {
       manaCost: 100,
       cooldown: 100,
       castRange: 4.5,
-      spec: { kind: 'oathfield', reach: 4.5, radius: 5, duration: 4 },
+      // Inside his ring he takes a fifth less from champions outside it.
+      spec: { kind: 'oathfield', reach: 4.5, radius: 5, duration: 4, guard: 0.2 },
       atRank: [
-        { rank: 2, spec: { kind: 'oathfield', reach: 4.5, radius: 5, duration: 4.5 } },
-        { rank: 3, spec: { kind: 'oathfield', reach: 4.5, radius: 5, duration: 5 } },
+        { rank: 2, spec: { kind: 'oathfield', reach: 4.5, radius: 5, duration: 4.5, guard: 0.2 } },
+        { rank: 3, spec: { kind: 'oathfield', reach: 4.5, radius: 5, duration: 5, guard: 0.2 } },
       ],
     },
   },

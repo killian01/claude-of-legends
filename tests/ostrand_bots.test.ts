@@ -93,3 +93,31 @@ describe('the Oathfield', () => {
     expect(sim.walls.size).toBe(16);
   });
 });
+
+describe("an Ostrand bot's charge at the Sworn", () => {
+  function thrown(): { sim: Sim; o: Unit; e: Unit } {
+    const sim = new Sim(41);
+    const o = sim.addChampion(0 as TeamId, C, 'ostrand');
+    ready(o);
+    const e = sim.addChampion(1 as TeamId, { x: 82, z: 75 }, 'torv');
+    ready(e);
+    expect(sim.castAbility(o.id, 'E', { x: 82, z: 75 })).toBe(true);
+    for (let i = 0; i < 8; i++) sim.tick();
+    o.cooldowns.Q = o.cooldowns.W = o.cooldowns.R = sim.time + 30;
+    return { sim, o, e };
+  }
+
+  it('charges when it is the healthier', () => {
+    const { sim, o, e } = thrown();
+    e.hp = e.maxHp * 0.6;
+    const action = act(sim, o.id);
+    expect(action.kind === 'cast' && action.key).toBe('E');
+  });
+
+  it('does not charge in a duel it is behind in', () => {
+    const { sim, o } = thrown();
+    o.hp = o.maxHp * 0.6;
+    const action = act(sim, o.id);
+    expect(action.kind === 'cast' && action.key === 'E').toBe(false);
+  });
+});

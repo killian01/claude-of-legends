@@ -14,7 +14,7 @@ import type { CombatCtx } from '../sim_context';
 import type { SpellLook } from '../spell_look';
 import { isSpellTarget } from '../spell_targets';
 import { effectiveRank, RANK_BASE_SCALE, RANK_CD_SCALE } from '../stats';
-import { swear } from '../sworn';
+import { swear, swornOf } from '../sworn';
 import { plantTrap, type TrapSpec } from '../traps';
 import type { AbilityKey, Vec2 } from '../types';
 import { hostile, type Unit } from '../unit';
@@ -118,7 +118,9 @@ export type CastSpec =
   // Ostrand's Oathfield (oathfield.ts): needs an enemy champion within
   // `reach`, the nearest of which becomes the Sworn, then a closed ring of
   // wall of `radius` rises around the caster for `duration` seconds.
-  | { kind: 'oathfield'; reach: number; radius: number; duration: number }
+  // `guard`: the share of damage the caster takes less from champions
+  // outside the ring while it stands and he is inside.
+  | { kind: 'oathfield'; reach: number; radius: number; duration: number; guard?: number }
   // A hidden pod planted at the aim (traps.ts): unseen by enemies but
   // under their own reveal zone, it bursts into a field when one steps on
   // it.
@@ -150,9 +152,14 @@ export interface AbilityDef {
   // overrides): the highest entry at or below the live rank wins.
   atRank?: readonly { rank: number; spec: CastSpec }[];
   // ADR 0005: pressing the same key again inside `window` seconds resolves
-  // the follow-up. v2's only recast blinks the caster back to where it
-  // pressed the first cast. Budgeted like any cast; no mana, no cooldown.
-  recast?: { window: number; returnBlink: true };
+  // the follow-up: `returnBlink` blinks the caster back to where it
+  // pressed the first cast; `toSworn` flies it at `speed` to its Sworn
+  // (sworn.ts) when that one stands within `range`, stopped by walls and
+  // terrain like any traveling dash. Budgeted like any cast; no mana, no
+  // cooldown. The Forge offers the return blink alone.
+  recast?:
+    | { window: number; returnBlink: true }
+    | { window: number; toSworn: { speed: number; range: number } };
   // Cast from a store of charges (combat/charges.ts): each cast spends one,
   // one comes back every `every` seconds up to `max`, and `cooldown` is
   // only the beat between two casts.
@@ -435,13 +442,47 @@ export function executeCast(
       const sworn = nearestEnemyChampion(ctx, caster, spec.reach);
       if (!sworn) return false;
       swear(ctx, caster, sworn, true);
-      raiseOathfield(ctx, caster.id, caster.team, copy(caster.pos), spec.radius, spec.duration);
+      raiseOathfield(
+        ctx,
+        caster.id,
+        caster.team,
+        copy(caster.pos),
+        spec.radius,
+        spec.duration,
+        spec.guard,
+      );
       return true;
     }
     case 'trap':
       plantTrap(ctx, caster, spec, clampToRange(caster.pos, aim, castRange), power, vfx);
       return true;
   }
+}
+
+// The flight to the Sworn: from where the caster stands to just short of
+// the Sworn, at `speed`. Refused when there is no Sworn within `range`.
+function dashToSworn(ctx: CombatCtx, caster: Unit, speed: number, range: number): boolean {
+  const sworn = swornOf(ctx, caster);
+  if (!sworn) return false;
+  const gap = dist(caster.pos, sworn.pos);
+  const length = gap - caster.radius - sworn.radius;
+  if (gap > range || length <= 0) return false;
+  caster.path = [];
+  caster.activeDash = {
+    from: copy(caster.pos),
+    dir: headingTo(caster.pos, sworn.pos),
+    speed,
+    remaining: length,
+    traveled: 0,
+    landRadius: 0,
+    onLand: [],
+    selfEffects: [],
+    passThrough: [],
+    hitIds: new Set(),
+    power: { ad: caster.stats.ad, ap: caster.stats.ap, scale: 1 },
+    vfx: null,
+  };
+  return true;
 }
 
 export function castAbility(
@@ -460,6 +501,16 @@ export function castAbility(
   const armed = caster.recastArmed;
   if (armed && armed.key === key && armed.until > ctx.time) {
     if (isRooted(caster, ctx.time)) return false;
+    const recast = def.recast;
+    if (recast && 'toSworn' in recast) {
+      // No Sworn in reach, no flight: the window stays armed.
+      if (!dashToSworn(ctx, caster, recast.toSworn.speed, recast.toSworn.range)) return false;
+      caster.recastArmed = null;
+      breakStealth(caster);
+      caster.actedAt = ctx.time;
+      ctx.events.push({ type: 'cast', unitId: caster.id, key });
+      return true;
+    }
     caster.recastArmed = null;
     const landed = landingOn(ctx.ground, armed.origin, 6);
     if (landed) {

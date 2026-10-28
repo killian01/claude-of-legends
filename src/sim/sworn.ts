@@ -5,6 +5,7 @@
 // a hit on the Sworn renews it; another champion is taken only once the
 // mark lapses or its holder dies, or by a spell that swears outright.
 
+import { dist } from './geo';
 import type { CombatCtx } from './sim_context';
 import { hostile, type Unit } from './unit';
 
@@ -27,6 +28,20 @@ export function swornOf(ctx: CombatCtx, self: Unit): Unit | null {
     if (u.kind === 'champion' && live(ctx, u) && isSwornBy(u, self.id, ctx.time)) return u;
   }
   return null;
+}
+
+// Whether `self` has a living Sworn within `range` (a charge's reach).
+export function swornWithin(
+  units: Iterable<Unit>,
+  self: Unit,
+  range: number,
+  time: number,
+): boolean {
+  for (const u of units) {
+    if (u.kind !== 'champion' || u.dead || !isSwornBy(u, self.id, time)) continue;
+    if (dist(self.pos, u.pos) <= range) return true;
+  }
+  return false;
 }
 
 // Names `target` as the Sworn of `self`. Without `overwrite` a living Sworn

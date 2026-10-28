@@ -11,6 +11,7 @@ import { copy, dirTo, dist, heading, lerp, offset } from './geo';
 import { landingOn } from './ground';
 import type { CombatCtx } from './sim_context';
 import type { TeamId, Vec2 } from './types';
+import type { Unit } from './unit';
 import { createWallSegment, type Wall } from './walls';
 
 export const OATHFIELD_CHORDS = 16;
@@ -37,6 +38,7 @@ export function raiseOathfield(
   center: Vec2,
   radius: number,
   duration: number,
+  guard?: number,
 ): Wall[] {
   for (const u of ctx.units.values()) {
     if (u.dead || ctx.dead.has(u.id) || u.moveSpeed <= 0) continue;
@@ -56,7 +58,8 @@ export function raiseOathfield(
     u.path = [];
   }
   const corners = oathfieldCorners(center, radius);
-  const ring = { center: copy(center), radius };
+  const ring: NonNullable<Wall['ring']> = { center: copy(center), radius };
+  if (guard !== undefined) ring.guard = guard;
   return corners.map((a, i) => {
     const b = corners[(i + 1) % corners.length] as Vec2;
     const wall = createWallSegment(ctx, sourceId, team, a, b, duration);
@@ -97,4 +100,23 @@ export function ringGoal(walls: ReadonlyMap<number, Wall>, from: Vec2, to: Vec2)
 // Whether a point stands inside a ring raised at `center`.
 export function insideOathfield(center: Vec2, radius: number, p: Vec2): boolean {
   return dist(center, p) < radius;
+}
+
+// The share of `amount` a champion keeps taking from `source` while it
+// stands inside a guarding ring it raised and `source` stands outside it:
+// spells and arrows fly over the rim, and the stone takes some of the bite.
+export function oathfieldGuard(
+  walls: ReadonlyMap<number, Wall>,
+  source: Unit,
+  target: Unit,
+): number {
+  if (walls.size === 0 || source.kind !== 'champion' || target.kind !== 'champion') return 1;
+  for (const w of walls.values()) {
+    const ring = w.ring;
+    if (!ring?.guard || w.sourceId !== target.id) continue;
+    if (!insideOathfield(ring.center, ring.radius, target.pos)) continue;
+    if (insideOathfield(ring.center, ring.radius, source.pos)) continue;
+    return 1 - ring.guard;
+  }
+  return 1;
 }

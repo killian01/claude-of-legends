@@ -17,6 +17,7 @@ const fakeCtx = (sim: Sim): CombatCtx =>
     killers: new Map(),
     events: [],
     teamBuffs: new TeamBuffs(),
+    walls: new Map(),
   }) as unknown as CombatCtx;
 
 describe('skill points and ability ranks', () => {

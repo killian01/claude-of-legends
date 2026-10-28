@@ -6,6 +6,7 @@
 export const KILL_CREDIT_WINDOW_S = 10;
 
 import { WRATH_BURN_PCT, WRATH_BURN_S, WRATH_EXECUTE_FRAC } from '../content/rings';
+import { oathfieldGuard } from '../oathfield';
 import type { DamageVia } from '../passive_types';
 import { applyItemDamageModifiers, passiveOf, runGraftDamaged } from '../passives';
 import type { CombatCtx } from '../sim_context';
@@ -69,6 +70,9 @@ export function dealDamage(
     // to champions, scaled per champion on the Wanderseed; 1 everywhere
     // else, where x * 1 is the number it always was.
     if (source.kind === 'champion' && target.kind === 'champion') amount *= source.dmgScale;
+    // The Oathfield's guard (oathfield.ts): its raiser, inside, takes less
+    // from champions outside.
+    amount *= oathfieldGuard(ctx.walls, source, target);
   }
   const penFlat =
     source === undefined ? 0 : dtype === 'physical' ? source.stats.armorPen : source.stats.mrPen;
