@@ -51,6 +51,10 @@
 // and fewer of her free-for-alls (2026-10-24). A third step of health (1.15)
 // evens her duels and takes her to mid-field, but lengthens Lastwick's
 // bouts into its dark.
+// Dain then won the most of his duels at both stages (69% at landing and 56%
+// after the calm, seeds 1 to 30) from the middle of the Respawn field; one
+// small step of damage (0.95 to 0.92) takes him to 62% and 49% and leaves
+// his Respawn seat where it was (2026-10-28).
 //
 // Data, but planet rules only: the 5v5 never reads it, so it stays out of
 // the content fingerprint (fingerprint.ts) and a change moves
@@ -68,7 +72,7 @@ export const PLANET_TUNING: Readonly<Record<string, PlanetTuning>> = {
   vesk: { hp: 1.3, dmg: 0.95 },
   sylra: { hp: 1, dmg: 1.4 },
   elowen: { hp: 1.1, dmg: 1.3 },
-  dain: { hp: 1.05, dmg: 0.95 },
+  dain: { hp: 1.05, dmg: 0.92 },
   torv: { hp: 0.95, dmg: 1.55 },
   korrath: { hp: 0.9, dmg: 1.3 },
   maera: { hp: 1.05, dmg: 1.5 },
