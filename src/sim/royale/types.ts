@@ -113,7 +113,9 @@ export const CLAMOR_S = 3;
 // only a newcomer (mode.ts escortOrder).
 // 17: Elowen's health share on the planet goes from 1 to 1.1 and her
 // damage share from 1.4 to 1.3 (content/royale_tuning.ts).
-export const ROYALE_RULES_VERSION = 17;
+// 18: a Respawn Arrival's Grace waits up to 15 s for the seat's first order,
+// not 6 (grace.ts ARRIVAL_GRACE_MAX_S).
+export const ROYALE_RULES_VERSION = 18;
 
 // One of the Dusk's caps: a circle on the sphere, its radius a chord.
 export interface DuskCap {

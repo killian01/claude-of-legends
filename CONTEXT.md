@@ -1322,7 +1322,7 @@ _Avoid_: spawn, deploy
 The three seconds a champion just come down (an Arrival, a Respawn return) can be neither
 hurt nor targeted; its own first attack, cast or sigil ends it early. A Respawn Arrival's waits
 for the person, whose screen may still be loading: past its three seconds it lasts until the
-seat's first order of any kind, six seconds at most. Not the Calm, which is the whole field's.
+seat's first order of any kind, fifteen seconds at most. Not the Calm, which is the whole field's.
 A word of the code for now: players see the Untouchable status, and the word needs an IP check
 before any player reads it (another game's respawn points carry it).
 _Avoid_: spawn protection, invulnerability
