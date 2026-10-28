@@ -232,6 +232,10 @@ export function pickCast(
       continue;
     }
     if (role === 'engage' && (s.hpFrac < 0.5 || !engage)) continue;
+    // A charge at the Sworn (Gauntlet Throw's recast) only while ahead.
+    const recast = ability.recast;
+    if (s.recastArmed === key && recast && 'toSworn' in recast && s.hpFrac < target.hpFrac)
+      continue;
     if (d <= range && d >= minR) return cast(key, aimAt(sense, target, ability, rng));
   }
   return null;

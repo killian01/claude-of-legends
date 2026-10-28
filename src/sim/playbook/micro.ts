@@ -217,6 +217,9 @@ export function pickCast(ctx: SlotContext, champ: ObsUnit, engage = true): Actio
       continue;
     }
     if (role === 'engage' && (s.hpFrac < 0.5 || !engage)) continue;
+    // A charge at the Sworn (Gauntlet Throw's recast) only while ahead.
+    const recast = def.abilities[key].recast;
+    if (s.recastArmed === key && recast && 'toSworn' in recast && s.hpFrac < champ.hpFrac) continue;
     if (dc <= range && dc >= minR) {
       const aim = aimAt(s, champ, def.abilities[key], obs.time);
       return { kind: 'cast', key, x: aim.x, z: aim.z };

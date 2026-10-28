@@ -23,6 +23,7 @@ import type {
 import type { Sim } from './sim';
 import { effectiveRank } from './stats';
 import { isInvulnerable } from './structure_rules';
+import { swornWithin } from './sworn';
 import type { AbilityKey } from './types';
 import type { Unit } from './unit';
 
@@ -109,8 +110,13 @@ export function buildObservation(sim: Sim, unitId: number): Observation | null {
     }
     // ADR 0005: an armed recast window reads as ready; the press resolves
     // the follow-up with no mana or cooldown gate.
+    // A charge at the Sworn reads as ready only while one stands in reach.
     if (u.recastArmed && u.recastArmed.key === key && u.recastArmed.until > sim.time) {
-      abilityReady[key] = true;
+      const recast = a.recast;
+      abilityReady[key] =
+        !recast ||
+        !('toSworn' in recast) ||
+        swornWithin(sim.units.values(), u, recast.toSworn.range, sim.time);
     }
   }
 
