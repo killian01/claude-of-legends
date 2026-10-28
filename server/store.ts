@@ -44,11 +44,23 @@ export function loadJson<T>(file: string, fallback: T): T {
   }
 }
 
+// A write that fails partway (a full disk) removes its torn tmp before the
+// error goes on: left there, it holds the space the disk needs back, and a
+// replay's `<id>.json.tmp` is never pruned.
 export function saveJsonAtomic(file: string, value: unknown): void {
   mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.tmp`;
-  writeFileSync(tmp, JSON.stringify(value));
-  renameSync(tmp, file);
+  try {
+    writeFileSync(tmp, JSON.stringify(value));
+    renameSync(tmp, file);
+  } catch (err) {
+    try {
+      unlinkSync(tmp);
+    } catch {
+      // Never written is fine.
+    }
+    throw err;
+  }
 }
 
 export function appendJsonl(file: string, value: unknown): void {
