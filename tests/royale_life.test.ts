@@ -30,6 +30,19 @@ describe('a Respawn life', () => {
     expect(life.step(26, true, false, { assists: 0 })).toBe(false);
   });
 
+  it('knows the first fall of the seat from the ones after it', () => {
+    const life = new RoyaleLife();
+    expect(life.firstFall()).toBe(false);
+    life.step(10, true, false, { assists: 0 });
+    expect(life.firstFall()).toBe(false);
+    life.step(20, true, true, { assists: 0 });
+    life.step(22, true, true, { assists: 0 });
+    expect(life.firstFall()).toBe(true);
+    life.step(25, true, false, { assists: 0 });
+    life.step(40, true, true, { assists: 0 });
+    expect(life.firstFall()).toBe(false);
+  });
+
   it('begins again on the return, from zero', () => {
     const life = new RoyaleLife();
     life.step(10, true, false, { assists: 0 });

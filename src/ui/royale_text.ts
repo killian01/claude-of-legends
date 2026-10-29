@@ -161,6 +161,15 @@ export function assistsText(n: number): string {
   return n === 1 ? '1 assist' : `${n} assists`;
 }
 
+// When a Respawn death comes back, the wash's subtitle: "Back in 4.3 s".
+// On the seat's first fall it also says the return keeps what was won
+// (CONTEXT.md: Respawn, "with everything it had"), which nothing else on
+// the wash tells.
+export function backLine(left: number, first: boolean): string {
+  const back = `Back in ${Math.max(0, left).toFixed(1)} s`;
+  return first ? `${back} with your level and build` : back;
+}
+
 // What the Respawn life that just ended held, under the wash's subtitle:
 // "This life: 42 s · 1 takedown · 2 assists", a count of zero left out.
 export function lifeLine(seconds: number, takedowns: number, assists: number): string {

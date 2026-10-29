@@ -3852,7 +3852,7 @@ export class Hud {
       const dead = u.dead && !this.royale.resultShown();
       this.deathOverlay.classList.toggle('open', dead);
       if (dead) {
-        const words = this.royale.deathWords(u);
+        const words = this.royale.deathWords(u, this.royaleLife.firstFall());
         if (this.deathTitle.textContent !== words.title) this.deathTitle.textContent = words.title;
         setText(this.deathSub, this.deathRecap ? `${this.deathRecap} · ${words.sub}` : words.sub);
       }
