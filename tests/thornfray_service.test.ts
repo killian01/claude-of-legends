@@ -299,6 +299,34 @@ describe('the seats over the bouts', () => {
     expect(h.sim().policies.has(unit)).toBe(false);
   });
 
+  it('holds one account to one Thornfray: a second tab is told, not seated again', () => {
+    const h = thornfrayHarness();
+    const a = h.connect(1, 'ash', 7);
+    h.enter(a);
+    h.say(a, { t: 'thornfray_start' });
+    const id = a.matchId;
+    // A second tab of the same account while the first one plays.
+    const b = h.connect(2, 'ash', 7);
+    h.enter(b);
+    expect(b.matchId).toBeNull();
+    expect(h.to(2, 'thornfray_gather')).toEqual([]);
+    expect(h.last(2, 'error')?.message).toBe('You are already in a Thornfray.');
+    // Nor a late seat at the next match's second Lull.
+    const c = h.connect(3, 'cedar');
+    h.enter(c);
+    h.say(c, { t: 'thornfray_start' });
+    h.nextBout();
+    h.step(40);
+    h.enter(b);
+    expect(b.matchId).toBeNull();
+    expect(h.service.entries.size).toBe(2);
+    expect(a.matchId).toBe(id);
+    // Once the first tab leaves, the second takes its seat back.
+    h.say(a, { t: 'leave' });
+    h.enter(b);
+    expect(b.matchId).toBe(id);
+  });
+
   it('seats a late person on the fewest-bushels bot seat at the second Lull alone', () => {
     const h = thornfrayHarness();
     const a = h.connect(1, 'ash');
