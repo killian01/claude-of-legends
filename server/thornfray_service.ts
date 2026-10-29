@@ -310,6 +310,13 @@ export class ThornfrayService {
     this.picks.set(client.id, royalePick(msg, THORNFRAY_ROSTER));
     this.deps.leaveQueues(client.id);
     if (this.rejoin(client)) return;
+    // One Thornfray per line: a seat this account holds from another tab
+    // keeps it out of every other match until that tab leaves.
+    if ([...this.entries.values()].some((e) => seatOfOwner(e.m, client.accountId) !== null)) {
+      this.picks.delete(client.id);
+      send(client.id, { t: 'error', message: 'You are already in a Thornfray.' });
+      return;
+    }
     const g = this.gathering;
     if (g) {
       // One seat per line: the same account in two tabs gathers once.
