@@ -20,6 +20,8 @@ export class RoyaleLife {
   private from: number | null = null;
   private diedAt: number | null = null;
   private takedowns = 0;
+  // The falls seen in the seat, so the wash knows its first.
+  private falls = 0;
   // The row's assists when the life began; null until a row is seen.
   private assistsFrom: number | null = null;
 
@@ -40,7 +42,10 @@ export class RoyaleLife {
       return true;
     }
     if (dead) {
-      if (this.diedAt === null) this.diedAt = time;
+      if (this.diedAt === null) {
+        this.diedAt = time;
+        this.falls += 1;
+      }
       return false;
     }
     // The first row seen, or one under the start: a count only climbs in
@@ -50,6 +55,11 @@ export class RoyaleLife {
       this.assistsFrom = assists;
     }
     return false;
+  }
+
+  // Whether the champion lies in the seat's first fall.
+  firstFall(): boolean {
+    return this.falls === 1 && this.diedAt !== null;
   }
 
   // The own champion took a champion down: one more in this life.

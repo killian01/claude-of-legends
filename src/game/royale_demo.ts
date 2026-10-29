@@ -458,7 +458,8 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
     const w = wall();
     if (scene === 'closing' || moments) (self.pos as { y?: number }).y = -80;
     if (moments && Math.floor(t * 10) % 40 === 0) clamors = [[3, 79, 4, t]];
-    if (scene === 'out' || wash) {
+    // The wash's champion falls a moment in, so the HUD sees the life end.
+    if (scene === 'out' || (wash && w >= 5)) {
       self.dead = true;
       self.hp = 0;
       self.respawnAt = t + (scene === 'wash-globe' ? 2 : 999);

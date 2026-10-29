@@ -10,6 +10,7 @@ import { nextLootPiece, seatBuild } from '../src/sim/royale/loot';
 import { CACHE_OPEN_S, MARK_SHOWN_S } from '../src/sim/royale/types';
 import {
   BUILD_COMPLETE,
+  backLine,
   buildComplete,
   clockText,
   completedText,
@@ -438,6 +439,12 @@ describe('a Respawn death', () => {
 
   it('names the killer alone when its body was not in sight', () => {
     expect(royaleRecap('Pinetinder', null)).toBe('Taken down by Pinetinder');
+  });
+
+  it('says when a Respawn death comes back, and on the first what it comes back with', () => {
+    expect(backLine(4.25, false)).toBe('Back in 4.3 s');
+    expect(backLine(4.25, true)).toBe('Back in 4.3 s with your level and build');
+    expect(backLine(-0.2, false)).toBe('Back in 0.0 s');
   });
 
   it('says what the life held, leaving a count of zero out', () => {

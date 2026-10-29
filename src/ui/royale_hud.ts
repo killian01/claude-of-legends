@@ -70,6 +70,7 @@ import {
   sinceLanding,
 } from './royale_steps';
 import {
+  backLine,
   countLine,
   crewOutLine,
   doubleBadge,
@@ -743,7 +744,8 @@ export class RoyaleHud {
   // life says the champion is out and where it placed; in Crews where the
   // crew placed once it is out, else that the champion watches its crew
   // (game/crew_watch.ts).
-  deathWords(u: Readonly<Unit>): { title: string; sub: string } {
+  // `first`: the seat's first fall, told what a return keeps.
+  deathWords(u: Readonly<Unit>, first = false): { title: string; sub: string } {
     const r = this.state();
     // A Thornfray's One life bout: out until the next, its place of eight.
     if (this.host.variant === 'one_life' && this.bout) {
@@ -762,7 +764,7 @@ export class RoyaleHud {
     }
     return {
       title: 'SLAIN',
-      sub: `Back in ${Math.max(0, u.respawnAt - this.host.world.time).toFixed(1)} s`,
+      sub: backLine(u.respawnAt - this.host.world.time, first),
     };
   }
 
