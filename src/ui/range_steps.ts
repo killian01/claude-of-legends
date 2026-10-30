@@ -54,7 +54,7 @@ const RULES: Readonly<Record<RangeStepId, StepRule<RangeStepId, RangeStepsView>>
 const RANGE: StepTable<RangeStepId, RangeStepsView> = {
   ids: RANGE_STEP_IDS,
   rules: RULES,
-  urgent: null,
+  urgent: [],
 };
 
 // The Range's guide: hidden with the lane's, and 'learn' done when the

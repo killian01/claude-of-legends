@@ -2,7 +2,7 @@
 // the mode's own list, since learning a spell, the last hit, the recall,
 // the shop and the towers mean nothing on the Wanderseed. Attack and cast
 // at an enemy champion, open a cache, stay in the light, take a champion
-// down, fly a launch pad, cast the ultimate at level 6. The same rules as
+// down, fly a launch pad, cast the ultimate at level 6, walk away when hurt. The same rules as
 // the 5v5's (ui/first_steps.ts, whose engine runs both): one line at a
 // time, a step done once done or said long enough, what the player does
 // unaided counted as done, the browser remembering what is done
@@ -12,7 +12,7 @@
 
 import { ROYALE_STEP_IDS, type RoyaleStepId } from '../net/protocol';
 import type { SnapDusk, WirePoint } from '../net/royale_wire';
-import type { RoyaleStage } from '../sim/royale/types';
+import { OUT_OF_COMBAT_S, type RoyaleStage } from '../sim/royale/types';
 import {
   advanceGuide,
   type GuideState,
@@ -20,6 +20,7 @@ import {
   guideFinished,
   guideStart,
   hideGuide,
+  LOW_HEALTH,
   READ_S,
   SAY_S,
   type StepRule,
@@ -57,6 +58,8 @@ export interface RoyaleStepsView extends GuideView {
   ultReady: boolean;
   // R is cooling down, so it was cast.
   ultCast: boolean;
+  // Health over maximum health, 0..1.
+  hpFrac: number;
 }
 
 // The fight step shows for this long on landing, whoever is near; after it,
@@ -163,12 +166,23 @@ const RULES: Readonly<Record<RoyaleStepId, StepRule<RoyaleStepId, RoyaleStepsVie
     over: (v, up) => v.ultCast || up >= READ_S,
     did: (v) => v.level >= ULT_LEVEL && v.ultCast,
   },
+  // Low health takes the card from any step but the Dusk's: there is no
+  // fountain on the Wanderseed, and out of combat a champion runs faster
+  // and heals in the light (sim/royale/mode.ts stepRecovery). Said once,
+  // like the 5v5's.
+  br_low: {
+    when: (v) => v.sinceLanding !== null && !v.dead && v.hpFrac < LOW_HEALTH,
+    over: (v, up) => v.dead || v.hpFrac > RECOVERED || up >= SAY_S,
+  },
 };
+
+// Health back over this share, the low-health step has done its work.
+export const RECOVERED = 0.6;
 
 const TABLE: StepTable<RoyaleStepId, RoyaleStepsView> = {
   ids: ROYALE_STEP_IDS,
   rules: RULES,
-  urgent: 'br_dusk',
+  urgent: ['br_dusk', 'br_low'],
 };
 
 // On a phone the card stands in the band over the champion, where a fight
@@ -204,6 +218,7 @@ const MOUSE: Readonly<Record<RoyaleStepId, string>> = {
   br_dusk: 'Stay in the light: the Dusk burns.',
   br_takedown: 'Takedowns heal you and give you the next piece.',
   br_ult: 'Level 6: your ultimate is ready on R.',
+  br_low: `Low health: walk away from the fight. Out of it for ${OUT_OF_COMBAT_S} s, you run faster and heal.`,
 };
 
 const TAP: Readonly<Partial<Record<RoyaleStepId, string>>> = {

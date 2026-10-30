@@ -8,7 +8,8 @@
 // ?royale-ui-demo=<scene>: pick, pick-one, home, drop (with a Graft
 // offer), calm (with the status chips and a Heartwood offer), closing,
 // out, wash and wash-globe (a Respawn death's wash with the goal's line,
-// and its wait's globe), end-one, end-respawn, moments (the loud
+// and its wait's globe), low (the champion low on health, the guide's
+// low-health step), end-one, end-respawn, moments (the loud
 // moments: the Seedfalls' edge arrows, the Clamors, the feed folding, the
 // run's spotlight, the cache's ritual and the loot's words, the Dusk's
 // pill, every new block faked), land and land-one (the drop, then the
@@ -311,7 +312,7 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
         ...offer('bough', ['second_breath', 'stoneblood', 'thornhide'], t),
       };
     }
-    if (scene === 'calm' || scene === 'end-respawn' || wash || landing) {
+    if (scene === 'calm' || scene === 'low' || scene === 'end-respawn' || wash || landing) {
       return {
         ...base,
         st: 'play',
@@ -459,6 +460,8 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
     if (scene === 'closing' || moments) (self.pos as { y?: number }).y = -80;
     if (moments && Math.floor(t * 10) % 40 === 0) clamors = [[3, 79, 4, t]];
     // The wash's champion falls a moment in, so the HUD sees the life end.
+    // The low scene's champion is hurt a moment in, and stays at a quarter.
+    if (scene === 'low' && w >= 3) self.hp = self.maxHp * 0.25;
     if (scene === 'out' || (wash && w >= 5)) {
       self.dead = true;
       self.hp = 0;

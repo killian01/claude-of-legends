@@ -105,12 +105,13 @@ export interface StepRule<Id extends string, V> {
 }
 
 // A list of steps: the ids in the order they are tried, the rule of each,
-// and the one step, if any, that takes the card from whatever is up when it
-// applies (backing off when hurt, in the 5v5).
+// and the steps, if any, that take the card from whatever is up when they
+// apply (backing off when hurt, in the 5v5), the first of them before the
+// others: one up keeps the card from those after it.
 export interface StepTable<Id extends string, V extends GuideView> {
   ids: readonly Id[];
   rules: Readonly<Record<Id, StepRule<Id, V>>>;
-  urgent: Id | null;
+  urgent: readonly Id[];
 }
 
 const RULES: Readonly<Record<StepId, StepRule<StepId, StepsView>>> = {
@@ -162,7 +163,7 @@ const RULES: Readonly<Record<StepId, StepRule<StepId, StepsView>>> = {
   },
 };
 
-const FIVE: StepTable<StepId, StepsView> = { ids: STEP_IDS, rules: RULES, urgent: 'low_health' };
+const FIVE: StepTable<StepId, StepsView> = { ids: STEP_IDS, rules: RULES, urgent: ['low_health'] };
 
 export function guideStart<Id extends string>(
   ids: readonly Id[],
@@ -179,7 +180,7 @@ export function guideStart<Id extends string>(
   };
 }
 
-// One update of any list: what the player did on their own is done, the
+// One update of any list: what the player did on their own is done, an
 // urgent step takes the card when it applies, the step up is kept, ended
 // or lapsed, and with none up the first that applies comes up.
 export function advanceGuide<Id extends string, V extends GuideView>(
@@ -194,14 +195,11 @@ export function advanceGuide<Id extends string, V extends GuideView>(
     if (!done.includes(id) && rules[id].did?.(v)) done = [...done, id];
   }
   let next: GuideState<Id> = done === s.done ? s : { ...s, done };
-  if (
-    urgent !== null &&
-    next.current !== urgent &&
-    !done.includes(urgent) &&
-    !v.covered &&
-    rules[urgent].when(v, done)
-  ) {
-    return { ...next, current: urgent, shownAt: v.time, lapsedAt: null };
+  for (const id of urgent) {
+    if (next.current === id) break;
+    if (!done.includes(id) && !v.covered && rules[id].when(v, done)) {
+      return { ...next, current: id, shownAt: v.time, lapsedAt: null };
+    }
   }
   const current = next.current;
   if (current !== null) {

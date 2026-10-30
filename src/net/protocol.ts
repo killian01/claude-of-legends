@@ -589,6 +589,7 @@ export const ROYALE_STEP_IDS = [
   'br_takedown',
   'br_pad',
   'br_ult',
+  'br_low',
 ] as const;
 export type RoyaleStepId = (typeof ROYALE_STEP_IDS)[number];
 export type WireStepId = StepId | RoyaleStepId;
