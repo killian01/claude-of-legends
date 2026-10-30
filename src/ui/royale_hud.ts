@@ -737,6 +737,7 @@ export class RoyaleHud {
       level: u.level,
       ultReady: effectiveRank(u, 'R') > 0 && !rCooling,
       ultCast: rCooling,
+      hpFrac: u.maxHp > 0 ? u.hp / u.maxHp : 1,
     };
   }
 

@@ -8,7 +8,8 @@
 import { describe, expect, it } from 'vitest';
 import { clampSettings } from '../src/game/settings';
 import { STEP_IDS, stepOnWire } from '../src/net/protocol';
-import { GAP_S, LAPSE_S, READ_S, SAY_S } from '../src/ui/first_steps';
+import { OUT_OF_COMBAT_S } from '../src/sim/royale/types';
+import { GAP_S, LAPSE_S, LOW_HEALTH, READ_S, SAY_S } from '../src/ui/first_steps';
 import {
   CACHE_AFTER_S,
   DUSK_NEAR_M,
@@ -22,6 +23,7 @@ import {
   NOT_LANDED,
   noteLanding,
   PAD_AFTER_S,
+  RECOVERED,
   ROYALE_STEP_IDS,
   type RoyaleStepsState,
   type RoyaleStepsView,
@@ -48,6 +50,7 @@ const LANDED: RoyaleStepsView = {
   level: 3,
   ultReady: false,
   ultCast: false,
+  hpFrac: 1,
 };
 
 function run(s: RoyaleStepsState, views: readonly RoyaleStepsView[]): RoyaleStepsState {
@@ -216,6 +219,51 @@ describe('the battle royale first steps', () => {
         expect(royaleStepLine(id, input)).not.toMatch(/recall|shop|tower|minion|\bB\b|\bP\b/i);
       }
     }
+  });
+});
+
+describe('the low-health step', () => {
+  it('takes the card from the fight when health runs low, and leaves when it is back', () => {
+    let s = run(royaleStepsStart(false, []), [at(0, { enemyNear: true })]);
+    expect(s.current).toBe('br_fight');
+    s = stepRoyaleSteps(s, at(1, { enemyNear: true, hpFrac: LOW_HEALTH - 0.05 }));
+    expect(s.current).toBe('br_low');
+    expect(royaleStepLine('br_low', 'mouse')).toBe(
+      `Low health: walk away from the fight. Out of it for ${OUT_OF_COMBAT_S} s, you run faster and heal.`,
+    );
+    s = stepRoyaleSteps(s, at(3, { hpFrac: RECOVERED + 0.05 }));
+    expect(s.current).toBeNull();
+    expect(s.done).toContain('br_low');
+    // Said once: low again later, the card stays with the other steps.
+    s = run(s, [at(3 + GAP_S, { hpFrac: 0.1 }), at(4 + GAP_S, { hpFrac: 0.1 })]);
+    expect(s.current).not.toBe('br_low');
+  });
+
+  it('gives way to the Dusk, and does not take the card from it', () => {
+    let s = run(fought(), [at(0), at(1, { hpFrac: 0.2 })]);
+    expect(s.current).toBe('br_low');
+    s = stepRoyaleSteps(s, at(2, { hpFrac: 0.2, outside: true }));
+    expect(s.current).toBe('br_dusk');
+    s = stepRoyaleSteps(s, at(3, { hpFrac: 0.15, outside: true }));
+    expect(s.current).toBe('br_dusk');
+  });
+
+  it('says nothing above the line, during the drop, or for a fallen champion', () => {
+    expect(stepRoyaleSteps(fought(), at(1, { hpFrac: LOW_HEALTH + 0.01 })).current).not.toBe(
+      'br_low',
+    );
+    expect(
+      stepRoyaleSteps(fought(), { ...at(1, { hpFrac: 0.1 }), sinceLanding: null }).current,
+    ).toBeNull();
+    expect(stepRoyaleSteps(fought(), at(1, { hpFrac: 0, dead: true })).current).toBeNull();
+  });
+
+  it('ends by itself once said, and is a step the wire knows', () => {
+    let s = run(fought(), [at(0), at(1, { hpFrac: 0.2 })]);
+    expect(s.current).toBe('br_low');
+    s = stepRoyaleSteps(s, at(1 + SAY_S, { hpFrac: 0.2 }));
+    expect(s.current).toBeNull();
+    expect(stepOnWire('br_low')).toBe('br_low');
   });
 });
 

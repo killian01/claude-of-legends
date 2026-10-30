@@ -166,6 +166,7 @@ const view = (time: number, since: number | null, covered = false): RoyaleStepsV
   level: 3,
   ultReady: false,
   ultCast: false,
+  hpFrac: 1,
 });
 
 describe('the first steps and the win card', () => {
