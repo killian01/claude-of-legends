@@ -11,6 +11,7 @@
 
 import {
   appendFileSync,
+  type Dirent,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -61,6 +62,29 @@ export function saveJsonAtomic(file: string, value: unknown): void {
     }
     throw err;
   }
+}
+
+// Every `<name>.json.tmp` file in a directory removed, for boot: saves are
+// synchronous, so before the first one any tmp is a torn write (a crash, or a
+// full disk before the cleanup above). Returns the names removed, for the log.
+export function sweepTornJson(dir: string): string[] {
+  let entries: Dirent[];
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const swept: string[] = [];
+  for (const e of entries) {
+    if (!e.isFile() || !e.name.endsWith('.json.tmp')) continue;
+    try {
+      unlinkSync(path.join(dir, e.name));
+      swept.push(e.name);
+    } catch {
+      // Already gone is fine.
+    }
+  }
+  return swept;
 }
 
 export function appendJsonl(file: string, value: unknown): void {

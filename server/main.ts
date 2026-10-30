@@ -188,6 +188,7 @@ import {
   pruneNumberedJson,
   readJsonl,
   saveJsonAtomic,
+  sweepTornJson,
 } from './store';
 import { suggestKit } from './suggest';
 import { suggestLook } from './suggest_look';
@@ -628,6 +629,12 @@ function seedStandingAccounts(): void {
   if (seeded > 0) console.log(`laurels: ${seeded} account(s) credited from the match log`);
 }
 seedStandingAccounts();
+// A torn save's tmp is never read and never pruned; a replay's is as big as
+// the replay. Saves are synchronous, so none is in flight here.
+for (const dir of [DATA_DIR, REPLAYS_DIR]) {
+  const swept = sweepTornJson(dir);
+  if (swept.length > 0) console.log(`store: swept ${swept.length} torn tmp file(s) in ${dir}`);
+}
 // Match ids restart above everything already on disk: a replay file, a
 // replay a Record entry still holds, a match log line. Ids name replay
 // files, so an id handed out twice would overwrite a replay an older

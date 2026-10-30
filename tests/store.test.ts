@@ -20,6 +20,7 @@ import {
   pruneNumberedJson,
   readJsonl,
   saveJsonAtomic,
+  sweepTornJson,
 } from '../server/store';
 
 const dirs: string[] = [];
@@ -92,6 +93,28 @@ describe('json store', () => {
     expect(maxNumberedJson(dir)).toBe(22);
     expect(maxNumberedJson(path.join(dir, 'nope'))).toBe(0);
     expect(maxNumberedJson(tmp())).toBe(0);
+  });
+
+  // A save torn by a crash or a full disk before the tmp cleanup landed left
+  // `<file>.json.tmp` behind, and nothing ever pruned it: a replay's tmp is
+  // as big as the replay. Saves are synchronous, so at boot every one is torn.
+  it('sweeps torn json tmp files at boot and leaves everything else', () => {
+    const dir = tmp();
+    saveJsonAtomic(path.join(dir, '7.json'), { n: 7 });
+    saveJsonAtomic(path.join(dir, 'accounts.json'), []);
+    writeFileSync(path.join(dir, '8.json.tmp'), '{"n":');
+    writeFileSync(path.join(dir, 'accounts.json.tmp'), '[');
+    writeFileSync(path.join(dir, 'notes.tmp'), 'keep');
+    mkdirSync(path.join(dir, 'odd.json.tmp'));
+    expect(sweepTornJson(dir).sort()).toEqual(['8.json.tmp', 'accounts.json.tmp']);
+    expect(readdirSync(dir).sort()).toEqual([
+      '7.json',
+      'accounts.json',
+      'notes.tmp',
+      'odd.json.tmp',
+    ]);
+    expect(sweepTornJson(dir)).toEqual([]);
+    expect(sweepTornJson(path.join(dir, 'nope'))).toEqual([]);
   });
 
   it('appends jsonl lines and skips a torn last line', () => {
