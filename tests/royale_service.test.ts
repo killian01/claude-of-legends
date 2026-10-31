@@ -200,6 +200,33 @@ describe('entering', () => {
     expect(h.last(2, 'snap')?.royale?.people).toBe(2);
   });
 
+  it('holds one account to one seat: a second tab is refused while the first plays', () => {
+    const h = harness();
+    const a = h.connect(1, 'alice');
+    h.enter(a);
+    const b = h.connect(2, 'alice');
+    (b as { accountId: number }).accountId = 1;
+    h.enter(b);
+    expect(h.last(2, 'error')?.message).toBe('You are already in a battle royale.');
+    expect(h.service.owns(2)).toBe(false);
+    expect(h.last(2, 'match_start')).toBeUndefined();
+    // Once the first tab leaves, the second one enters.
+    h.say(a, { t: 'leave' });
+    h.enter(b);
+    expect(h.service.owns(2)).toBe(true);
+  });
+
+  it('lets a second tab enter once the first seat is out for good', () => {
+    const h = harness();
+    const a = h.connect(1, 'alice');
+    h.enter(a, 'one_life');
+    h.runTo(Number.POSITIVE_INFINITY);
+    const b = h.connect(2, 'alice');
+    (b as { accountId: number }).accountId = 1;
+    h.enter(b, 'one_life');
+    expect(h.service.owns(2)).toBe(true);
+  });
+
   it('One life takes no newcomer past the calm: a new match starts instead', () => {
     const h = harness();
     h.enter(h.connect(1, 'alice'), 'one_life');
@@ -560,14 +587,16 @@ describe('leaving and coming back', () => {
   });
 
   // One account in two matches at once, on two sockets: a seat holds for
-  // its owner only while the owner may still claim it.
+  // its owner only while the owner may still claim it. Entering no longer
+  // reaches this (a second tab is refused), so the socket takes the account
+  // once seated; forget stays the guard.
   const twoMatches = () => {
     const h = harness();
     const a = h.connect(1, 'alice');
     const b = h.connect(5, 'alice');
-    (b as { accountId: number }).accountId = 1;
     h.enter(a, 'respawn');
     h.enter(b, 'one_life');
+    (b as { accountId: number }).accountId = 1;
     const first = h.service.matches.get(a.matchId!)!;
     expect(b.matchId).not.toBe(a.matchId);
     return { h, a, b, first };

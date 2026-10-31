@@ -197,6 +197,17 @@ export class RoyaleService {
     }
   }
 
+  // A seat of this owner in a match still running, its champion not out.
+  private playing(owner: number): boolean {
+    for (const e of this.matches.values()) {
+      if (e.match.over) continue;
+      for (const p of e.match.players.values()) {
+        if (p.owner === owner && !e.match.isOut(p.unitId)) return true;
+      }
+    }
+    return false;
+  }
+
   private entryOf(clientId: number): RoyaleEntry | undefined {
     const id = this.seated.get(clientId);
     return id === undefined ? undefined : this.matches.get(id);
@@ -263,6 +274,13 @@ export class RoyaleService {
     this.picks.set(client.id, royalePick(msg, ROYALE_ROSTER));
     this.deps.leaveQueues(client.id);
     if (this.rejoin(client)) return;
+    // One seat per line: a seat this account still plays from another tab
+    // keeps it out of every other one until that tab leaves.
+    if (this.playing(client.accountId)) {
+      this.picks.delete(client.id);
+      send(client.id, { t: 'error', message: 'You are already in a battle royale.' });
+      return;
+    }
     const person = this.person(client, this.pickOf(client));
     const matchId = chooseRoyaleMatch(this.candidates(), variant, crew);
     const entry = matchId === null ? undefined : this.matches.get(matchId);
