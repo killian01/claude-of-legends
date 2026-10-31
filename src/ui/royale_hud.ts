@@ -724,7 +724,8 @@ export class RoyaleHud {
       time,
       // The win card says what wins first: the steps wait while it is to
       // come or up, and count their landing from its going.
-      covered: covered || this.endEl !== null || fight || this.win.holdsSteps(),
+      covered: covered || this.endEl !== null || this.win.holdsSteps(),
+      fold: fight,
       dead: u.dead,
       sinceLanding: r ? this.win.stepsLanding(sinceLanding(this.landing, r.st, time), time) : null,
       fought: this.fought,

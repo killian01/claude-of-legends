@@ -64,6 +64,9 @@ export interface GuideView {
   // A shop, a menu or the end screen covers the screen: no step starts.
   covered: boolean;
   dead: boolean;
+  // The card folds for a moment (a fight on a phone): no step but an
+  // urgent one starts or shows, since what it says is about that moment.
+  fold?: boolean;
 }
 
 // Health under which backing off is the step.
@@ -222,13 +225,25 @@ export function advanceGuide<Id extends string, V extends GuideView>(
     }
     return next.lapsedAt === null ? next : { ...next, lapsedAt: null };
   }
-  if (v.covered || v.dead || v.time - next.lastEnd < GAP_S) return next;
+  if (v.covered || v.fold || v.dead || v.time - next.lastEnd < GAP_S) return next;
   for (const id of ids) {
     if (done.includes(id) || !rules[id].when(v, done)) continue;
     next = { ...next, current: id, shownAt: v.time, lapsedAt: null };
     break;
   }
   return next;
+}
+
+// The step up shows now: nothing covers the card, the champion lives, and
+// a fold leaves only an urgent step up.
+export function guideShows<Id extends string, V extends GuideView>(
+  table: StepTable<Id, V>,
+  s: GuideState<Id>,
+  v: V,
+): boolean {
+  const id = s.current;
+  if (id === null || v.covered || v.dead) return false;
+  return !v.fold || table.urgent.includes(id);
 }
 
 // Every step of a list done, or the guide hidden: nothing left to lead.
