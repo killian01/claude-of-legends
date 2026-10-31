@@ -117,7 +117,9 @@ export const CLAMOR_S = 3;
 // not 6 (grace.ts ARRIVAL_GRACE_MAX_S).
 // 19: Dain's damage share on the planet goes from 0.95 to 0.92
 // (content/royale_tuning.ts).
-export const ROYALE_RULES_VERSION = 19;
+// 20: Maera's health share on the planet goes from 1.05 to 1
+// (content/royale_tuning.ts).
+export const ROYALE_RULES_VERSION = 20;
 
 // One of the Dusk's caps: a circle on the sphere, its radius a chord.
 export interface DuskCap {
