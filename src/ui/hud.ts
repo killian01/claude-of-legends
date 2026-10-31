@@ -181,6 +181,7 @@ import {
   hideRoyaleSteps,
   type RoyaleStepsState,
   royaleStepLine,
+  royaleStepShows,
   royaleStepsFinished,
   royaleStepsStart,
   stepRoyaleSteps,
@@ -2688,7 +2689,7 @@ export class Hud {
       for (const id of fresh) this.netHooks.sendStep?.(id);
     }
     const id = next.current;
-    const visible = id !== null && !view.covered && !view.dead;
+    const visible = royaleStepShows(next, view);
     if (id !== null && visible) {
       const line = royaleStepLine(id, this.stepsInput, getSettings().leftClickMoves);
       if (this.stepsLineEl.textContent !== line) this.stepsLineEl.textContent = line;

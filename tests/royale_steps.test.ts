@@ -28,6 +28,7 @@ import {
   type RoyaleStepsState,
   type RoyaleStepsView,
   royaleStepLine,
+  royaleStepShows,
   royaleStepsFinished,
   royaleStepsStart,
   sinceLanding,
@@ -394,5 +395,30 @@ describe('the first steps in a fight', () => {
   it('never fold on a desktop, where the card stands at the side', () => {
     expect(foldForFight(0, false)).toBe(false);
     expect(foldForFight(1, false)).toBe(false);
+  });
+
+  it('start no ordinary step while folded, and hide the one up until the fold ends', () => {
+    let s = run(fought(), [at(CACHE_AFTER_S, { fold: true })]);
+    expect(s.current).toBeNull();
+    s = run(s, [at(CACHE_AFTER_S + 1)]);
+    expect(s.current).toBe('br_cache');
+    expect(royaleStepShows(s, at(CACHE_AFTER_S + 1))).toBe(true);
+    expect(royaleStepShows(s, at(CACHE_AFTER_S + 2, { fold: true }))).toBe(false);
+  });
+
+  it('tell a hurt champion to walk away in the middle of the fight it is losing', () => {
+    const hurt = at(CACHE_AFTER_S + 1, { fold: true, hpFrac: LOW_HEALTH - 0.05 });
+    const s = run(fought(), [at(CACHE_AFTER_S), hurt]);
+    expect(s.current).toBe('br_low');
+    expect(royaleStepShows(s, hurt)).toBe(true);
+  });
+
+  it('keep the Dusk up through a fight in it', () => {
+    const burning = at(CACHE_AFTER_S, { fold: true, outside: true });
+    const s = run(fought(), [burning]);
+    expect(s.current).toBe('br_dusk');
+    expect(royaleStepShows(s, burning)).toBe(true);
+    expect(royaleStepShows(s, { ...burning, covered: true })).toBe(false);
+    expect(royaleStepShows(s, { ...burning, dead: true })).toBe(false);
   });
 });

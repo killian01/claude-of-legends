@@ -18,6 +18,7 @@ import {
   type GuideState,
   type GuideView,
   guideFinished,
+  guideShows,
   guideStart,
   hideGuide,
   LOW_HEALTH,
@@ -187,8 +188,10 @@ const TABLE: StepTable<RoyaleStepId, RoyaleStepsView> = {
 
 // On a phone the card stands in the band over the champion, where a fight
 // is read: it folds while the champion is in one (a hit taken, the Dusk's
-// burn aside, in the last FIGHT_FOLD_S) and comes back after. On a desktop
-// it stands at the side (ui/hud.ts) and never folds for a fight.
+// burn aside, in the last FIGHT_FOLD_S) and comes back after, but for the
+// urgent steps, which say to leave the fight or the Dusk and are only of
+// use during it. On a desktop it stands at the side (ui/hud.ts) and never
+// folds for a fight.
 export const FIGHT_FOLD_S = 3;
 export function foldForFight(sinceHit: number | null, compact: boolean): boolean {
   return compact && sinceHit !== null && sinceHit >= 0 && sinceHit < FIGHT_FOLD_S;
@@ -200,6 +203,10 @@ export function royaleStepsStart(off: boolean, done: readonly string[]): RoyaleS
 
 export function stepRoyaleSteps(s: RoyaleStepsState, v: RoyaleStepsView): RoyaleStepsState {
   return advanceGuide(TABLE, s, v);
+}
+
+export function royaleStepShows(s: RoyaleStepsState, v: RoyaleStepsView): boolean {
+  return guideShows(TABLE, s, v);
 }
 
 export function royaleStepsFinished(s: RoyaleStepsState): boolean {

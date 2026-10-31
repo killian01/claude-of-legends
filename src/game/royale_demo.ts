@@ -460,8 +460,9 @@ export async function runRoyaleDemo(container: HTMLElement): Promise<void> {
     if (scene === 'closing' || moments) (self.pos as { y?: number }).y = -80;
     if (moments && Math.floor(t * 10) % 40 === 0) clamors = [[3, 79, 4, t]];
     // The wash's champion falls a moment in, so the HUD sees the life end.
-    // The low scene's champion is hurt a moment in, and stays at a quarter.
-    if (scene === 'low' && w >= 3) self.hp = self.maxHp * 0.25;
+    // The low scene's champion is hurt a moment in, and stays near a quarter
+    // taking a blow every 2 s, so a phone's card is in its fight fold.
+    if (scene === 'low' && w >= 3) self.hp = self.maxHp * (Math.floor(w) % 2 === 0 ? 0.25 : 0.3);
     if (scene === 'out' || (wash && w >= 5)) {
       self.dead = true;
       self.hp = 0;
