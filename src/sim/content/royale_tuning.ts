@@ -55,6 +55,9 @@
 // after the calm, seeds 1 to 30) from the middle of the Respawn field; one
 // small step of damage (0.95 to 0.92) takes him to 62% and 49% and leaves
 // his Respawn seat where it was (2026-10-28).
+// Maera then won 70% of her landing duels (seeds 1 to 30), the field's
+// first; a step of health back (1.05 to 1), as in round 3, takes her to 63%
+// and keeps her Respawn seat in the field (2026-10-31).
 //
 // Data, but planet rules only: the 5v5 never reads it, so it stays out of
 // the content fingerprint (fingerprint.ts) and a change moves
@@ -75,7 +78,7 @@ export const PLANET_TUNING: Readonly<Record<string, PlanetTuning>> = {
   dain: { hp: 1.05, dmg: 0.92 },
   torv: { hp: 0.95, dmg: 1.55 },
   korrath: { hp: 0.9, dmg: 1.3 },
-  maera: { hp: 1.05, dmg: 1.5 },
+  maera: { hp: 1, dmg: 1.5 },
   nisk: { hp: 1.3, dmg: 1.05 },
   // Behind his release switch: at 1 and 1 he won 29% of his landing duels
   // and 19% after the calm, at 1.3 damage 67% and 65%; 1.2 gives 56% and
