@@ -14,7 +14,7 @@ import {
   initialCampStates,
   stepCamps,
 } from '../src/sim/camps';
-import { castAbility, executeCast, stepWindups } from '../src/sim/combat/casting';
+import { type AbilityDef, castAbility, executeCast, stepWindups } from '../src/sim/combat/casting';
 import { dealDamage } from '../src/sim/combat/damage';
 import { applyEffects, type EffectCtx, evaluatePredicate } from '../src/sim/combat/effects';
 import { CAMPS } from '../src/sim/content/camps';
@@ -138,10 +138,16 @@ function champion(
 // enemy dummy six meters away that cannot die, and an ally two meters
 // beside the dummy for the jump that goes to one (Dain's Cinder Guard).
 // Everyone holds, so nobody walks or swings on their own.
-function arena(championId: string) {
+// The dummy stands 6 away, or inside the reach a spell needs an enemy in
+// (the Oathfield's 4.5).
+function dummyAt(a?: AbilityDef): number {
+  return a?.spec.kind === 'oathfield' ? a.spec.reach - 0.5 : 6;
+}
+
+function arena(championId: string, at = 6) {
   const sim = planetSim({}, 5);
   const caster = sim.addChampion(0, HOME, championId);
-  const dummy = sim.addChampion(1, offset(HOME, heading(HOME, 0.6), 6), 'vesk');
+  const dummy = sim.addChampion(1, offset(HOME, heading(HOME, 0.6), at), 'vesk');
   const back = dirTo(dummy.pos, HOME)!;
   const ally = sim.addChampion(0, offset(dummy.pos, turnLeft(back, dummy.pos), 2), 'maera');
   sim.setLevel(caster.id, 6);
@@ -158,7 +164,7 @@ describe('every spell of the ten on the sphere, as it resolves', () => {
     it(`${def.name}: Q, W, E and R land their bolts, fields and leaps on the sphere`, () => {
       const out: string[] = [];
       for (const key of KEYS) {
-        const { sim, caster, dummy } = arena(def.id);
+        const { sim, caster, dummy } = arena(def.id, dummyAt(def.abilities[key]));
         const cast = castAbility(ctxOf(sim, sim.time), caster, key, def.abilities[key], dummy.pos);
         expect(cast, `${def.id} ${key} is cast`).toBe(true);
         // The windup waited out: the spell resolves, nothing else steps.
@@ -436,7 +442,7 @@ describe('every spell of the ten on the sphere, three seconds on', () => {
       const out: string[] = [];
       const hurt: AbilityKey[] = [];
       for (const key of KEYS) {
-        const { sim, caster, dummy } = arena(def.id);
+        const { sim, caster, dummy } = arena(def.id, dummyAt(def.abilities[key]));
         expect(sim.castAbility(caster.id, key, copy(dummy.pos)), `${def.id} ${key}`).toBe(true);
         const windup = def.abilities[key].windup ?? 0;
         const ticks = Math.ceil((windup + 3) / DT);

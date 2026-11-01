@@ -4,7 +4,6 @@
 // hardens allies and reveals enemies; E throws a gauntlet that swears
 // whoever it strikes; R raises the Oathfield (oathfield.ts), a ring of
 // stone nobody walks or dashes across, around him and his Sworn.
-// Not yet dealt anywhere: `released: false` keeps him out of every pick.
 
 import { refreshBuff } from '../../combat/status';
 import { dist } from '../../geo';
@@ -25,7 +24,6 @@ export const OSTRAND: ChampionDef = {
   name: 'Ostrand, the Pledgeblade',
   role: 'Fighter',
   blurb: 'A duelist who names one enemy and rings the two of them in stone.',
-  released: false,
   passive: {
     name: 'Sworn',
     description:
@@ -95,7 +93,7 @@ export const OSTRAND: ChampionDef = {
       // are harder to hurt, enemies under it are seen.
       name: 'Standard',
       manaCost: 50,
-      cooldown: 16,
+      cooldown: 11,
       castRange: 0,
       spec: {
         kind: 'zone',
@@ -112,14 +110,14 @@ export const OSTRAND: ChampionDef = {
       // Sworn, and a wall or a cliff stops him like any dash.
       name: 'Gauntlet Throw',
       manaCost: 40,
-      cooldown: 12,
-      castRange: 9,
-      recast: { window: 3, toSworn: { speed: 18, range: 11 } },
+      cooldown: 11,
+      castRange: 7,
+      recast: { window: 3, toSworn: { speed: 18, range: 7.5 } },
       spec: {
         kind: 'skillshot',
         speed: 24,
         radius: 0.6,
-        range: 9,
+        range: 7,
         onHit: [
           { kind: 'damage', base: 40, adRatio: 0.3, dtype: 'physical' },
           { kind: 'conditional', when: { kind: 'targetIsChampion' }, effects: [{ kind: 'swear' }] },
@@ -129,7 +127,7 @@ export const OSTRAND: ChampionDef = {
     R: {
       name: 'Oathfield',
       manaCost: 100,
-      cooldown: 100,
+      cooldown: 70,
       castRange: 4.5,
       // Inside his ring he takes a fifth less from champions outside it.
       spec: { kind: 'oathfield', reach: 4.5, radius: 5, duration: 4, guard: 0.2 },

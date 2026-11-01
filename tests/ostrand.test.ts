@@ -1,5 +1,5 @@
 // Ostrand, the Pledgeblade, through the Sim (docs/design/ostrand.md, slice
-// 2): the release switch that keeps him out of every pick, the Sworn his
+// 2): the release switch, on since 2026-11-01, the Sworn his
 // hits name and his gauntlet takes, Lance Drive's harder slow on it, and the
 // Oathfield: refused with nobody in reach, a closed ring that keeps each
 // unit on its own side, stops a walk and a traveling dash at the rim alike
@@ -42,10 +42,10 @@ type Ctx = Parameters<typeof swornOf>[0];
 const ctxOf = (sim: Sim): Ctx => (sim as unknown as { ctx(): Ctx }).ctx();
 
 describe('the release switch', () => {
-  it('keeps Ostrand out of every pick while the Sim can still field him', () => {
-    expect(CHAMPION_LIST.some((c) => c.id === 'ostrand')).toBe(false);
-    expect(CHAMPIONS.ostrand).toBeUndefined();
-    expect(UNRELEASED_CHAMPIONS.ostrand?.released).toBe(false);
+  it('deals Ostrand in every pick now that he is released', () => {
+    expect(CHAMPION_LIST.some((c) => c.id === 'ostrand')).toBe(true);
+    expect(CHAMPIONS.ostrand?.released).not.toBe(false);
+    expect(UNRELEASED_CHAMPIONS.ostrand).toBeUndefined();
     for (const c of CHAMPION_LIST) expect(c.released).not.toBe(false);
     const { o } = arena();
     expect(o.championId).toBe('ostrand');

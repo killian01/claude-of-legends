@@ -119,7 +119,9 @@ export const CLAMOR_S = 3;
 // (content/royale_tuning.ts).
 // 20: Maera's health share on the planet goes from 1.05 to 1
 // (content/royale_tuning.ts).
-export const ROYALE_RULES_VERSION = 20;
+// 21: Ostrand joins the pool the house seats are dealt from, with his planet
+// tuning and build.
+export const ROYALE_RULES_VERSION = 21;
 
 // One of the Dusk's caps: a circle on the sphere, its radius a chord.
 export interface DuskCap {

@@ -1,8 +1,7 @@
 # Ostrand, the Pledgeblade (champion twelve)
 
-Status: accepted design, not yet in the game. Lands in four slices (below); until the last one
-the champion stays behind the `released` switch in its content data, so no select screen, bot
-seat or royale pool deals it.
+Status: in the game since 2026-11-01. Landed in the slices below behind the `released` switch
+in its content data, turned on in the last one.
 
 ## What it is
 
@@ -39,8 +38,8 @@ Role Fighter, home lane top. Melee, a long lance-sword (attack range 2.0).
 - **W, Standard.** Plants a banner at his feet: a zone (radius 3.5, 4 s) where allies take 15
   percent less damage from champions and enemies are revealed. It does not move with him; the
   play is to fight over it.
-- **E, Gauntlet Throw.** A gauntlet skillshot (range 9): the first enemy champion hit takes
-  light damage and becomes the Sworn. Recast within 3 s: a traveling dash to the Sworn, which
+- **E, Gauntlet Throw.** A gauntlet skillshot (range 7): the first enemy champion hit takes
+  light damage and becomes the Sworn. Recast within 3 s: a traveling dash to a Sworn within 7.5, which
   walls and terrain stop like any dash.
 - **R, Oathfield.** Needs an enemy champion within 4.5; that champion becomes the Sworn. A
   ring of wall (radius 5) rises around Ostrand's position for 4 s (4.5 s and 5 s at ranks two
@@ -53,16 +52,16 @@ sixteen chords, each a `createWallSegment`, so it blocks walking, pathing and tr
 and lets projectiles and sight pass, exactly like Iron Wall. On the planet each chord is an arc
 of a great circle, as walls already are. No new system: no ADR.
 
-## Numbers (first pass, tuned in slice 4)
+## Numbers (tuned on the release night)
 
 | | |
 |---|---|
 | Base | hp 640, mana 280, ad 60, armor 30, mr 30, attack speed 0.66, move 3.7, radius 0.7 |
 | Growth | hp 98, mana 28, ad 3.6, armor 2.8, mr 1.8 |
 | Q | 30 mana, cooldown 6, 65 / 100 / 135 / 170 / 205 + 0.8 bonus ad |
-| W | 50 mana, cooldown 16 |
-| E | 40 mana, cooldown 12, 40 / 60 / 80 / 100 / 120 + 0.3 bonus ad |
-| R | 100 mana, cooldown 100 / 85 / 70 |
+| W | 50 mana, cooldown 11 |
+| E | 40 mana, cooldown 11, 40 / 60 / 80 / 100 / 120 + 0.3 bonus ad |
+| R | 100 mana, cooldown 70 |
 
 Balance target: within the roster's band in the 5v5 matrix and in `scripts/royale_duel.mjs`
 and `scripts/royale_report.mjs`. The duel is the risk: if Ostrand wins most rings, R's damage
@@ -148,3 +147,10 @@ person and bot alike (a person's click inside a ring walks to the rim).
    night: skins, laurel price, balance with the whole kit, news, `released: true`.
 4. Balance with the headless tools, skins and laurel price, the portrait, the news entry, phone
    and desktop checked, and `released: true`.
+   Landed 2026-11-01: `released: true`, three skins (Default, Ashlar, Winterpledge), a price of
+   500 laurels, the royale pool (`ROYALE_RULES_VERSION` 21), the news entry with his portrait.
+   The kit came into the roster's bands (`tests/pacing.test.ts`, `tests/champion_reach.test.ts`):
+   W and E at 11 s, R at 70 s, the gauntlet at 7 and its charge at 7.5, inside the melee
+   engage band of 6 to 7.5.
+   Duels on seeds 1 to 30 with the whole kit (`royale_duel --only ostrand`): 52% at landing,
+   60% after the calm, inside the gate; the planet tuning stays hp 1, damage 1.15.

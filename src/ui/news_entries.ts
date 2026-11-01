@@ -35,6 +35,27 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
+    day: '2026-11-01',
+    title: 'Ostrand, the Pledgeblade',
+    body: [
+      'A twelfth champion takes the field: Ostrand, the Pledgeblade, a knight who picks one ' +
+        'enemy and will not let go. The first enemy champion he strikes becomes his Sworn, ' +
+        'marked by a red pennant both teams can see. Near his Sworn he runs faster and hits ' +
+        'harder, and taking it down heals him and readies his Lance Drive again.',
+      'Lance Drive thrusts down a line and slows, hardest on the Sworn. Standard plants a ' +
+        'banner that hardens his allies and reveals enemies around it. Gauntlet Throw names ' +
+        'whoever it strikes as the Sworn; cast it again to charge straight at them. And the ' +
+        'Oathfield raises a ring of stone around him and his Sworn: nobody walks ' +
+        'or dashes in or out for a few seconds, arrows still fly over, and inside it he takes ' +
+        'less from champions outside.',
+      'He plays top as a Fighter, in 5v5 and on the Wanderseed alike, and the house bots ' +
+        'play him too. He costs 500 laurels and comes with three looks: Default, Ashlar and ' +
+        'Winterpledge.',
+    ],
+    image: 'ostrand.webp',
+    link: { label: 'See the champions', to: 'champions' },
+  },
+  {
     day: '2026-10-28',
     title: 'More time to look around when you join',
     body: [
