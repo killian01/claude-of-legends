@@ -72,12 +72,18 @@ function isOnSelf(a: AbilityDef): boolean {
 }
 
 // Every leap a champion owns, on any key: for a melee kit this is the
-// whole engage, whether it sits on Q (Dain, Fenn, Rhoka, Torv) or on the
-// ultimate (Korrath, who has no other way in).
+// whole engage, whether it sits on Q (Dain, Fenn, Rhoka, Torv), on the
+// ultimate (Korrath, who has no other way in) or on a recast (Ostrand's
+// charge at his Sworn, as far as it flies).
 function gapClosers(c: ChampionDef): number[] {
-  return KEYS.map((k) => c.abilities[k])
+  const leaps = KEYS.map((k) => c.abilities[k])
     .filter(isMobility)
     .map(reachOf);
+  for (const k of KEYS) {
+    const recast = c.abilities[k].recast;
+    if (recast && 'toSworn' in recast) leaps.push(recast.toSworn.range);
+  }
+  return leaps;
 }
 
 const melee = (c: ChampionDef): boolean => c.base.attackRange <= RANGED_THRESHOLD;

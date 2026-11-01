@@ -24,8 +24,8 @@ export const STARTER_COLLECTION: readonly string[] = ['torv', 'fenn', 'ashvyn', 
 // maintainer decides; there is deliberately no formula behind these
 // (ADR 0018). Korrath and Vesk cost more because they arrive with their
 // own models while the other eight wear shared CC0 pack assets
-// (src/render/champions/manifest.ts). Nisk, the eleventh, wears one of
-// those packs too.
+// (src/render/champions/manifest.ts). Nisk, the eleventh, and Ostrand,
+// the twelfth, wear those packs too.
 export const CHAMPION_PRICES: Readonly<Record<string, number>> = {
   korrath: 800,
   vesk: 800,
@@ -34,6 +34,7 @@ export const CHAMPION_PRICES: Readonly<Record<string, number>> = {
   maera: 500,
   rhoka: 500,
   nisk: 500,
+  ostrand: 500,
 };
 
 // What a match pays. The fixed part is deliberately the small one: it is

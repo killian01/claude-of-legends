@@ -57,11 +57,15 @@ const TWIN_PASSIVES: Record<string, ForgedPassiveRef> = {
     params: { msPct: 0.1, duration: 2 },
     name: 'Lie Low',
   },
+  // Sworn has no template (the mark is engine data, src/sim/sworn.ts):
+  // priced as the nearest one, more damage on the one enemy he holds.
+  ostrand: { template: 'predators_focus', params: { bonusPct: 0.1 }, name: 'Sworn' },
 };
 
 // The roster champions whose kits use what the Forge does not offer: Nisk's
-// charges, hidden pods, fumble and lurk (forge/bounds.ts names none).
-export const OUTSIDE_FORGE: readonly string[] = ['nisk'];
+// charges, hidden pods, fumble and lurk, and Ostrand's Sworn, his charge at
+// it and the Oathfield (forge/bounds.ts names none).
+export const OUTSIDE_FORGE: readonly string[] = ['nisk', 'ostrand'];
 
 export function forgedTwin(champion: ChampionDef): ForgedChampionDef {
   const passive = TWIN_PASSIVES[champion.id];

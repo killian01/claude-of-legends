@@ -84,7 +84,7 @@ export const PLANET_TUNING: Readonly<Record<string, PlanetTuning>> = {
   // and 19% after the calm, at 1.3 damage 67% and 65%; 1.2 gives 56% and
   // 45% (seeds 1 to 10, 2026-10-25), and with his bruiser build 55% and
   // 70%; 1.15 gives 48% and 56%. Read again in Respawn on release.
-  ostrand: { hp: 1, dmg: 1.15 },
+  ostrand: { hp: 1, dmg: 1.12 },
 };
 
 const NEUTRAL: PlanetTuning = { hp: 1, dmg: 1 };

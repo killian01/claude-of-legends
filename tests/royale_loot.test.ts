@@ -145,7 +145,7 @@ describe('the next piece', () => {
     const shells = CHAMPION_LIST.filter((c) => ['Tank', 'Support', 'Fighter'].includes(c.role)).map(
       (c) => c.id,
     );
-    expect(shells.sort()).toEqual(['dain', 'korrath', 'maera', 'torv']);
+    expect(shells.sort()).toEqual(['dain', 'korrath', 'maera', 'ostrand', 'torv']);
     for (const id of shells) {
       const build = PLANET_BUILDS[id]!;
       expect(ownedCount(build, 'heart_gem'), id).toBeLessThanOrEqual(2);

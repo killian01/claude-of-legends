@@ -35,18 +35,19 @@ describe('the laurel price table', () => {
     );
   });
 
-  it('costs about sixty matches for the whole roster, and five for the first', () => {
+  it('costs about sixty-five matches for the whole roster, and five for the first', () => {
     // The pacing choice the ADR makes, pinned so a rate edit that breaks
     // it is a decision rather than an accident. The first rates put the
     // cheapest champion two matches away, which is what sent these
     // numbers back to the table. Six champions at 3600 were about forty
-    // matches; Nisk, the eleventh, joined at the shared-pack price and
-    // lengthened the wall by its own 500 (ADR 0018).
+    // matches; Nisk, the eleventh, and Ostrand, the twelfth, joined at the
+    // shared-pack price and lengthened the wall by their own 500 each, to
+    // about sixty-five (ADR 0018).
     const total = Object.values(CHAMPION_PRICES).reduce((a, b) => a + b, 0);
-    expect(total).toBe(4100);
+    expect(total).toBe(4600);
     const perMatch = (MATCH_LAURELS + WIN_LAURELS) / 2;
     expect(Math.round(total / perMatch)).toBeGreaterThanOrEqual(35);
-    expect(Math.round(total / perMatch)).toBeLessThanOrEqual(60);
+    expect(Math.round(total / perMatch)).toBeLessThanOrEqual(70);
     // The cheapest champion, from nothing, in a evening rather than in a
     // pair of matches.
     const cheapest = Math.min(...Object.values(CHAMPION_PRICES));

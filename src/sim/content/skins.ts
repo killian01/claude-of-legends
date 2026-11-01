@@ -68,6 +68,11 @@ export const SKINS: Readonly<Record<string, readonly SkinDef[]>> = {
     { name: 'Gloamthorn', body: 0x2f3a2a, accent: 0xc6e86a },
     { name: 'Pepperpot', body: 0x8a3a22, accent: 0xf2b84a },
   ],
+  ostrand: [
+    { name: 'Default', body: null, accent: 0xb83a3a },
+    { name: 'Ashlar', body: 0x8c8478, accent: 0xd8cfbf },
+    { name: 'Winterpledge', body: 0x3a4a5e, accent: 0xcfe0f2 },
+  ],
 };
 
 // Resolves a skin index to a valid SkinDef (unknown champion or out-of-range

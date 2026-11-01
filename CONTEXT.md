@@ -398,14 +398,14 @@ _Avoid_: invisibility (players read "Hidden", the status chip's word)
 The one enemy champion Ostrand's passive has marked: the first he damages, or the one his
 Gauntlet Throw or Oathfield names, for a few seconds renewed by every hit. He walks faster
 toward it and strikes it harder; both teams see the mark. One Sworn at a time.
-In design (docs/design/ostrand.md), not yet in the game.
+See docs/design/ostrand.md.
 _Avoid_: target, marked (a Barbed Mark's word), duel
 
 **Oathfield**:
 Ostrand's ultimate: a closed ring of wall raised around him for a few seconds. Like every
 ability wall it blocks walking, pathing and traveling dashes and lets projectiles and sight
 pass, so whoever is inside stays inside and the fight outside can still shoot in; a blink
-crosses it. In design (docs/design/ostrand.md), not yet in the game.
+crosses it. See docs/design/ostrand.md.
 _Avoid_: arena, cage, ring (the creature site's word)
 
 **Mastery**:

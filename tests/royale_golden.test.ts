@@ -10,7 +10,8 @@
 // Thornfray's bout seams (ADR 0035, docs/plan-thornfray.md) moved anything;
 // Respawn's and Trios' captured again under 14, a cache's opener holding its
 // idle fire; all three again under 15, Sylra's planet damage share, and
-// under 17, Elowen's planet shares, under 19, Dain's, and under 20, Maera's.
+// under 17, Elowen's planet shares, under 19, Dain's, under 20, Maera's, and
+// under 21, Ostrand joining the pool.
 //
 // A red run means a seam moved the battle royale: a changed order of random
 // draws in the Dusk, the Seedfalls, the caches, the Grafts, the drop or the
@@ -39,9 +40,9 @@ interface Golden {
 }
 
 const GOLDEN = {
-  respawnSolo7: { landed60: 432985025, end: 2101693596 },
-  oneLifeSolo7: { landed60: 2744503451, end: 3212700017 },
-  oneLifeTrios5: { landed60: 2684017376, end: 255393025 },
+  respawnSolo7: { landed60: 627606779, end: 74806172 },
+  oneLifeSolo7: { landed60: 311617927, end: 3872947724 },
+  oneLifeTrios5: { landed60: 2428003195, end: 2410443987 },
 } satisfies Record<string, Golden>;
 
 const AFTER_LANDING_TICKS = Math.round(60 / DT);
