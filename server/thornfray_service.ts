@@ -95,6 +95,9 @@ export interface ThornfrayDeps {
   capacityLeft(): number;
   // Out of the 5v5's queues: one seat at a time.
   leaveQueues(clientId: number): void;
+  // Whether a line holds a seat in another mode (the battle royale), which
+  // keeps it out of a Thornfray until it leaves there. Unset, none does.
+  seatedElsewhere?(owner: number): boolean;
   // Banks points on a line (ADR 0027), answering the new total or null.
   bank(owner: number, delta: number): number | null;
   // Whether an owner never banked a battle royale award.
@@ -175,6 +178,18 @@ export class ThornfrayService {
   // Whether this client waits in the gathering.
   gathers(clientId: number): boolean {
     return this.gathering?.people.includes(clientId) ?? false;
+  }
+
+  // Whether a line waits in the gathering or plays a seat in a Thornfray,
+  // from any of its tabs. A seat left to its bot does not count: its owner
+  // may play elsewhere and come back to it later.
+  holds(owner: number): boolean {
+    const g = this.gathering;
+    if (g?.people.some((id) => this.deps.client(id)?.accountId === owner)) return true;
+    for (const e of this.entries.values()) {
+      for (const h of e.holders.values()) if (h.owner === owner && h.clientId !== null) return true;
+    }
+    return false;
   }
 
   // What the Thornfrays cost, in 5v5 matches.
@@ -307,6 +322,12 @@ export class ThornfrayService {
       return;
     }
     if (this.owns(client.id) || this.gathers(client.id) || client.matchId !== null) return;
+    // One mode per line: a seat this account plays in the battle royale
+    // from another tab keeps it out until that tab leaves.
+    if (this.deps.seatedElsewhere?.(client.accountId)) {
+      send(client.id, { t: 'error', message: 'You are already in another match.' });
+      return;
+    }
     this.picks.set(client.id, royalePick(msg, THORNFRAY_ROSTER));
     this.deps.leaveQueues(client.id);
     if (this.rejoin(client)) return;

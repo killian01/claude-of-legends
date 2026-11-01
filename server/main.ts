@@ -1076,6 +1076,7 @@ const royale = new RoyaleService({
   leaveQueues: (id) => {
     for (const mm of matchmakers) mm.removeEverywhere(id);
   },
+  seatedElsewhere: (owner) => thornfray.holds(owner),
   bank: (owner, delta) => {
     royaleVeterans.noteBanked(owner);
     return bankPoints(owner, delta);
@@ -1112,6 +1113,7 @@ const thornfray = new ThornfrayService({
   leaveQueues: (id) => {
     for (const mm of matchmakers) mm.removeEverywhere(id);
   },
+  seatedElsewhere: (owner) => royale.playing(owner),
   bank: (owner, delta) => {
     royaleVeterans.noteBanked(owner);
     return bankPoints(owner, delta);

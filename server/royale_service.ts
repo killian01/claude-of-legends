@@ -73,6 +73,9 @@ export interface RoyaleDeps {
   capacityLeft(): number;
   // Out of the 5v5's queues: one seat at a time.
   leaveQueues(clientId: number): void;
+  // Whether a line holds a seat in another mode (a Thornfray), which keeps
+  // it out of the battle royale until it leaves there. Unset, none does.
+  seatedElsewhere?(owner: number): boolean;
   // Banks points on a line (ADR 0027), answering the new total or null.
   bank(owner: number, delta: number): number | null;
   // A Respawn end's tally for a line's seat (ADR 0033): raises the line's
@@ -198,7 +201,7 @@ export class RoyaleService {
   }
 
   // A seat of this owner in a match still running, its champion not out.
-  private playing(owner: number): boolean {
+  playing(owner: number): boolean {
     for (const e of this.matches.values()) {
       if (e.match.over) continue;
       for (const p of e.match.players.values()) {
@@ -269,6 +272,12 @@ export class RoyaleService {
       if (p && !current.match.over && !current.match.isOut(p.unitId)) return;
       this.walkOut(client, current, 'menu');
     } else if (client.matchId !== null) {
+      return;
+    }
+    // One mode per line: a Thornfray this account plays from another tab
+    // keeps it out until that tab leaves.
+    if (this.deps.seatedElsewhere?.(client.accountId)) {
+      send(client.id, { t: 'error', message: 'You are already in another match.' });
       return;
     }
     this.picks.set(client.id, royalePick(msg, ROYALE_ROSTER));

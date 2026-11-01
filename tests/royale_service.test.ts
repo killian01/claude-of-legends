@@ -34,6 +34,7 @@ import {
 } from '../src/sim/royale/types';
 import { respawnTally } from '../src/ui/royale_result';
 import { fakeFactory, near } from './royale_fake';
+import { thornfrayHarness } from './thornfray_harness';
 
 type Msg<T extends ServerMsg['t']> = Extract<ServerMsg, { t: T }>;
 
@@ -45,6 +46,8 @@ function harness(
     // The lines' Respawn bests: kept (the default), gone (every line
     // answers null), or not wired at all.
     bests?: 'kept' | 'gone' | 'none';
+    // Whether a line holds a seat in another mode.
+    elsewhere?: (owner: number) => boolean;
   } = {},
 ) {
   const sent: { to: number; msg: ServerMsg }[] = [];
@@ -85,6 +88,7 @@ function harness(
       return total;
     },
     ...(opts.bests === 'none' ? {} : { raiseBest }),
+    ...(opts.elsewhere ? { seatedElsewhere: opts.elsewhere } : {}),
     appendSeat: (rec) => seats.push(rec),
     saveReplay: (id, record) => replays.set(id, record),
     now: () => now,
@@ -198,6 +202,37 @@ describe('entering', () => {
     expect(h.last(1, 'player_joined')?.name).toBe('bob');
     h.step(1);
     expect(h.last(2, 'snap')?.royale?.people).toBe(2);
+  });
+
+  it('holds one account to one mode: a Thornfray seat keeps a second tab out, and back', () => {
+    // Both services wired to each other the way server/main.ts wires them.
+    const th = thornfrayHarness({ elsewhere: (owner) => h.service.playing(owner) });
+    const h = harness({ elsewhere: (owner) => th.service.holds(owner) });
+    const a = th.connect(1, 'alice');
+    th.enter(a);
+    expect(th.service.holds(1)).toBe(true);
+    // A second tab of the same account, at the battle royale's door.
+    const b = h.connect(2, 'alice');
+    (b as { accountId: number }).accountId = 1;
+    h.enter(b);
+    expect(h.last(2, 'error')?.message).toBe('You are already in another match.');
+    expect(h.service.owns(2)).toBe(false);
+    expect(h.last(2, 'match_start')).toBeUndefined();
+    th.say(a, { t: 'thornfray_start' });
+    expect(a.matchId).not.toBeNull();
+    h.enter(b);
+    expect(h.last(2, 'match_start')).toBeUndefined();
+    // Once the first tab leaves, the second one enters.
+    th.say(a, { t: 'leave' });
+    expect(th.service.holds(1)).toBe(false);
+    h.enter(b);
+    expect(h.service.owns(2)).toBe(true);
+    expect(h.service.playing(1)).toBe(true);
+    // And now the Thornfray's door is the one shut to the first tab.
+    th.enter(a);
+    expect(th.last(1, 'error')?.message).toBe('You are already in another match.');
+    expect(a.matchId).toBeNull();
+    expect(th.service.holds(1)).toBe(false);
   });
 
   it('holds one account to one seat: a second tab is refused while the first plays', () => {
