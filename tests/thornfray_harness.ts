@@ -25,7 +25,13 @@ export const FAKE_BOUT_S = 25;
 export const FAKE_BOUT_TICKS = Math.round((DROP_S + FAKE_BOUT_S) / DT) + 1;
 
 export function thornfrayHarness(
-  opts: { pool?: readonly BoutKind[]; capacity?: number; open?: boolean } = {},
+  opts: {
+    pool?: readonly BoutKind[];
+    capacity?: number;
+    open?: boolean;
+    // Whether a line holds a seat in another mode.
+    elsewhere?: (owner: number) => boolean;
+  } = {},
 ) {
   const sent: { to: number; msg: ServerMsg }[] = [];
   const clients = new Map<number, RoyaleClient>();
@@ -61,6 +67,7 @@ export function thornfrayHarness(
     saveReplay: (id, record) => replays.set(id, record),
     now: () => now,
     log: (line) => logs.push(line),
+    ...(opts.elsewhere ? { seatedElsewhere: opts.elsewhere } : {}),
   });
   const connect = (id: number, name: string, account = id, guest = false): RoyaleClient => {
     const c: RoyaleClient = {
