@@ -673,9 +673,10 @@ const CSS = `
 .hud-spot.on { opacity: 1; transform: translateX(-50%) scale(1); }
 .hud-spot.top { font-size: 74px; letter-spacing: 7px; }
 .hud-toast {
-  position: absolute; bottom: 150px; left: 50%; transform: translateX(-50%);
+  position: absolute; bottom: 196px; left: 50%; transform: translateX(-50%);
   background: rgba(61, 23, 16, 0.95); border: 1px solid #a05040; border-radius: 6px;
   color: #f5c9c0; font-size: 12px; padding: 6px 12px; opacity: 0; transition: opacity 0.25s;
+  width: max-content; max-width: calc(90 * var(--vw, 1vw)); text-align: center;
 }
 /* The scoreboard answers three questions at a glance: who is behind the
    champion, how the lane is going, and what they have built. The two teams
@@ -1293,6 +1294,7 @@ export class Hud {
   private readonly announceEl: HTMLElement;
   private readonly spotEl: HTMLElement;
   private readonly toastEl: HTMLElement;
+  private toastTimer = 0;
   private readonly score: HTMLElement;
   private readonly scoreTeams: [HTMLElement, HTMLElement];
   private readonly kdaText: HTMLElement;
@@ -3003,12 +3005,14 @@ export class Hud {
     this.spotUntil = performance.now() + look.holdMs;
   }
 
-  toast(text: string): void {
+  toast(text: string, holdMs = 1800): void {
     this.toastEl.textContent = text;
     this.toastEl.style.opacity = '1';
-    window.setTimeout(() => {
+    // A later toast keeps its own time, not an earlier one's.
+    window.clearTimeout(this.toastTimer);
+    this.toastTimer = window.setTimeout(() => {
       this.toastEl.style.opacity = '0';
-    }, 1800);
+    }, holdMs);
   }
 
   // Where the shop is usable: on your fountain as the sim sees it (on the
