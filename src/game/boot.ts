@@ -41,6 +41,7 @@ import { slotTap } from '../ui/slot_tap';
 import { buildThumbStickView } from '../ui/thumb_stick_view';
 import { buildTouchBar, drinkButton } from '../ui/touch_bar';
 import { unlearnedLine } from '../ui/unlearned_line';
+import { WALK_HINT_HOLD_MS, WalkHint, walkHintLine } from '../ui/walk_hint';
 import type { IWorld } from '../world_api';
 import type { AttackNote } from './attack_notes';
 import { cacheGoal } from './cache_pick';
@@ -470,8 +471,11 @@ export function startPresentation(
   // The click that orders: an attack on the enemy under the cursor, else a
   // walk to the ground point. The right click's, and the left click's too
   // unless the player turned that off (onLeftClick below).
+  // How to walk, for a player pressing W A S D who never clicked to.
+  const walkHint = new WalkHint();
   const clickOrder = (p: Vec2, sx: number, sy: number): void => {
     pendingCast = null;
+    walkHint.clickOrdered();
     // The genre's cancel: a right-click while aiming drops the cast and
     // the release becomes a no-op; the move or attack order still goes.
     if (aimingKey !== null) {
@@ -685,6 +689,11 @@ export function startPresentation(
       attackHold = null;
       world.orderStop(selfId);
       renderer.setAttackTarget(null);
+    },
+    onKey: (lower) => {
+      if (walkHint.key(lower, performance.now() / 1000)) {
+        hud.toast(walkHintLine(getSettings().leftClickMoves), WALK_HINT_HOLD_MS);
+      }
     },
     onRecenterCamera: () => renderer.recenterCamera(),
     onToggleShop: () => hud.toggleShop(),

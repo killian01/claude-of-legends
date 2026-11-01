@@ -58,6 +58,9 @@ export interface InputHandlers {
   isTyping(): boolean;
   // The pause menu is up: the keyboard is the menu's (menu_keys.ts).
   isMenuOpen(): boolean;
+  // Any game key without Alt, lowered, before it does its own thing
+  // (ui/walk_hint.ts listens for W A S D).
+  onKey?(lower: string): void;
 }
 
 const ABILITY_KEYS: Readonly<Record<string, AbilityKey>> = {
@@ -145,6 +148,7 @@ export function setupInput(renderer: Renderer, handlers: InputHandlers): () => v
     }
     const aim = (): Vec2 | null => renderer.groundPointAt(mouseX, mouseY);
     const lower = e.key.toLowerCase();
+    if (!e.altKey) handlers.onKey?.(lower);
     // Alt + ability key spends a skill point (Ctrl is browser-reserved).
     if (e.altKey) {
       const levelKey = ABILITY_KEYS[lower];
