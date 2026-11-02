@@ -74,6 +74,7 @@ import {
 } from './bots';
 import { buildId, buildInfo, deployStamp, readBuildId } from './build_info';
 import { withBuildTag } from './build_tag';
+import { classicDoorRefused, classicPlaying } from './classic_seat';
 import { ConnectionLimiter } from './conn_limit';
 import { clearCookie, crossSiteRequest, parseCookies, serializeCookie } from './cookies';
 import { authorizeUrl, CALLBACK_PATH, DiscordOauth, discordConfigFromEnv } from './discord_oauth';
@@ -332,6 +333,15 @@ interface MatchEntry {
   points: MatchPoints | null;
 }
 const matches = new Map<number, MatchEntry>();
+
+// Whether an account plays a seat in a running 5v5 from any of its tabs
+// (server/classic_seat.ts): the battle royale and Thornfray ask it.
+function playsClassic(owner: number): boolean {
+  return classicPlaying(owner, clients.values(), (matchId, clientId) => {
+    const entry = matches.get(matchId);
+    return entry !== undefined && entry.endedAt === null && entry.match.players.has(clientId);
+  });
+}
 // Abandoned seats and leaver lockouts, both keyed on the account
 // (server/rejoin.ts): the seat comes back on whatever device its owner
 // logs in from, and the lockout follows the person who earned it.
@@ -1076,7 +1086,7 @@ const royale = new RoyaleService({
   leaveQueues: (id) => {
     for (const mm of matchmakers) mm.removeEverywhere(id);
   },
-  seatedElsewhere: (owner) => thornfray.holds(owner),
+  seatedElsewhere: (owner) => thornfray.holds(owner) || playsClassic(owner),
   bank: (owner, delta) => {
     royaleVeterans.noteBanked(owner);
     return bankPoints(owner, delta);
@@ -1113,7 +1123,7 @@ const thornfray = new ThornfrayService({
   leaveQueues: (id) => {
     for (const mm of matchmakers) mm.removeEverywhere(id);
   },
-  seatedElsewhere: (owner) => royale.playing(owner),
+  seatedElsewhere: (owner) => royale.playing(owner) || playsClassic(owner),
   bank: (owner, delta) => {
     royaleVeterans.noteBanked(owner);
     return bankPoints(owner, delta);
@@ -3010,6 +3020,18 @@ wss.on('connection', (ws, req) => {
     if (thornfray.handle(client, msg)) return;
     // The battle royale's own messages, and every message of a seat in one.
     if (royale.handle(client, msg)) return;
+    // One mode per line: a royale or a Thornfray this account plays from
+    // another tab keeps every door into a 5v5 shut until that tab leaves.
+    if (
+      !inMatch &&
+      classicDoorRefused(
+        msg.t,
+        () => royale.playing(client.accountId) || thornfray.holds(client.accountId),
+      )
+    ) {
+      send(id, { t: 'error', message: 'You are already in another match.' });
+      return;
+    }
     switch (msg.t) {
       case 'queue': {
         if (inMatch) break;
