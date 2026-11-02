@@ -1,5 +1,5 @@
-// The battle royale's quick pick, decided (ADR 0031): one card, the ten
-// champions of the roster with no lanes, no bans and no clock, the last
+// The battle royale's quick pick, decided (ADR 0031): one card, every
+// released champion of the roster with no lanes, no bans and no clock, the last
 // one played already chosen, the skin and the two sigils kept from last
 // time, a Random button and a big Play. Duplicates are allowed, so nothing
 // is ever taken. Pure: ui/royale_pick.ts draws it and the browser's
@@ -82,4 +82,11 @@ export function pickReady(sigils: readonly string[]): sigils is [string, string]
 // A champion changed: its first skin, since skins are the champion's own.
 export function withChampion(pick: RoyalePick, championId: string): RoyalePick {
   return championId === pick.championId ? pick : { ...pick, championId, skin: 0 };
+}
+
+// The cards stand in two rows, however many champions the roster deals: a
+// third row fell below the card on a phone held sideways and overlapped
+// the second on a short desktop window.
+export function pickColumns(count: number): number {
+  return Math.max(1, Math.ceil(count / 2));
 }
