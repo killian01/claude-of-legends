@@ -35,6 +35,15 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
+    day: '2026-11-02',
+    title: 'Every champion on the battle royale pick',
+    body: [
+      'The battle royale pick now lays all twelve champions in two rows. On a phone held sideways, Nisk and Ostrand had slipped below the card and could not be chosen; now they sit beside the rest.',
+      'On a short desktop window the rows no longer overlap, and Random and Back stay on the card.',
+    ],
+    link: { label: 'Play', to: 'play' },
+  },
+  {
     day: '2026-11-01',
     title: 'Ostrand, the Pledgeblade',
     body: [

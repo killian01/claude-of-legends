@@ -11,6 +11,7 @@ import {
   DEFAULT_SIGILS,
   FIRST_ROYALE_CHAMPION,
   initialPick,
+  pickColumns,
   pickReady,
   randomChampion,
   toggleSigil,
@@ -103,5 +104,21 @@ describe('the quick pick', () => {
       sigils: DEFAULT_SIGILS,
     });
     expect(withChampion(pick, 'torv')).toBe(pick);
+  });
+});
+
+describe('the quick pick lays the roster in two rows', () => {
+  it('fits every released champion in two rows', () => {
+    const cols = pickColumns(CHAMPION_LIST.length);
+    expect(cols * 2).toBeGreaterThanOrEqual(CHAMPION_LIST.length);
+    expect(cols * 2 - CHAMPION_LIST.length).toBeLessThan(2);
+  });
+
+  it('adds a column for each second champion', () => {
+    expect(pickColumns(10)).toBe(5);
+    expect(pickColumns(11)).toBe(6);
+    expect(pickColumns(12)).toBe(6);
+    expect(pickColumns(13)).toBe(7);
+    expect(pickColumns(0)).toBe(1);
   });
 });
