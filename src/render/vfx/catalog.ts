@@ -37,6 +37,17 @@ import {
   SOUR,
   sourSplash,
 } from './nisk_fx';
+import {
+  buildGauntlet,
+  buildLancePoint,
+  buildStandard,
+  driveImpact,
+  gauntletImpact,
+  gauntletTrail,
+  lanceThrust,
+  oathfieldRise,
+  standardTick,
+} from './ostrand_fx';
 import { basicMat, flatDisc, flatRing, growSweep, pulseRim, telegraphZone } from './shapes';
 import { SPRITE } from './sprites';
 import {
@@ -849,6 +860,31 @@ export const SPELL_VFX: Readonly<Record<string, SpellVisual>> = {
     zoneTick: (fx, holder, x, z, radius, ageMs, _colors, dtMs) =>
       cloudTick(fx, holder, x, z, radius, ageMs, dtMs),
     castFx: (fx, x, z) => fx.sparkBurst(x, 0.6, z, SOUR.main, 6, 3, { life: 0.4, size: 0.3 }),
+  },
+
+  // Ostrand (ostrand_fx.ts): battered steel and the oath's crimson.
+  // Lance Drive: a steel point driven down the line on a crimson streak.
+  ostrand_Q: {
+    projectile: () => buildLancePoint(),
+    castFx: (fx, x, z, dirX, dirZ) => lanceThrust(fx, x, z, dirX, dirZ),
+    impact: (fx, x, z) => driveImpact(fx, x, z),
+  },
+  // Standard: the banner planted at his feet, its ward circle around it.
+  ostrand_W: {
+    zone: (radius, _colors, hostile) => buildStandard(radius, hostile),
+    zoneTick: (fx, holder, x, z, radius, ageMs, _colors, dtMs) =>
+      standardTick(fx, holder, x, z, radius, ageMs, dtMs),
+  },
+  // Gauntlet Throw: a steel fist on a red ribbon, a clang where it swears.
+  ostrand_E: {
+    projectile: () => buildGauntlet(),
+    projectileTick: (fx, x, z) => gauntletTrail(fx, x, z),
+    impact: (fx, x, z) => gauntletImpact(fx, x, z),
+  },
+  // Oathfield: the ground breaks where the stones rise (rampart.ts draws
+  // the ring itself).
+  ostrand_R: {
+    castFx: (fx, x, z) => oathfieldRise(fx, x, z),
   },
 };
 

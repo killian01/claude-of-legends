@@ -98,6 +98,8 @@ const SHOTS: Readonly<Record<string, Shot>> = {
   rhoka: { from: { x: 73, z: 71 }, aim: { x: 73, z: 71 }, key: 'R' },
   // Nisk's pods lie hidden from the other side: the dart shows instead.
   nisk: { from: { x: 77, z: 70 }, aim: { x: 75, z: 77 }, key: 'Q' },
+  // Ostrand's gauntlet swears a dummy; his other keys fire from the same spot.
+  ostrand: { from: { x: 71.5, z: 77.5 }, aim: CENTER, key: 'E' },
   // The look demo, one shot per key: the same champion drawn four ways.
   look_q: { from: { x: 68, z: 84 }, aim: { x: 76.5, z: 79 }, key: 'Q' },
   look_w: { from: { x: 66, z: 75 }, aim: CENTER, key: 'W' },
