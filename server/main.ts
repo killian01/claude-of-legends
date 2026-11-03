@@ -74,6 +74,7 @@ import {
 } from './bots';
 import { buildId, buildInfo, deployStamp, readBuildId } from './build_info';
 import { withBuildTag } from './build_tag';
+import { rejoinClassic } from './classic_rejoin';
 import { classicDoorRefused, classicPlaying } from './classic_seat';
 import { ConnectionLimiter } from './conn_limit';
 import { clearCookie, crossSiteRequest, parseCookies, serializeCookie } from './cookies';
@@ -2977,24 +2978,15 @@ wss.on('connection', (ws, req) => {
       // later queue/lobby message is then ignored by the in-match guard.
       // Keyed on the account, so the seat comes back on whatever device
       // the player reconnects from.
-      const seat = rejoins.claim(client.accountId);
-      if (seat) {
-        const entry = matches.get(seat.matchId);
-        if (entry) {
-          entry.match.restorePlayer(id, seat);
-          entry.abandonedAt = null;
-          client.matchId = seat.matchId;
-          send(id, {
-            t: 'match_start',
-            selfUnitId: seat.unitId,
-            team: seat.team,
-            ...(seat.coach ? { coach: true as const } : {}),
-            ...forgedPayload(entry.match),
-            ...teamsPayload(entry.match),
-          });
-          tellSeat(entry, 'back', seat, id);
-          console.log(`match ${seat.matchId}: ${seat.name} reconnected`);
-        }
+      // A held seat whose match is gone gives nothing back, and the
+      // royale's own rejoin still gets its turn (server/classic_rejoin.ts).
+      const back = rejoinClassic(rejoins, matches, client.accountId, id);
+      if (back) {
+        const { seat, entry, start } = back;
+        client.matchId = seat.matchId;
+        send(id, { ...start, ...forgedPayload(entry.match), ...teamsPayload(entry.match) });
+        tellSeat(entry, 'back', seat, id);
+        console.log(`match ${seat.matchId}: ${seat.name} reconnected`);
       } else royale.rejoin(client);
       // A Thornfray's seat comes back only by entering it again (the
       // 'thornfray' message, ThornfrayService.enter): every flow says hello.
