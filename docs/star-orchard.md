@@ -112,7 +112,10 @@ ground.
   as the loading card reaching 100% and the landing coming back. So a
   browser with a coarse primary pointer downloads `map-light.glb` instead,
   about 200 MB decoded; `?map=light` shows it on a laptop, `?map=full`
-  forces the full one on a phone. GPU-compressed textures (KTX2) remain the
+  forces the full one on a phone. A laptop on a slow line gets the light
+  one too: when the full download's first 5 s project more than 30 s still
+  to wait, it gives way to `map-light.glb` (`src/game/slow_line.ts`); an
+  address that asks for a model keeps it. GPU-compressed textures (KTX2) remain the
   next step if the full model proves too much on laptops, and a middle size
   for tablets the one after.
 - Memory beside the textures: the renderer uploads every terrain texture

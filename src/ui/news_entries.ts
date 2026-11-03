@@ -35,6 +35,14 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
+    day: '2026-11-03',
+    title: 'The Star Orchard loads faster on a slow connection',
+    body: [
+      'The Star Orchard is a big download, and on a slow connection the loading card could stay up for minutes while your match went on without you.',
+      'Now the game watches how fast the map is coming in. When the full map would take too long, it fetches the lighter one phones already use, the same orchard with smaller textures, so you reach your lane in a fraction of the time.',
+    ],
+  },
+  {
     day: '2026-11-02',
     title: 'Every champion on the battle royale pick',
     body: [
