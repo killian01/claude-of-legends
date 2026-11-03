@@ -10,7 +10,14 @@ import { loadTerrain } from '../render/terrain_loader';
 import type { StarOrchard } from '../sim/content/star_orchard';
 import { TerrainNavGrid } from '../sim/terrain_nav';
 import { downloadTotal } from './download_total';
-import { chooseModel, mapQualityFor, qualityOverride, readDeviceHints } from './map_quality';
+import {
+  chooseModel,
+  type ModelChoice,
+  mapQualityFor,
+  qualityOverride,
+  readDeviceHints,
+} from './map_quality';
+import { downloadModel, type ModelFile } from './slow_line';
 import { fetchOrchardFile, loadStarOrchard } from './star_orchard_records';
 
 // Download progress, 0 to 1.
@@ -31,28 +38,19 @@ function report(value: number): void {
 
 // Streams the body so the loading screen can show the model coming in;
 // the size comes from the manifest when the server does not say, or says
-// it of a compressed body (download_total.ts).
-async function fetchBytes(path: string, expected: number): Promise<ArrayBuffer> {
-  const res = await fetchOrchardFile(path);
-  const total = downloadTotal(res.headers, expected);
-  if (!res.body || !total) return res.arrayBuffer();
-  const reader = res.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let received = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    received += value.byteLength;
-    report(Math.min(1, received / total));
-  }
-  const out = new Uint8Array(received);
-  let offset = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return out.buffer;
+// it of a compressed body (download_total.ts). A full model on a line too
+// slow for it gives way to the light one (slow_line.ts).
+function fetchBytes(choice: ModelChoice, light: ModelFile | null): Promise<ArrayBuffer> {
+  return downloadModel(
+    choice,
+    choice.quality === 'full' ? light : null,
+    {
+      fetchFile: fetchOrchardFile,
+      totalOf: (res, expected) => downloadTotal(res.headers, expected),
+      now: () => performance.now(),
+    },
+    report,
+  );
 }
 
 // Whether the model is already on hand, so a host can skip the card.
@@ -69,12 +67,15 @@ export function loadStarOrchardModel(
   else if (fraction > 0) onProgress(fraction);
   if (!model) {
     // Which model: the light one on a phone or a tablet, unless the
-    // address says otherwise (map_quality.ts).
-    const choice = chooseModel(
-      orchard,
-      qualityOverride(window.location.search) ?? mapQualityFor(readDeviceHints(window)),
-    );
-    model = fetchBytes(choice.file, choice.bytes)
+    // address says otherwise (map_quality.ts). An address that asks for
+    // one gets it however slow the line.
+    const asked = qualityOverride(window.location.search);
+    const choice = chooseModel(orchard, asked ?? mapQualityFor(readDeviceHints(window)));
+    const light =
+      asked === null && orchard.modelLight !== null && orchard.modelLightBytes > 0
+        ? { file: orchard.modelLight, bytes: orchard.modelLightBytes }
+        : null;
+    model = fetchBytes(choice, light)
       .then((bytes) => {
         downloaded = true;
         report(1);
