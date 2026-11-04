@@ -46,6 +46,10 @@ export const ABILITY_ICON_IMAGES: ReadonlySet<string> = new Set<string>([
   'maera_Q',
   'maera_W',
   'maera_E',
+  'ostrand_Q',
+  'ostrand_W',
+  'ostrand_E',
+  'ostrand_R',
 ]);
 
 // Sigil paintings shipped at public/icons/sigils/<sigilId>.webp.
