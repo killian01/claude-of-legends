@@ -2,13 +2,14 @@
 // entry point decides what they mean. Keys: right-click move/attack, A
 // attack-move, B recall, QWER abilities, DF sigils, P shop, Tab scoreboard,
 // Enter chat, G ping, Space center camera, Escape menu, 1 2 3 a battle
-// royale's Graft card. While the menu is up only Escape is the game's
+// royale's Graft card, the arrows walk (key_walk.ts). While the menu is up only Escape is the game's
 // (menu_keys.ts).
 
 import type { Renderer } from '../render/renderer';
 import type { AbilityKey, Vec2 } from '../sim/types';
 import { cardOfKey } from '../ui/royale_grafts';
 import { heldFromBrowser } from './browser_keys';
+import { isWalkKey } from './key_walk';
 import { pointOnStage } from './match_stage';
 import { menuKey } from './menu_keys';
 import type { SlotPress } from './thumb_cast';
@@ -61,6 +62,9 @@ export interface InputHandlers {
   // Any game key without Alt, lowered, before it does its own thing
   // (ui/walk_hint.ts listens for W A S D).
   onKey?(lower: string): void;
+  // An arrow key held or let go (game/key_walk.ts); null: the window lost
+  // the keyboard and every arrow is let go.
+  onWalkKey?(key: string | null, down: boolean): void;
 }
 
 const ABILITY_KEYS: Readonly<Record<string, AbilityKey>> = {
@@ -136,6 +140,11 @@ export function setupInput(renderer: Renderer, handlers: InputHandlers): () => v
       handlers.onRecenterCamera();
       return;
     }
+    if (isWalkKey(e.key)) {
+      e.preventDefault();
+      if (!e.repeat) handlers.onWalkKey?.(e.key, true);
+      return;
+    }
     if (e.repeat) return;
     const card = cardOfKey(e.key);
     if (card !== null && handlers.onPickCard?.(card)) {
@@ -194,12 +203,16 @@ export function setupInput(renderer: Renderer, handlers: InputHandlers): () => v
   window.addEventListener('keydown', onKeyDown);
 
   const onKeyUp = (e: KeyboardEvent): void => {
+    // An arrow let go is let go, whatever opened meanwhile.
+    if (isWalkKey(e.key)) handlers.onWalkKey?.(e.key, false);
     if (handlers.isTyping()) return;
     if (heldFromBrowser(e.key)) e.preventDefault();
     const key = ABILITY_KEYS[e.key.toLowerCase()];
     if (key) handlers.onAimEnd(key, renderer.groundPointAt(mouseX, mouseY));
   };
   window.addEventListener('keyup', onKeyUp);
+  const onBlur = (): void => handlers.onWalkKey?.(null, false);
+  window.addEventListener('blur', onBlur);
 
   return () => {
     el.removeEventListener('pointermove', onPointerMove);
@@ -207,5 +220,6 @@ export function setupInput(renderer: Renderer, handlers: InputHandlers): () => v
     el.removeEventListener('pointerdown', onPointerDown);
     window.removeEventListener('keydown', onKeyDown);
     window.removeEventListener('keyup', onKeyUp);
+    window.removeEventListener('blur', onBlur);
   };
 }

@@ -35,6 +35,15 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
+    day: '2026-11-05',
+    title: 'Walk with the arrow keys',
+    body: [
+      'Clicking the ground is still how most of us walk, but now the arrow keys walk too. Hold one and your champion keeps going that way on the screen; hold two for a diagonal, and let go to stop.',
+      'It works in 5v5, on the Wanderseed and in Thornfray. Q W E R, A, S and the sigils keep their keys.',
+    ],
+    link: { label: 'Play', to: 'play' },
+  },
+  {
     day: '2026-11-03',
     title: 'The Star Orchard loads faster on a slow connection',
     body: [

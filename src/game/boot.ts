@@ -52,6 +52,7 @@ import { BeatCamera } from './death_beat';
 import type { PostMatchAction } from './flow';
 import { pauseOnFullscreenExit, requestGameFullscreen, watchFullscreen } from './fullscreen';
 import { type InputHandlers, setupInput } from './input';
+import { KeyWalk, keyWalkAim } from './key_walk';
 import { buildMatchStage, stageSizeOf } from './match_stage';
 import { moveRingWanted } from './move_ring';
 import { startMusic, stopMusic } from './music';
@@ -473,6 +474,26 @@ export function startPresentation(
   // unless the player turned that off (onLeftClick below).
   // How to walk, for a player pressing W A S D who never clicked to.
   const walkHint = new WalkHint();
+  // The arrow keys' walk (key_walk.ts), stepped every frame.
+  const keyWalk = new KeyWalk();
+  const stepKeyWalk = (nowS: number): void => {
+    if (hud.isChatOpen() || hud.covers().pauseMenu || hud.endScreenUp()) keyWalk.releaseAll();
+    const step = keyWalk.step(nowS);
+    if (!step) return;
+    const me = world.units.get(selfId);
+    if (!me || me.dead) return;
+    pendingCast = null;
+    attackHold = null;
+    if (step.kind === 'stop') {
+      world.orderStop(selfId);
+      return;
+    }
+    walkHint.clickOrdered();
+    const feet = project(me.pos.x, 0, me.pos.z, me.pos.y);
+    const aim = feet ? keyWalkAim(feet, step.dir) : null;
+    const p = aim ? renderer.groundPointAt(aim.x, aim.y) : null;
+    if (p) world.orderMove(selfId, p.x, p.z, p.y);
+  };
   const clickOrder = (p: Vec2, sx: number, sy: number): void => {
     pendingCast = null;
     walkHint.clickOrdered();
@@ -689,6 +710,11 @@ export function startPresentation(
       attackHold = null;
       world.orderStop(selfId);
       renderer.setAttackTarget(null);
+    },
+    onWalkKey: (key, down) => {
+      if (key === null) keyWalk.releaseAll();
+      else if (down) keyWalk.press(key);
+      else keyWalk.release(key);
     },
     onKey: (lower) => {
       if (walkHint.key(lower, performance.now() / 1000)) {
@@ -917,6 +943,7 @@ export function startPresentation(
     const alpha = Math.max(0, Math.min(1, (now - lastTick) / TICK_MS));
     renderer.render(alpha, now);
     placeArrow(alpha);
+    stepKeyWalk(now / 1000);
     cursorLock?.setFree(hud.covers().pauseMenu || hud.endScreenUp());
     rafId = requestAnimationFrame(frame);
   }
