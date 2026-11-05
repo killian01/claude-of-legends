@@ -137,6 +137,7 @@ import { accountKey, addressKey, LoginThrottle } from './login_throttle';
 import { confirmMail, confirmUrl, publicOrigin, resetMail, resetUrl } from './mail_messages';
 import { mailerFromEnv } from './mailer';
 import { AFK_IDLE_TICKS, Match, type MatchPick } from './match';
+import { closeMatch } from './match_close';
 import { type OwnedSeat, type RatingBook, rateMatch } from './match_rating';
 import { Matchmaker, type MatchSource } from './matchmaker';
 import {
@@ -3240,6 +3241,8 @@ wss.on('connection', (ws, req) => {
 // while a match is on, and the last window on /healthz.
 const meter = new TickMeter(Date.now());
 
+const closing = { matches, rejoins, clients, send };
+
 let last = Date.now();
 let acc = 0;
 setInterval(() => {
@@ -3252,8 +3255,8 @@ setInterval(() => {
   // Reap abandoned matches whose rejoin grace ran out.
   for (const [matchId, entry] of matches) {
     if (entry.abandonedAt !== null && now - entry.abandonedAt > REJOIN_GRACE_MS) {
-      matches.delete(matchId);
-      rejoins.pruneMatch(matchId);
+      // A spectator may still be watching: closeMatch frees them too.
+      closeMatch(closing, matchId);
       console.log(`match ${matchId} reaped: rejoin grace expired`);
     }
   }
@@ -3463,18 +3466,7 @@ setInterval(() => {
           }
         }
         if (entry.endedAt !== null && now - entry.endedAt > MATCH_LINGER_MS) {
-          for (const player of entry.match.players.values()) {
-            const c = clients.get(player.clientId);
-            if (c) c.matchId = null;
-            send(player.clientId, { t: 'match_end' });
-          }
-          for (const cid of entry.match.spectators.keys()) {
-            const c = clients.get(cid);
-            if (c) c.matchId = null;
-            send(cid, { t: 'match_end' });
-          }
-          matches.delete(matchId);
-          rejoins.pruneMatch(matchId);
+          closeMatch(closing, matchId);
           console.log(`match ${matchId} closed`);
         }
         entry.failures = 0;
@@ -3482,18 +3474,7 @@ setInterval(() => {
         console.error(`match ${matchId} tick failed`, err);
         entry.failures += 1;
         if (entry.failures > 200) {
-          for (const player of entry.match.players.values()) {
-            const c = clients.get(player.clientId);
-            if (c) c.matchId = null;
-            send(player.clientId, { t: 'match_end' });
-          }
-          for (const cid of entry.match.spectators.keys()) {
-            const c = clients.get(cid);
-            if (c) c.matchId = null;
-            send(cid, { t: 'match_end' });
-          }
-          matches.delete(matchId);
-          rejoins.pruneMatch(matchId);
+          closeMatch(closing, matchId);
           console.error(`match ${matchId} force-closed after repeated tick failures`);
         }
       }
