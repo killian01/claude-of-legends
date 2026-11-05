@@ -1870,14 +1870,14 @@ export class Hud {
             'champion. Level up: tap the +.'
         : stepsFinished(this.steps)
           ? `${getSettings().leftClickMoves ? 'Click' : 'Right-click'}: move / attack. ` +
-            'A: attack-move. S: stop and hold. B: recall. ' +
+            'Arrows: walk. A: attack-move. S: stop and hold. B: recall. ' +
             'Q W E R: hold to aim, release to cast (right-click cancels). D F: sigils. P: shop. ' +
             'Tab: scoreboard. Enter: chat. G: ping. Esc: menu. Screen edges pan the camera; ' +
             'Space recenters; left-click the minimap to look. Level up: Alt+key or click +.'
           : // While the first steps lead a newcomer, the keys they need and no
             // more: the steps say the rest when it comes up.
             `${getSettings().leftClickMoves ? 'Click' : 'Right-click'}: move / attack. ` +
-            'Q W E R: spells. B: recall. P: shop. Esc: menu.';
+            'Arrows: walk. Q W E R: spells. B: recall. P: shop. Esc: menu.';
 
     // The always-visible personal score: K / D / A plus creep
     // score, top right.

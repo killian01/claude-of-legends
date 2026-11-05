@@ -14,7 +14,7 @@ The consolidated result of the design grill (rounds 1 to 3). The ADRs in `docs/a
 - **Sigils**: pick 2 of 4 at lock: Riftstep (blink), Zephyr (move speed), Mend (burst heal), Sear (damage over time plus healing reduction).
 - **Champions**: 10 at launch (`docs/design/roster.md`), kits composed from shared effect primitives. An account starts with four of them and recruits the rest with laurels earned by playing (ADR 0018); three more rotate free every week, the same three for everyone, and the offline practice match opens the whole roster.
 - **Champion select**: blind pick, 45 s, no duplicates within a team (allowed across teams), random button, sigil choice at lock, and a lane preference (top lane, mid lane, bot lane or the forest; the champion's home lane preselected; the own team sees each claim live and a full lane is taken first come, first served; ADR 0026).
-- **Controls**: right-click move, A attack-move, QWER abilities, mouse-aimed skillshots. Desktop browser only.
+- **Controls**: right-click move, arrow keys walk, A attack-move, QWER abilities, mouse-aimed skillshots. Desktop browser only.
 - **Fairness**: identical decision budget for humans and bots (ADR 0003).
 - **Rendering**: Three.js top-down camera, flat fixed map, simple stylized geometry at launch.
 - **Bots**: scripted Policies under `src/sim/content/bots/` (ADR 0002); community-trained RL bots later via the headless env, joining as normal clients. Accounts field their own bots as playbooks, coached live or played in the Arena, each bot on its own rating (`docs/design/bots.md`, ADR 0013 and ADR 0016).

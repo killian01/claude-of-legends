@@ -114,7 +114,7 @@ practice, ranked, lobbies and the bots' Arena alike. See
 
 ## How to play
 
-- Click (left or right): move or attack; a tap on a phone. A: attack-move. S: stop and hold. B: recall.
+- Click (left or right): move or attack; a tap on a phone. Arrow keys: walk. A: attack-move. S: stop and hold. B: recall.
 - Q W E R: abilities, cast at the cursor (hold for the range preview).
   Level them with Alt+key or by clicking the plus.
 - D F: sigils (picked in champion select). P: shop. Tab: scoreboard.

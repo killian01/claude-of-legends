@@ -427,8 +427,8 @@ export function royaleHints(input: 'mouse' | 'tap' | 'thumbs', leftClickMoves: b
     );
   }
   return (
-    `${leftClickMoves ? 'Click' : 'Right-click'}: move / attack. Q W E R: hold to aim, ` +
-    'release to cast. D F: sigils. Stand by a glowing cache to open it, and stay in the ' +
+    `${leftClickMoves ? 'Click' : 'Right-click'}: move / attack. Arrows: walk. Q W E R: hold ` +
+    'to aim, release to cast. D F: sigils. Stand by a glowing cache to open it, and stay in the ' +
     'light. Space recenters. Esc: menu.'
   );
 }

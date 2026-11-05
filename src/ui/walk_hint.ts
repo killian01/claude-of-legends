@@ -1,7 +1,7 @@
 // How to walk, told to a player whose hands went to W A S D. Here W casts,
 // A attack-moves to the cursor, S stops and D is a sigil, so a player who
 // walks with those keys elsewhere gets a spell, a lurch, a halt and a dash,
-// and no word about the click that walks. Until the player first gives a
+// and no word about the click or the arrows that walk. Until the player first gives a
 // click order (a walk or an attack), a press of one of those keys says how
 // to walk, again on a later press once WALK_HINT_GAP_S has passed, at most
 // WALK_HINT_TIMES in a match. The first click order ends it for good. Pure:
@@ -16,7 +16,10 @@ export const WALK_HINT_HOLD_MS = 4200;
 
 export function walkHintLine(leftClickMoves: boolean): string {
   const click = leftClickMoves ? 'Click' : 'Right-click';
-  return `${click} the ground to walk. Here W casts, A attack-moves, S stops and D is a sigil.`;
+  return (
+    `${click} the ground or hold the arrow keys to walk. ` +
+    'Here W casts, A attack-moves, S stops and D is a sigil.'
+  );
 }
 
 export class WalkHint {

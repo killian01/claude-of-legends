@@ -38,7 +38,7 @@ describe('the walk hint', () => {
   });
 
   it('names the click the player walks with', () => {
-    expect(walkHintLine(true)).toMatch(/^Click the ground to walk\./);
-    expect(walkHintLine(false)).toMatch(/^Right-click the ground to walk\./);
+    expect(walkHintLine(true)).toMatch(/^Click the ground or hold the arrow keys to walk\./);
+    expect(walkHintLine(false)).toMatch(/^Right-click the ground or hold the arrow keys to walk\./);
   });
 });
