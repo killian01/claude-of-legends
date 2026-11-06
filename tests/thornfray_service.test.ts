@@ -4,9 +4,11 @@
 // moved onto each new sim, a rejoin during a Lull and during a bout with the
 // whole table, the second Lull's late seat, a leave played by the seat's
 // bot, no royale_result before the end, the six replays saved under numeric
-// ids, listed in the result and held from the prune while the match runs.
+// ids, listed in the result and held from the prune while the match runs,
+// and a match closed for nobody coming back or for a bout that keeps failing.
 
 import { describe, expect, it } from 'vitest';
+import { ROYALE_MAX_FAILURES } from '../server/royale_service';
 import { GATHER_MS } from '../server/thornfray_gather';
 import { THORNFRAY_MATCH_WEIGHT } from '../server/thornfray_service';
 import { BOUT_SEATS, BOUTS } from '../src/sim/content/bouts/match';
@@ -388,5 +390,31 @@ describe('the seats over the bouts', () => {
     h.advance(61_000);
     h.step(1);
     expect(h.service.entries.size).toBe(0);
+  });
+
+  it('closes a Thornfray whose bout keeps failing, and lets every person in it go', () => {
+    const h = thornfrayHarness();
+    const a = h.connect(1, 'ash');
+    const b = h.connect(2, 'birch');
+    h.enter(a);
+    h.enter(b);
+    h.say(a, { t: 'thornfray_start' });
+    expect(a.matchId).not.toBeNull();
+    h.sim().tick = () => {
+      throw new Error('broken bout');
+    };
+    h.step(ROYALE_MAX_FAILURES);
+    expect(h.service.entries.size).toBe(1);
+    h.step(1);
+    expect(h.service.entries.size).toBe(0);
+    expect(h.logs.some((l) => l.includes('force-closed'))).toBe(true);
+    for (const c of [a, b]) {
+      expect(h.last(c.id, 'match_end')).toBeDefined();
+      expect(c.matchId).toBeNull();
+    }
+    expect(h.service.presence()).toEqual({ playing: 0, gathering: 0 });
+    // Free to play again: entering opens a new gathering.
+    expect(h.enter(a)).toBe(true);
+    expect(h.last(1, 'thornfray_gather')).toMatchObject({ people: 1, opener: true });
   });
 });

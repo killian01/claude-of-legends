@@ -12,6 +12,7 @@ import { respawnSeatTally } from '../server/royale_ranking';
 import {
   ROYALE_LINGER_MS,
   ROYALE_MATCH_WEIGHT,
+  ROYALE_MAX_FAILURES,
   ROYALE_REJOIN_GRACE_MS,
   ROYALE_SCORE_EVERY_TICKS,
   type RoyaleClient,
@@ -600,6 +601,31 @@ describe('leaving and coming back', () => {
     h.step(1);
     expect(h.service.matches.size).toBe(0);
     expect(h.service.rejoin(h.connect(1, 'alice'))).toBe(false);
+  });
+
+  it('a match whose tick keeps failing closes and lets every person in it go', () => {
+    const h = harness();
+    const a = h.connect(1, 'alice');
+    const b = h.connect(2, 'bob');
+    h.enter(a);
+    h.enter(b);
+    expect(b.matchId).toBe(a.matchId);
+    h.fake.sims[0]!.tick = () => {
+      throw new Error('broken sim');
+    };
+    h.step(ROYALE_MAX_FAILURES);
+    expect(h.service.matches.size).toBe(1);
+    h.step(1);
+    expect(h.service.matches.size).toBe(0);
+    for (const c of [a, b]) {
+      expect(h.last(c.id, 'match_end')).toBeDefined();
+      expect(c.matchId).toBeNull();
+      expect(h.service.playing(c.accountId)).toBe(false);
+    }
+    // Free to play again: entering seats them on a new match.
+    expect(h.enter(a)).toBe(true);
+    expect(a.matchId).not.toBeNull();
+    expect(h.fake.sims).toHaveLength(2);
   });
 
   it('leaving from the menu hands the champion to a bot for good', () => {
