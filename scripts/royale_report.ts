@@ -358,12 +358,13 @@ interface Match {
   burrTakedowns: number;
   // The Grafts: held per seat at its fall (One life) or the end, every
   // Graft taken by id, the Bough offers and those filled with a Sprout,
-  // and the offers of the bots' seats that ran out (card 0 taken for them).
+  // and the longest a bot seat's offer stayed open before its pick, in
+  // seconds (an offer has no time limit; absent in a dump from before).
   graftsHeld: number[];
   graftsTaken: Record<string, number>;
   boughOffers: number;
   boughFallbacks: number;
-  botTimeouts: number;
+  botOfferWait?: number;
   dropIns: DropIn[];
   // Respawn's Upstarts begun (Arrivals and returns), and the takedowns
   // landed while carrying one (royale/upstart.ts).
@@ -505,7 +506,9 @@ function play(
   const offersSeen = new WeakSet<object>();
   let boughOffers = 0;
   let boughFallbacks = 0;
-  let botTimeouts = 0;
+  // When each bot seat's offer came to the head of its queue.
+  const headSince = new WeakMap<object, number>();
+  let botOfferWait = 0;
   // The drop-ins: the times still to come, and each one taken, with its
   // landing.
   const dropinsLeft = [...dropins];
@@ -605,8 +608,11 @@ function play(
     }
     for (const [id, q] of mode.state.offers) {
       const head = q[0];
-      if (!head || head.until === null || seats.get(id)?.skill === 'passive') continue;
-      if (mode.state.stage === 'play' && sim.time + 1e-9 >= head.until) botTimeouts++;
+      const skill = seats.get(id)?.skill;
+      if (!head || skill === undefined || !(skill in ROYALE_SKILLS)) continue;
+      const since = headSince.get(head) ?? sim.time;
+      headSince.set(head, since);
+      botOfferWait = Math.max(botOfferWait, sim.time - since);
     }
     const t0 = performance.now();
     const holderBefore = mode.state.wrathHolder?.unitId ?? null;
@@ -927,7 +933,7 @@ function play(
       }, {}),
     boughOffers,
     boughFallbacks,
-    botTimeouts,
+    botOfferWait,
     dropIns: dropIns.map((d) => d.row),
     upstarts: mode.tally.upstarts,
     upstartTakedowns: mode.tally.upstartTakedowns,
@@ -1047,7 +1053,8 @@ function print(m: Match): void {
   );
   console.log(
     `  grafts: held ${histogram(m.graftsHeld)} (mean ${mean(m.graftsHeld).toFixed(1)}), ` +
-      `bough offers ${m.boughOffers} (${m.boughFallbacks} with a sprout), bot offers run out ${m.botTimeouts}`,
+      `bough offers ${m.boughOffers} (${m.boughFallbacks} with a sprout), ` +
+      `a bot offer open at most ${m.botOfferWait === undefined ? '-' : `${m.botOfferWait.toFixed(2)} s`}`,
   );
   console.log(
     `  enemy within ${ENGAGE_M} m in sight: fighting ${pct(m.engagedSeconds, m.nearSeconds)} of ${m.nearSeconds} bot-seconds; ` +
@@ -1231,7 +1238,8 @@ function risingsAcceptance(all: readonly Match[]): void {
 // The Grafts' acceptance (ADR 0032): every One life seat holds one, the
 // mean held at a seat's fall or the end, each Graft's share of its grade's
 // picks against an even share, the Bough offers filled with a Sprout, and
-// no bot offer run out.
+// every bot offer picked within one decision slot (bot/brain.ts answers an
+// open offer first, dead, flying or dropping).
 function graftAcceptance(all: readonly Match[]): void {
   console.log('\ngrafts:');
   const band = { one_life: [1.5, 3], respawn: [4, 7] } as const;
@@ -1253,8 +1261,14 @@ function graftAcceptance(all: readonly Match[]): void {
     console.log(
       `  ${variant} bough offers filled with a sprout: ${pct(fell, offers)} of ${offers} (max 30%): ${verdict(fell <= offers * 0.3)}`,
     );
-    const late = ms.reduce((a, m) => a + m.botTimeouts, 0);
-    console.log(`  ${variant} bot offers run out: ${late} (0): ${verdict(late === 0)}`);
+    const waits = ms.flatMap((m) => (m.botOfferWait === undefined ? [] : [m.botOfferWait]));
+    if (waits.length > 0) {
+      const wait = Math.max(...waits);
+      const slot = POLICY_PERIOD_TICKS / TICK_RATE;
+      console.log(
+        `  ${variant} longest a bot offer stayed open: ${wait.toFixed(2)} s (max ${slot} s): ${verdict(wait <= slot + 1e-9)}`,
+      );
+    }
     const taken: Record<string, number> = {};
     for (const m of ms) {
       for (const [id, n] of Object.entries(m.graftsTaken)) taken[id] = (taken[id] ?? 0) + n;
