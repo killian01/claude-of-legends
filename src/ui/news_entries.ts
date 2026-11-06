@@ -35,6 +35,15 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
+    day: '2026-11-06',
+    title: 'Your spells light up in your first fight',
+    body: [
+      'On the Wanderseed, a champion that only swings loses most duels. Now, when you take a hit and have not cast a spell yet this match, every spell you could cast right then glows gold on your bar.',
+      'Press it, or tap it on a phone, and the glow is gone for the rest of the match.',
+    ],
+    link: { label: 'Play', to: 'play' },
+  },
+  {
     day: '2026-11-05',
     title: 'Walk with the arrow keys',
     body: [
