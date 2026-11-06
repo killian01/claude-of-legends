@@ -193,6 +193,7 @@ import { buildSettingsPanel } from './settings_panel';
 import { shopSections } from './shop_sections';
 import { suggestedItem } from './shop_suggestion';
 import { rankable } from './slot_tap';
+import { SpellCall } from './spell_call';
 import { teamLook } from './team_look';
 import { TeamScore } from './team_score';
 import { attachTooltip, hideTooltip, LONG_PRESS_MS } from './tooltips';
@@ -312,6 +313,13 @@ const CSS = `
 }
 .hud-slot.nomana { border-color: #27436e; color: #6f8cb8; }
 .hud-slot.nomana { filter: saturate(0.35) brightness(0.75); }
+/* A battle royale's first fight: the ready spells glow until one is cast
+   (ui/spell_call.ts). */
+.hud-slot.call {
+  border-color: #e8c862; box-shadow: 0 0 0 2px rgba(232, 200, 98, 0.55), 0 0 14px #e8c862;
+  animation: hud-call-pulse 0.6s ease-in-out infinite alternate;
+}
+@keyframes hud-call-pulse { from { filter: brightness(0.95); } to { filter: brightness(1.35); } }
 /* A two-step touch cast is armed on this slot: tap the ground to fire. */
 .hud-slot.armed { border-color: #5fb8e8; box-shadow: 0 0 10px rgba(95, 184, 232, 0.75); }
 /* The passive: smaller and rounder than the castable keys, aligned to the
@@ -1099,6 +1107,9 @@ ${compactTapsCss()}
      moving finger for a scroll and cancels the pointer under it. */
   touch-action: none;
 }
+.hud.thumbs .hud-slot.call {
+  border: 2px solid #e8c862; box-shadow: 0 0 0 3px rgba(232, 200, 98, 0.6), 0 0 16px #e8c862;
+}
 .hud.thumbs .hud-slot-key { font-size: 9px; }
 .hud.thumbs .hud-slot-up { font-size: 17px; line-height: 20px; border-radius: 50%; }
 .hud.thumbs .hud-attack {
@@ -1416,6 +1427,7 @@ export class Hud {
   // (ui/royale_steps.ts), in a match on the Wanderseed; null in a 5v5. A
   // Thornfray builds it afresh at each bout (setBout).
   private royale: RoyaleHud | null;
+  private readonly spellCall = new SpellCall();
   private royaleSteps: RoyaleStepsState | null = null;
   // The Range's own first steps (ui/range_steps.ts); null in a match.
   private rangeSteps: RangeStepsState | null = null;
@@ -3683,6 +3695,14 @@ export class Hud {
       slot.up.style.display = seatCasts(this.guideMode) && rankable(u, key) ? 'block' : 'none';
       const cost = def ? def.abilities[key].manaCost : 0;
       slot.root.classList.toggle('nomana', u.mana < cost);
+      // In a battle royale's fight, the spells glow until the first cast.
+      this.spellCall.step(key, remaining > 0);
+      const ready = this.royale !== null && !u.dead && rank > 0 && remaining <= 0 && u.mana >= cost;
+      const sinceHit = this.royale?.sinceHit(this.world.time) ?? null;
+      slot.root.classList.toggle(
+        'call',
+        seatCasts(this.guideMode) && this.spellCall.calls(sinceHit, ready),
+      );
     }
 
     for (let i = 0; i < this.sigilSlots.length; i++) {

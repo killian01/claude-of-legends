@@ -625,6 +625,11 @@ export class RoyaleHud {
   }
 
   // The names a death carries, else the seats', else what the unit is.
+  // Seconds since the own champion last took a hit (ui/spell_call.ts).
+  sinceHit(time: number): number | null {
+    return this.moments.sinceHit(time);
+  }
+
   victimName(k: RoyaleKill): string {
     return k.n ?? this.nameOf(k.unitId);
   }
