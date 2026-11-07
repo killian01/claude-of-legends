@@ -1,5 +1,6 @@
 // A walk ordered onto or beside a standing cache goes to its middle, where
-// standing opens it; a walk ordered elsewhere is left as it was.
+// standing opens it, and so does a steered walk (stick or arrow keys) that
+// comes to rest beside one; a walk ordered elsewhere is left as it was.
 
 import { describe, expect, it } from 'vitest';
 import { CACHE_PICK_M, cacheGoal } from '../src/game/cache_pick';
@@ -33,6 +34,16 @@ describe('cacheGoal', () => {
     const p = { x: 0, y: R, z: 3.2 };
     expect(cacheGoal(p, [top])).toBeNull();
     expect(cacheGoal(p, [[9, 0, R, 0, 1]])).toEqual({ x: 0, y: R, z: 0 });
+  });
+
+  it('takes a steered walk resting beside a cache on into its reach', () => {
+    // The stick rested or the arrow keys let go 2.4 m off: outside the
+    // reach, where standing opens nothing, and inside the catch.
+    const rest = { x: 2.4 * Math.SQRT1_2, y: R, z: 2.4 * Math.SQRT1_2 };
+    expect(Math.hypot(rest.x, rest.z)).toBeGreaterThan(CACHE_REACH_M);
+    expect(cacheGoal(rest, [top])).toEqual({ x: 0, y: R, z: 0 });
+    // Passing farther off, the rest stays where it is.
+    expect(cacheGoal({ x: 0, y: R, z: 4 }, [top])).toBeNull();
   });
 
   it('ends inside the reach the bots walk to', () => {

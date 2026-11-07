@@ -3,8 +3,12 @@
 // opens it: the point a bot walks to (sim/royale/bot/travel.ts lootCache).
 // A click on the chest itself lands on the ground behind it (the lid and
 // the glow stand above the feet), and a tap "beside" it easily lands past
-// the reach, where standing opens nothing. Pure: the mode's caches as the
-// last snapshot told them and the ground point the pointer gave.
+// the reach, where standing opens nothing. The same holds where a steered
+// walk comes to rest (the thumb stick resting, the arrow keys let go): it
+// stops wherever the champion is, rarely inside a reach this small, so a
+// rest beside a cache goes on to its middle too (game/boot.ts). Pure: the
+// mode's caches as the last snapshot told them and the ground point the
+// pointer gave, or where the champion came to rest.
 
 import type { SnapCache } from '../net/royale_wire';
 import { dist } from '../sim/geo';
