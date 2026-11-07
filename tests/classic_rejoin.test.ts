@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { rejoinClassic } from '../server/classic_rejoin';
 import { Match } from '../server/match';
+import { closeMatch } from '../server/match_close';
 import { RejoinRegistry } from '../server/rejoin';
 
 function dropped(): {
@@ -62,5 +63,34 @@ describe('the classic rejoin', () => {
     expect(back?.start).toEqual({ t: 'match_start', selfUnitId: unitId, team: 0, coach: true });
     expect(entry.match.players.get(9)?.coach).toBe(true);
     expect(entry.match.sim.policies.has(unitId)).toBe(true);
+  });
+
+  // A match that ended lingers so its end screen can show: a reload in that
+  // window takes the seat back, and the close at the end of the linger then
+  // tells the new socket and sets it free to queue again.
+  it('takes a seat back in an ended match, and the close lets the new socket go', () => {
+    const { rejoins, matches, unitId } = dropped();
+    const entry = matches.get(3)!;
+    entry.match.sim.winner = 1;
+
+    const back = rejoinClassic(rejoins, matches, 41, 9);
+    expect(back?.start).toEqual({ t: 'match_start', selfUnitId: unitId, team: 0 });
+    expect(entry.match.players.get(9)?.unitId).toBe(unitId);
+    expect(entry.abandonedAt).toBeNull();
+
+    const clients = new Map([[9, { matchId: 3 as number | null }]]);
+    const sent: number[] = [];
+    closeMatch({ matches, rejoins, clients, send: (cid) => sent.push(cid) }, 3);
+    expect(sent).toContain(9);
+    expect(clients.get(9)?.matchId).toBeNull();
+    expect(matches.has(3)).toBe(false);
+  });
+
+  it('gives nothing back once the linger closed the match, even for a seat held in it', () => {
+    const { rejoins, matches } = dropped();
+    matches.get(3)!.match.sim.winner = 1;
+    closeMatch({ matches, rejoins, clients: new Map(), send: () => {} }, 3);
+    expect(rejoins.held(41)).toBeUndefined();
+    expect(rejoinClassic(rejoins, matches, 41, 9)).toBeNull();
   });
 });
