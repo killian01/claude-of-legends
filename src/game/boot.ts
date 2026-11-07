@@ -485,7 +485,10 @@ export function startPresentation(
     pendingCast = null;
     attackHold = null;
     if (step.kind === 'stop') {
-      world.orderStop(selfId);
+      // Let go beside a cache, the walk ends in its reach (cache_pick.ts).
+      const to = cacheGoal(me.pos, world.royaleView?.()?.caches);
+      if (to) world.orderMove(selfId, to.x, to.z, to.y);
+      else world.orderStop(selfId);
       return;
     }
     walkHint.clickOrdered();
@@ -548,7 +551,9 @@ export function startPresentation(
         if (stickOrder === null) return;
         stickOrder = null;
         if (toTarget !== null) return;
-        world.orderMove(selfId, at.x, at.z, at.y);
+        // A rest beside a cache ends in its reach (cache_pick.ts).
+        const to = cacheGoal(at, world.royaleView?.()?.caches) ?? at;
+        world.orderMove(selfId, to.x, to.z, to.y);
         return;
       }
       if (stickYields(attackHold, dir, toTarget)) return;
