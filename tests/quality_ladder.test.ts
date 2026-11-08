@@ -80,13 +80,14 @@ describe('a step down', () => {
   });
 
   it('under a third of the target, waits only for eight windows of the top', () => {
-    // 19 a second: tried 7 to 8 s in, with no fresh windows, and the top
+    // 19 a second: tried 7 to 8 s in, with no fresh windows, straight on
+    // the floor (no rung between holds the line on the costs), and the top
     // marked as left early; 21 waits its twenty seconds and four fresh.
     const l = ladderFor();
     const quick = exact(l, (i) => (i === 0 ? 19 : 30), 120);
     expect(sinceSettle(quick.changes[0]!.at)).toBeGreaterThan(7);
     expect(sinceSettle(quick.changes[0]!.at)).toBeLessThan(8.5);
-    expect(quick.settled.map((s) => s.index).slice(0, 2)).toEqual([0, 1]);
+    expect(quick.settled.map((s) => s.index).slice(0, 2)).toEqual([0, 4]);
     expect(l.quickTop).toBe(true);
     const m = ladderFor();
     const usual = exact(m, (i) => (i === 0 ? 21 : 30), 120);
@@ -234,7 +235,7 @@ describe('a step down', () => {
 
   it('is tried under half the target whatever the script, and kept when the pixels pay', () => {
     // Every frame's time its script's, as a context drawn in software
-    // shows it: 8 a second at the top and 14 a rung down is kept; 29 is
+    // shows it: 8 a second at the top and 14 on the floor is kept; 29 is
     // tried, 31 is not.
     const slow = exact(
       ladderFor(),
@@ -242,7 +243,7 @@ describe('a step down', () => {
       120,
       () => 0.97,
     );
-    expect(slow.settled.map((s) => s.index).slice(0, 2)).toEqual([0, 1]);
+    expect(slow.settled.map((s) => s.index).slice(0, 2)).toEqual([0, 4]);
     const tried = (fps: number) =>
       exact(
         ladderFor(),
@@ -350,11 +351,11 @@ describe('a step up', () => {
   it("walks on a faster screen's own refreshes only far under the line", () => {
     // A 144 Hz screen: 43 at the top, 48 a rung down (a third of 144, but
     // 1.12 over 43, no gain) is undone, never walked on to the 60 below it.
-    // Far under the line, 16 at the top and 18 a rung down (nine and eight
-    // refreshes) walk on.
+    // Far under the line, 24 at the top and a rung down (six refreshes)
+    // walk on.
     const noisy = exact(ladderFor(1.25, 144), (i) => [43, 48, 60, 60, 60][i]!, 60);
     expect(indexes(noisy.changes)).toEqual([1, 0]);
-    const dropped = exact(ladderFor(1.25, 144), (i) => [16, 18, 48, 48, 48][i]!, 60);
+    const dropped = exact(ladderFor(1.25, 144), (i) => [24, 24, 48, 48, 48][i]!, 60);
     expect(dropped.settled.at(-1)!.index).toBe(2);
   });
 

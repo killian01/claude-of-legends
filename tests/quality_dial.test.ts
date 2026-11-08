@@ -108,7 +108,7 @@ describe('the shadows on the ground', () => {
 });
 
 describe('the dial', () => {
-  it('draws a weak GPU coarser rung by rung, the shadows last', () => {
+  it('draws a weak GPU far too slow straight on the floor, without shadows', () => {
     const dial = laptop();
     expect(dial.lean).toEqual({ antialias: true, effectLights: true });
     const { gl, floor, ratios } = attached(dial);
@@ -126,11 +126,11 @@ describe('the dial', () => {
     let at = play(dial, gl, 75, 17.5);
     expect(gl.ratio).toBe(1.25);
     at = play(dial, gl, 75, 18.5, at);
-    expect(gl.ratio).toBe(1);
+    expect(gl.ratio).toBe(0.75);
     play(dial, gl, 75, 120, at);
-    // Each step kept still short, the next at once, to the floor's ratio
-    // and then without shadows.
-    expect(ratios).toEqual([1, 0.85, 0.75]);
+    // So far under, no rung between holds the line on the costs: straight
+    // to the floor's ratio without shadows.
+    expect(ratios).toEqual([0.75]);
     expect(gl.shadowMap.autoUpdate).toBe(false);
     expect(floor.receiveShadow).toBe(false);
     expect(drawnQuality()).toMatchObject({ step: 4, ratio: 0.75, w: 1152, h: 648, shadows: false });
