@@ -27,7 +27,11 @@
 // Under a third of it (20 frames a second), the top does not wait its
 // twenty seconds either, only the eight windows of a median, and no fresh
 // windows are measured: a page that slow from its first frames has nothing
-// to settle, and every second on the top is a second at a few frames.
+// to settle, and every second on the top is a second at a few frames. Its
+// step down goes over the rungs that by their documented costs cannot hold
+// the line, to the first that can, else the floor (walked rung by rung, a
+// page at 5 a second stood on its floor a minute or more in); kept, each
+// rung it went over is a step given back one at a time.
 //
 // A browser hands requestAnimationFrame the refresh's time, so frames that
 // all take two refreshes on a 60 Hz screen read as a 30 Hz screen's would
@@ -91,11 +95,12 @@ function windowRate(intervals: readonly number[]): number {
 const hold = (first: number, most: number, fails: number) => Math.min(most, first * 2 ** fails);
 
 // A step on trial: its way, the rung it left, what a step down is weighed
-// against, the windows since the change, the rates after the ones left for
-// it, and whether it went a rung further.
+// against, the rung it went to, the windows since the change, the rates
+// after the ones left for it, and whether it went a rung further.
 interface Trial {
   down: boolean;
   from: number;
+  to: number;
   before: number;
   seen: number;
   rates: number[];
@@ -306,10 +311,25 @@ export class QualityLadder {
     );
   }
 
+  // The rung a step down from `before` goes to: the next, or under the quick
+  // share the first the documented costs say holds the line, else the
+  // floor. Every rung walked on the way is ten seconds more at a few frames.
+  private below(before: number): number {
+    const r = LADDER_RULES;
+    const target = Math.min(r.capHz, this.screenHz ?? r.capHz);
+    if (before >= r.quickShare * target) return this.current + 1;
+    const cost = this.costs[this.current]!;
+    for (let k = this.current + 1; k < this.floor; k++) {
+      if ((before * cost) / this.costs[k]! >= r.lineShare * target) return k;
+    }
+    return this.floor;
+  }
+
   private begin(down: boolean, before: number): void {
     if (down && this.current === 0 && this.topMs < LADDER_RULES.startMs) this.quickTop = true;
-    this.trial = { down, from: this.current, before, seen: 0, rates: [], walked: false };
-    this.current = down ? this.current + 1 : this.steps.at(-1)!.from;
+    const to = down ? this.below(before) : this.steps.at(-1)!.from;
+    this.trial = { down, from: this.current, to, before, seen: 0, rates: [], walked: false };
+    this.current = to;
     this.recent = [];
     this.fresh = null;
   }
@@ -336,7 +356,11 @@ export class QualityLadder {
         this.upHeldUntil = at + hold(r.upHoldMs, r.upHoldMostMs, this.upFails++);
       }
     } else if (after >= gain * trial.before) {
-      this.steps.push({ from: trial.from, before: trial.before, gain });
+      // A leap over rungs is kept as a step from each, given back one by
+      // one; the rungs walked after it go back with its last.
+      for (let from = trial.from; from < trial.to; from++) {
+        this.steps.push({ from, before: trial.before, gain });
+      }
       this.recent = trial.rates;
       if (after < r.lineShare * target && this.mayStepDown(after, 0, at)) this.begin(true, after);
     } else if (after * r.gain < trial.before) {

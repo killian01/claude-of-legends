@@ -35,6 +35,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type ModeMemory, QUALITY_KEY } from '../src/game/quality_memory';
+import { DESK_RATIO_FLOOR, ladderRungs } from '../src/render/quality_dial';
 import {
   capableMatch,
   documented,
@@ -338,6 +339,43 @@ describe('G. slow from the first frames', () => {
         expect(usual!.changes[0]!.at / 1000).toBeGreaterThan(30);
       }
     }
+  });
+
+  it('under a third of the target goes in one step to the rung that can hold the line', () => {
+    // Rung by rung, ten seconds each, a page at 5 a second stood on its
+    // floor a minute in from a top of 1.25, a minute and a half from 2.
+    for (const top of [1.25, 2]) {
+      const floor = ladderRungs(top, DESK_RATIO_FLOOR).length - 1;
+      for (const fps of [3, 5, 8, 12, 15]) {
+        const work = documented(1000 / fps, top);
+        const [p] = series([{ refreshHz: 60, strict: false, top, seconds: 90, workMs: work }]);
+        const at = `${fps} at ${top}`;
+        const rung = Math.min(floor, ...holding(work, top, 0, false));
+        expect(
+          p!.settled.map((s) => s.index),
+          at,
+        ).toEqual([0, rung]);
+        expect(p!.settled[1]!.at / 1000, at).toBeLessThanOrEqual(35);
+      }
+    }
+  });
+
+  it('gives a leap back a rung at a time once the page is fast again', () => {
+    // 5 a second for 40 s, then a machine with room to spare.
+    const top = 1.25;
+    const slow = documented(200, top);
+    const fast = documented(9, top);
+    const [p] = series([
+      {
+        refreshHz: 60,
+        strict: false,
+        top,
+        seconds: 300,
+        workMs: (r, l, at) => (at < 40_000 ? slow(r, l, at) : fast(r, l, at)),
+      },
+    ]);
+    const after = p!.settled.filter((s) => s.at > 40_000).map((s) => s.index);
+    expect(after).toEqual([3, 2, 1, 0]);
   });
 
   it('leans after two such matches, its top left within its first seconds', () => {
