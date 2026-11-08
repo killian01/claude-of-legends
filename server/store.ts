@@ -11,10 +11,14 @@
 
 import {
   appendFileSync,
+  closeSync,
   type Dirent,
+  fstatSync,
   mkdirSync,
+  openSync,
   readdirSync,
   readFileSync,
+  readSync,
   renameSync,
   unlinkSync,
   writeFileSync,
@@ -89,9 +93,32 @@ export function sweepTornJson(dir: string): string[] {
   return swept;
 }
 
+// A file whose last line was torn (a crash, or a full disk, mid-append)
+// gets a newline first: glued to the torn bytes, the new line would not
+// parse either, and readJsonl would lose it with them.
 export function appendJsonl(file: string, value: unknown): void {
   mkdirSync(path.dirname(file), { recursive: true });
-  appendFileSync(file, `${JSON.stringify(value)}\n`);
+  const lead = endsTorn(file) ? '\n' : '';
+  appendFileSync(file, `${lead}${JSON.stringify(value)}\n`);
+}
+
+// Whether a file is there, holds something, and does not end in a newline.
+function endsTorn(file: string): boolean {
+  let fd: number;
+  try {
+    fd = openSync(file, 'r');
+  } catch {
+    return false;
+  }
+  try {
+    const size = fstatSync(fd).size;
+    if (size === 0) return false;
+    const last = Buffer.alloc(1);
+    readSync(fd, last, 0, 1, size - 1);
+    return last[0] !== 0x0a;
+  } finally {
+    closeSync(fd);
+  }
 }
 
 // Keep only the `keep` highest-numbered `<n>.json` files in a directory
