@@ -126,4 +126,24 @@ describe('json store', () => {
     writeFileSync(file, `${readFileSync(file, 'utf8')}{"m":3,"trunc`);
     expect(readJsonl(file)).toEqual([{ m: 1 }, { m: 2 }]);
   });
+
+  // The server goes on appending after the crash (or the full disk) that
+  // tore the last line: the next record starts a line of its own instead of
+  // being glued to the torn one and lost with it.
+  it('keeps the first line appended after a torn one', () => {
+    const file = path.join(tmp(), 'matches.jsonl');
+    appendJsonl(file, { m: 1 });
+    writeFileSync(file, `${readFileSync(file, 'utf8')}{"m":2,"trunc`);
+    appendJsonl(file, { m: 3 });
+    appendJsonl(file, { m: 4 });
+    expect(readJsonl(file)).toEqual([{ m: 1 }, { m: 3 }, { m: 4 }]);
+    expect(readFileSync(file, 'utf8')).toBe('{"m":1}\n{"m":2,"trunc\n{"m":3}\n{"m":4}\n');
+  });
+
+  it('appends to an empty file without a blank first line', () => {
+    const file = path.join(tmp(), 'matches.jsonl');
+    writeFileSync(file, '');
+    appendJsonl(file, { m: 1 });
+    expect(readFileSync(file, 'utf8')).toBe('{"m":1}\n');
+  });
 });
