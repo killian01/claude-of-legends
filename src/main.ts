@@ -895,9 +895,15 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
     const ws = new WebSocket(`${proto}://${window.location.host}/ws`);
     // The map's walkability grid, for the own champion's prediction
     // (src/net/self_predict.ts): the grid the server's sim walks on.
+    // Set by the server's AFK warning, cleared by the next order sent.
+    let afkWarned = false;
     const world = new ClientWorld(
       (msg) => {
         if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
+        if (afkWarned) {
+          afkWarned = false;
+          pres?.keepIdleSeat();
+        }
       },
       orchard.map,
       new TerrainNavGrid(orchard.navigation),
@@ -1219,6 +1225,10 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
           break;
         case 'ping':
           pres?.showPing(msg.x, msg.z, msg.from, msg.team);
+          break;
+        case 'afk_warn':
+          afkWarned = pres !== null;
+          pres?.warnIdle(msg.s);
           break;
         case 'welcome':
           // The server names the account this socket belongs to; nothing to

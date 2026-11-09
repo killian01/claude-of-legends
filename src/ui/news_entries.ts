@@ -35,6 +35,15 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
+    day: '2026-11-09',
+    title: 'A warning before a bot takes your champion',
+    body: [
+      'In a 5v5 with other people in it, a champion left without orders for two minutes goes to a bot, so the match stays fair for everyone else. Until now that happened without a word.',
+      'Now, after a minute and a half of silence, the game tells you so, and the tab title says "Still there?" if you are on another tab. Any order in the next 30 seconds keeps your champion yours.',
+    ],
+    link: { label: 'Play', to: 'play' },
+  },
+  {
     day: '2026-11-06',
     title: 'Your spells light up in your first fight',
     body: [
