@@ -39,6 +39,7 @@ import {
   selfAccount,
 } from './accounts';
 import { CONFIRM_TTL_MS, RESET_TTL_MS, TokenStore } from './action_tokens';
+import { AFK_SWEEP_TICKS, AFK_WARN_SECONDS } from './afk';
 import { API_RATE_PER_MIN, ApiLimiter } from './api_limit';
 import { ARENA_PLAY_NOW_PER_DAY, ARENA_ROUND_MS } from './arena';
 import { ArenaRunner } from './arena_runner';
@@ -136,7 +137,7 @@ import {
 import { accountKey, addressKey, LoginThrottle } from './login_throttle';
 import { confirmMail, confirmUrl, publicOrigin, resetMail, resetUrl } from './mail_messages';
 import { mailerFromEnv } from './mailer';
-import { AFK_IDLE_TICKS, Match, type MatchPick } from './match';
+import { Match, type MatchPick } from './match';
 import { closeMatch } from './match_close';
 import { type OwnedSeat, type RatingBook, rateMatch } from './match_rating';
 import { Matchmaker, type MatchSource } from './matchmaker';
@@ -3300,12 +3301,15 @@ setInterval(() => {
         // AFK sweep: a connected player silent for two minutes in a live
         // match with other humans walks out (bot takeover, penalty when
         // rated); a solo-vs-bots match harms nobody and is left alone.
+        // A seat nearly there is warned first (server/afk.ts), once.
         if (
-          entry.match.sim.tickCount % 200 === 0 &&
+          entry.match.sim.tickCount % AFK_SWEEP_TICKS === 0 &&
           entry.match.sim.winner === null &&
           entry.match.players.size >= 2
         ) {
-          for (const cid of entry.match.idleClientIds(AFK_IDLE_TICKS)) {
+          const sweep = entry.match.afkSweep();
+          for (const cid of sweep.warn) send(cid, { t: 'afk_warn', s: AFK_WARN_SECONDS });
+          for (const cid of sweep.remove) {
             const c = clients.get(cid);
             if (!c) continue;
             send(cid, {

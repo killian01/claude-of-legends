@@ -17,6 +17,7 @@ import type { LanePreference, PlaybookDef } from '../src/sim/playbook/types';
 import type { Sim, SimEvent } from '../src/sim/sim';
 import { isSide } from '../src/sim/teams';
 import type { TeamId } from '../src/sim/types';
+import { AFK_IDLE_TICKS, afkCall } from './afk';
 import { dropInTeam } from './drop_in';
 import { buildSnapshot } from './snapshot';
 import { starOrchard } from './star_orchard';
@@ -61,6 +62,9 @@ interface MatchPlayer {
   known: Set<number>;
   // sim.tickCount of this player's last command, for the AFK sweep.
   lastCommandAt: number;
+  // The lastCommandAt the AFK warning went out for, so it is sent once a
+  // silence; null until one did.
+  afkWarnedFor: number | null;
   // A coach seat (ADR 0013): the account's own bot plays; the person only
   // orders. Never idle-swept, never handed to a stand-in, never a leaver.
   coach: boolean;
@@ -201,9 +205,7 @@ export function freshStats(tick: number, x: number, z: number): SeatStats {
   };
 }
 
-// A connected player silent for this long in a multi-human match is
-// treated as a walk-out (two minutes at 20 Hz).
-export const AFK_IDLE_TICKS = 20 * 120;
+export { AFK_IDLE_TICKS };
 
 // Seatless viewers per match; a small cap keeps the snapshot loop honest.
 export const MAX_SPECTATORS = 10;
@@ -265,6 +267,7 @@ export class Match {
         unitId,
         known: new Set(),
         lastCommandAt: 0,
+        afkWarnedFor: null,
         coach: p.playbook !== undefined,
         stats: this.statsAt(unitId),
         ack: 0,
@@ -313,6 +316,26 @@ export class Match {
       if (this.sim.tickCount - p.lastCommandAt > maxIdleTicks) out.push(p.clientId);
     }
     return out;
+  }
+
+  // The AFK sweep's verdicts (server/afk.ts): the seats to warn, each once
+  // a silence, and the seats to remove. A coach is never swept.
+  afkSweep(): { warn: number[]; remove: number[] } {
+    const warn: number[] = [];
+    const remove: number[] = [];
+    for (const p of this.players.values()) {
+      if (p.coach) continue;
+      const call = afkCall(
+        this.sim.tickCount - p.lastCommandAt,
+        p.afkWarnedFor === p.lastCommandAt,
+      );
+      if (call === 'remove') remove.push(p.clientId);
+      if (call === 'warn') {
+        p.afkWarnedFor = p.lastCommandAt;
+        warn.push(p.clientId);
+      }
+    }
+    return { warn, remove };
   }
 
   private recordReplay(ev: ReplayEvent): void {
@@ -374,6 +397,7 @@ export class Match {
       known: new Set(),
       // A fresh idle clock: a rejoin must not be flagged AFK on arrival.
       lastCommandAt: this.sim.tickCount,
+      afkWarnedFor: null,
       coach: seat.coach === true,
       // A seat taken back or taken over starts a report of its own.
       stats: this.statsAt(seat.unitId),

@@ -21,6 +21,7 @@ import { effectiveRank } from '../sim/stats';
 import type { AbilityKey, TeamId, Vec2 } from '../sim/types';
 import { DT } from '../sim/types';
 import type { Unit } from '../sim/unit';
+import { AFK_KEPT_LINE, afkTitle, afkWarnLine } from '../ui/afk_warn';
 import { boutRules } from '../ui/bout_rules';
 import { seatShops } from '../ui/coach_bar';
 import { attackCursor, defaultCursor } from '../ui/cursors';
@@ -118,6 +119,11 @@ export interface Presentation {
   // of the kill feed.
   pushSeatLine(line: SeatLine): void;
   showPing(x: number, z: number, from: string, team: TeamId): void;
+  // The server is about to hand this silent seat to a bot (ui/afk_warn.ts):
+  // any order within seconds keeps it.
+  warnIdle(seconds: number): void;
+  // The first order after that warning: the seat is kept, said so.
+  keepIdleSeat(): void;
   setNetHooks(hooks: NetHooks): void;
   // The server's rating verdict for this player, shown on the end screen;
   // queue 'forge' labels the number as the Forge queue's own ladder.
@@ -953,12 +959,26 @@ export function startPresentation(
     rafId = requestAnimationFrame(frame);
   }
   rafId = requestAnimationFrame(frame);
+  let afkTitleTimer = 0;
 
   return {
     onWorldTick,
     pushChat: (from, team, text) => hud.pushChat(from, team, text),
     pushSeatLine: (line) => hud.pushSeatLine(line),
     showPing,
+    warnIdle: (seconds) => {
+      hud.toast(afkWarnLine(seconds), seconds * 1000);
+      document.title = afkTitle(document.title, true);
+      window.clearTimeout(afkTitleTimer);
+      afkTitleTimer = window.setTimeout(() => {
+        document.title = afkTitle(document.title, false);
+      }, seconds * 1000);
+    },
+    keepIdleSeat: () => {
+      hud.toast(AFK_KEPT_LINE);
+      window.clearTimeout(afkTitleTimer);
+      document.title = afkTitle(document.title, false);
+    },
     setNetHooks: (h) => {
       hooks = h;
       hud.setNetHooks(h);
@@ -987,6 +1007,8 @@ export function startPresentation(
     dispose: () => {
       if (disposed) return;
       disposed = true;
+      window.clearTimeout(afkTitleTimer);
+      document.title = afkTitle(document.title, false);
       cancelAnimationFrame(rafId);
       container.removeEventListener('pointerdown', onFirstPointerDown);
       stopFullscreenWatch();

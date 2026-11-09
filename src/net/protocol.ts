@@ -562,6 +562,10 @@ export type ServerMsg =
   | ThornfrayGather
   | ThornfrayResult
   | { t: 'match_end' }
+  // A 5v5 seat silent long enough to be nearly swept as AFK (server/afk.ts):
+  // any order within s seconds keeps it; sent to that player alone, once a
+  // silence.
+  | { t: 'afk_warn'; s: number }
   | { t: 'error'; message: string };
 
 // The first steps a newcomer is led through, in the order they are tried
