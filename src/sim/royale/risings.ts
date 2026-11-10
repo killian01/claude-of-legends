@@ -4,7 +4,7 @@
 // Wanderseed and its passing. The bodies themselves stand on the sim's own
 // rings and pit (rings.ts, objectives.ts), scaled at their rise
 // (CombatCtx.neutralScale); this module keeps their clocks on the planet's
-// (content/royale_events.ts): the Pyrefang and the Voidmaul at 3:00 and
+// (content/royale_events.ts): the Pyrefang and the Voidmaul at RING_RISE_AT_S and
 // RISING_RETURN_S after each death, the Warden once, and a heads-up for
 // each. The mode drives it from stepAfterDeaths and onDeath.
 

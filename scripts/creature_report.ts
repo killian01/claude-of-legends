@@ -238,7 +238,7 @@ function planetFight(
   u.mana = u.maxMana;
   const at =
     body === 'pyrefang' || body === 'voidmaul'
-      ? DROP_S + RING_RISE_AT_S
+      ? DROP_S + RING_RISE_AT_S.one_life
       : DROP_S + WARDEN_RISE_AT_S[clockOf];
   sim.time = at;
   for (const st of sim.ringStates) {

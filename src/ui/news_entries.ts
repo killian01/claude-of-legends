@@ -35,6 +35,15 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
+    day: '2026-11-10',
+    title: 'The Pyrefang and the Voidmaul wake early in Respawn',
+    body: [
+      'In Respawn, the two big creatures of the Wanderseed now rise at 1:40 instead of 3:00. They are called at 1:10, just after the first Seedfall lands, and their markers count down at the edge of your screen.',
+      'The last hit pays two pieces of your build, all your health and mana, and a Heartwood Graft, and everyone sees who took it. Coming back is cheap in Respawn, so go for the steal. Once one falls, it rises again two and a half minutes later. One life keeps its 3:00.',
+    ],
+    link: { label: 'Play', to: 'play' },
+  },
+  {
     day: '2026-11-09',
     title: 'A warning before a bot takes your champion',
     body: [

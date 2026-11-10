@@ -11,7 +11,8 @@
 // Respawn's and Trios' captured again under 14, a cache's opener holding its
 // idle fire; all three again under 15, Sylra's planet damage share, and
 // under 17, Elowen's planet shares, under 19, Dain's, under 20, Maera's, and
-// under 21, Ostrand joining the pool.
+// under 21, Ostrand joining the pool; Respawn again under 22, its big
+// creatures rising at 1:40.
 //
 // A red run means a seam moved the battle royale: a changed order of random
 // draws in the Dusk, the Seedfalls, the caches, the Grafts, the drop or the
@@ -40,7 +41,7 @@ interface Golden {
 }
 
 const GOLDEN = {
-  respawnSolo7: { landed60: 627606779, end: 74806172 },
+  respawnSolo7: { landed60: 627606779, end: 2950608717 },
   oneLifeSolo7: { landed60: 311617927, end: 3872947724 },
   oneLifeTrios5: { landed60: 2428003195, end: 2410443987 },
 } satisfies Record<string, Golden>;

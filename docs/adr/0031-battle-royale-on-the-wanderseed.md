@@ -56,7 +56,8 @@ code rests on.
 Nine measured matches left the three big creatures untouched, and fifty champions had nothing
 to steer by but the nearest fight. This overrides **Creatures** above for the big ones:
 
-- **Risings.** The Pyrefang and the Voidmaul still rise at 3:00 on their rings, and again
+- **Risings.** The Pyrefang and the Voidmaul still rise at 3:00 on their rings (1:40 in Respawn,
+  from rules 22, called once the Opening Seedfall has landed), and again
   150 s after each death; the Warden rises once, at 4:30 in One life and 6:00 in Respawn, at the
   walkable point nearest the center of the light as it will stand 30 s later, never in the
   Sanctuary's pit and never a second time. Each is called 30 s ahead. On the planet a champion

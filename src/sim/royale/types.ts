@@ -121,7 +121,9 @@ export const CLAMOR_S = 3;
 // (content/royale_tuning.ts).
 // 21: Ostrand joins the pool the house seats are dealt from, with his planet
 // tuning and build.
-export const ROYALE_RULES_VERSION = 21;
+// 22: Respawn's Pyrefang and Voidmaul first rise at 1:40, not 3:00
+// (content/royale_events.ts RING_RISE_AT_S).
+export const ROYALE_RULES_VERSION = 22;
 
 // One of the Dusk's caps: a circle on the sphere, its radius a chord.
 export interface DuskCap {
