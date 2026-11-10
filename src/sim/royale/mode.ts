@@ -393,7 +393,9 @@ export class RoyaleMode {
   // constructor sets the clocks from it): the planet's times in a battle
   // royale, a bout's own from its kind, never when it names none.
   risingAt(kind: RisingKind): number {
-    if (!this.bout) return kind === 'warden' ? WARDEN_RISE_AT_S[this.variant] : RING_RISE_AT_S;
+    if (!this.bout) {
+      return kind === 'warden' ? WARDEN_RISE_AT_S[this.variant] : RING_RISE_AT_S[this.variant];
+    }
     return this.bout.kind.systems.risings?.[kind] ?? Number.POSITIVE_INFINITY;
   }
 

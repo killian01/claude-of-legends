@@ -12,6 +12,7 @@ import { buildRoyaleSim, type ReplayPick } from '../src/net/replay';
 import { dealDamage } from '../src/sim/combat/damage';
 import { unrootedMoveSpeed } from '../src/sim/combat/status';
 import { DUSK_PHASES } from '../src/sim/content/dusk';
+import { RING_RISE_AT_S } from '../src/sim/content/royale_events';
 import { planetTuning } from '../src/sim/content/royale_tuning';
 import { clampSkin } from '../src/sim/content/skins';
 import { basis, dirTo, dist, offset, type Vec3 } from '../src/sim/geo';
@@ -353,7 +354,10 @@ describe('the rules of play', () => {
   it('raises the big creatures on the mode clock', () => {
     const { sim } = build(1);
     expect(sim.objectives.nextSpawnAt).toBe(DROP_S + WARDEN_AT_S);
-    for (const r of sim.ringStates) expect(r.nextRiseAt).toBe(DROP_S + RING_CREATURES_AT_S);
+    for (const r of sim.ringStates) expect(r.nextRiseAt).toBe(DROP_S + RING_RISE_AT_S.respawn);
+    for (const r of build(1, 'one_life').sim.ringStates) {
+      expect(r.nextRiseAt).toBe(DROP_S + RING_CREATURES_AT_S);
+    }
   });
 });
 

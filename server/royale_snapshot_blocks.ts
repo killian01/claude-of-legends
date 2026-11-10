@@ -152,7 +152,10 @@ export const RISING_HP_STEP = 0.02;
 export const risingsBlock: Builder<SnapRising[]> = (sim, viewer) => {
   const r = sim.royale;
   if (r.stage !== 'play') return undefined;
-  if (r.risings.length === 0 && sim.time + 1e-9 < r.dropEndsAt + RING_RISE_AT_S - RISING_WARN_S) {
+  if (
+    r.risings.length === 0 &&
+    sim.time + 1e-9 < r.dropEndsAt + RING_RISE_AT_S[r.variant] - RISING_WARN_S
+  ) {
     return undefined;
   }
   const value = r.risings.map((x): SnapRising => {

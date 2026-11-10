@@ -83,9 +83,14 @@ export const SEEDFALL_CONTEST_MIN = 2;
 
 // The Risings (CONTEXT.md: Rising; src/sim/royale/risings.ts): the big
 // creatures and the Warden come up on the planet's own clocks, each called
-// RISING_WARN_S ahead. The Pyrefang and the Voidmaul rise at 3:00 on their
-// rings and RISING_RETURN_S after each death; the Warden once, inside the
-// light (4:30 in One life, 6:00 in Respawn), and never a second time. The
+// RISING_WARN_S ahead. The Pyrefang and the Voidmaul rise on their rings
+// (RING_RISE_AT_S) and RISING_RETURN_S after each death; the Warden once, inside the
+// light (4:30 in One life, 6:00 in Respawn), and never a second time.
+// Respawn's big creatures first rise at 1:40, called at 1:10, once the
+// Opening Seedfall's landing has been told: a landing champion meets the
+// first big fight of the match in its second minute, and coming back is
+// cheap, so the race for the last hit is on from the start. One life keeps 3:00: its field is still finding
+// its feet, and a fall there is the end. The
 // 5v5's bodies are sized for a duo or a team; on the planet a champion
 // fights alone, so a body is scaled at its rise (CombatCtx.neutralScale):
 // a level 6 champion with four pieces takes a big creature alone in about
@@ -93,7 +98,10 @@ export const SEEDFALL_CONTEST_MIN = 2;
 // (scripts/creature_report.mjs --planet): the gamble is the steal, and the
 // slayer shown to everyone.
 export const RISING_WARN_S = 30;
-export const RING_RISE_AT_S = RING_CREATURES_AT_S;
+export const RING_RISE_AT_S: Readonly<Record<RoyaleVariant, number>> = {
+  one_life: RING_CREATURES_AT_S,
+  respawn: 100,
+};
 export const RISING_RETURN_S = 150;
 export const WARDEN_RISE_AT_S: Readonly<Record<RoyaleVariant, number>> = {
   one_life: 270,

@@ -21,6 +21,7 @@ import {
   RISING_PIECES_BEFORE_GRAFTS,
   RISING_RETURN_S,
   RISING_WARN_S,
+  SEEDFALL_OPENING_S,
   WARDEN_RISE_AT_S,
   WRATH_PASS_MIN_S,
   WRATH_ROYALE_S,
@@ -129,7 +130,7 @@ describe('the bodies', () => {
     const { sim } = build(2);
     expect(ctxOf(sim).neutralScale).toBe(PLANET_NEUTRAL_SCALE);
     const ring = sim.ringStates.find((r) => r.creature === 'pyrefang')!;
-    expect(ring.nextRiseAt).toBe(DROP_S + RING_RISE_AT_S);
+    expect(ring.nextRiseAt).toBe(DROP_S + RING_RISE_AT_S.respawn);
     const body = riseRing(sim, 'pyrefang');
     const whole = createCreature(0, CREATURES.pyrefang, body.pos, body.aspect, ring.roseAt!);
     const s = PLANET_NEUTRAL_SCALE.creature;
@@ -146,6 +147,36 @@ describe('the bodies', () => {
 });
 
 describe('the clocks', () => {
+  it('raises the big creatures at 1:40 in Respawn, called after the Opening Seedfall lands', () => {
+    expect(RING_RISE_AT_S).toEqual({ one_life: 180, respawn: 100 });
+    // Its call stands apart from the Opening Seedfall's landing line.
+    expect(RING_RISE_AT_S.respawn - RISING_WARN_S).toBe(SEEDFALL_OPENING_S + 10);
+    for (const variant of ['one_life', 'respawn'] as const) {
+      for (const ring of build(2, variant).sim.ringStates) {
+        expect(ring.nextRiseAt).toBe(DROP_S + RING_RISE_AT_S[variant]);
+      }
+    }
+  });
+
+  it('calls the Pyrefang and the Voidmaul at 1:10 in Respawn and stands them at 1:40', () => {
+    const { sim, unitIds } = build(2, 'respawn');
+    const big = () =>
+      buildObservation(sim, unitIds[0]!)!.royale!.risings!.filter((r) => r.kind !== 'warden');
+    run(sim, DROP_S + RING_RISE_AT_S.respawn - RISING_WARN_S - 1 - sim.time);
+    expect(big()).toEqual([]);
+    run(sim, 1.5);
+    expect(
+      big()
+        .map((r) => r.kind)
+        .sort(),
+    ).toEqual(['pyrefang', 'voidmaul']);
+    for (const r of big()) {
+      expect(r).toMatchObject({ up: false, risesAt: DROP_S + RING_RISE_AT_S.respawn });
+    }
+    run(sim, RISING_WARN_S);
+    expect(big().filter((r) => r.up)).toHaveLength(2);
+  });
+
   it('raises the Warden at 4:30 in One life and 6:00 in Respawn', () => {
     expect(build(2, 'one_life').sim.objectives.nextSpawnAt).toBe(
       DROP_S + WARDEN_RISE_AT_S.one_life,
