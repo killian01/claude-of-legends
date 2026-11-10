@@ -411,6 +411,29 @@ export function clearOnRing(
   return findOnRing(at, taken, v, ring) ?? { x: at.x, y: at.y };
 }
 
+// The HUD's boxes the arrows keep off (ui/royale_hud_moments.ts
+// measureObstacles): the minimap, the thumbs and the bar, the top line and
+// the feed, the Graft chip, and the announcement line while it shows (the
+// top of a phone's ring stands on its line: "The calm is over" was said
+// over the Rising's arrows).
+export const EDGE_OBSTACLES =
+  '.hud-slots, .hud-bottom, .hud-kda, .stick-base, .stick-ghost, .touchbar, .br-top, ' +
+  '.br-feed, .br-open, .br-note, .hud-steps, .hud-points, .hud-hints, .br-graft-chip, ' +
+  '.hud-announce, canvas[style*="right"]';
+
+// Whether a HUD box, by its computed style, is in an arrow's way: not
+// hidden; the announcement only while a line is said (the HUD root's
+// `announcing`), since it only fades out, its words kept, and counts from
+// the start of its fade in.
+export function inTheWay(
+  style: Pick<CSSStyleDeclaration, 'visibility' | 'display'>,
+  announcement: boolean,
+  announcing: boolean,
+): boolean {
+  if (announcement && !announcing) return false;
+  return style.visibility !== 'hidden' && style.display !== 'none';
+}
+
 // How far in the next track stands when an arrow finds no room on its
 // own: the desktop's border moved in by an arrow's height, the phone's
 // ring shrunk by a fifth.

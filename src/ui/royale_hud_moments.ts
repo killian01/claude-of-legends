@@ -29,11 +29,13 @@ import { CACHE_ARROW_COLOR, cacheTarget } from './royale_cache_arrow';
 import { openCall } from './royale_cards_room';
 import {
   compactRing,
+  EDGE_OBSTACLES,
   EdgeChimes,
   type EdgeRect,
   type EdgeTarget,
   type EdgeView,
   edgeArrows,
+  inTheWay,
   layoutArrows,
   seedfallPointed,
 } from './royale_edges';
@@ -266,6 +268,7 @@ export class RoyaleHudMoments {
   // are measured again at once).
   private covers: EdgeRect[] = [];
   private cardsOpen = false;
+  private announcing = false;
   // The phone's safe-area insets, pixels, measured with the obstacles.
   private insets = { top: 0, right: 0, bottom: 0, left: 0 };
   private raf = 0;
@@ -822,19 +825,24 @@ export class RoyaleHudMoments {
     probe.remove();
   }
 
-  // What the arrows keep off, in the stage's pixels: the minimap, the
-  // thumbs and the bar, the top line and the feed, the Graft chip; and the
-  // open Graft cards, which their lines never stand on (ui/royale_edges.ts
-  // layoutArrows covers). Measured twice a second, and at once when the
-  // cards open or fold.
+  // What the arrows keep off, in the stage's pixels (ui/royale_edges.ts
+  // EDGE_OBSTACLES); and the open Graft cards, which their lines never
+  // stand on (ui/royale_edges.ts layoutArrows covers). Measured twice a second, and at once when the
+  // cards open or fold or an announcement starts or ends.
   private measureObstacles(stage: HTMLElement): EdgeRect[] {
     const now = performance.now();
     const cards = stage.querySelector<HTMLElement>('.br-grafts');
     const cardsOpen = cards !== null && !cards.hidden;
-    if (cardsOpen === this.cardsOpen && now - this.obstaclesAt < OBSTACLES_MS) {
+    const announcing = this.host.root.classList.contains('announcing');
+    if (
+      cardsOpen === this.cardsOpen &&
+      announcing === this.announcing &&
+      now - this.obstaclesAt < OBSTACLES_MS
+    ) {
       return this.obstacles;
     }
     this.cardsOpen = cardsOpen;
+    this.announcing = announcing;
     this.obstaclesAt = now;
     this.measureInsets();
     this.covers = [];
@@ -842,17 +850,13 @@ export class RoyaleHudMoments {
       const b = cards.getBoundingClientRect();
       if (b.width > 0 && b.height > 0) this.covers.push(rectOnStage(cards, b));
     }
-    const picks = stage.querySelectorAll<HTMLElement>(
-      '.hud-slots, .hud-bottom, .hud-kda, .stick-base, .stick-ghost, .touchbar, .br-top, ' +
-        '.br-feed, .br-open, .br-note, .hud-steps, .hud-points, .hud-hints, .br-graft-chip, ' +
-        'canvas[style*="right"]',
-    );
+    const picks = stage.querySelectorAll<HTMLElement>(EDGE_OBSTACLES);
     const out: EdgeRect[] = [];
     for (const node of picks) {
       const b = node.getBoundingClientRect();
       if (b.width <= 0 || b.height <= 0) continue;
-      const cs = getComputedStyle(node);
-      if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+      const said = node.classList.contains('hud-announce');
+      if (!inTheWay(getComputedStyle(node), said, this.announcing)) continue;
       const r = rectOnStage(node, b);
       // The thumb covers more than the stick's ring.
       const m =

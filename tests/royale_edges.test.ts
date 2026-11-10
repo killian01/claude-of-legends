@@ -20,6 +20,7 @@ import {
   type EdgeView,
   edgeArrows,
   edgeDirection,
+  inTheWay,
   LABEL_H,
   LABEL_MARGIN,
   LABEL_TOP,
@@ -399,6 +400,31 @@ describe('the arrows placed together', () => {
     expect(hit(r, kda)).toBe(false);
     expect(r.left).toBeGreaterThanOrEqual(0);
     expect(r.right).toBeLessThanOrEqual(960);
+  });
+
+  it('keep off the announcement line on a phone ("The calm is over" over the Rising)', () => {
+    // The phone's ring tops out on the line (ui/hud.ts .hud.compact.royale
+    // .hud-announce, 70 px down, 20 px type), as wide as the calm's call.
+    const view: EdgeView = { width: 844, height: 390, top: 14, right: 26, bottom: 38, left: 26 };
+    const ring = compactRing(view);
+    const line = { left: 212, top: 66, right: 632, bottom: 100 };
+    const [a] = edgeArrows([target({ x: 400, y: -600, distance: 120 })], view, ring);
+    const r0 = (p: { x: number; y: number; labelDx: number }) =>
+      arrowRect(p, arrowBox(60), p.labelDx);
+    const [under] = layoutArrows([a!], [60], [], view, ring);
+    expect(hit(r0(under!), line)).toBe(true);
+    const [p] = layoutArrows([a!], [60], [line], view, ring);
+    expect(hit(r0(p!), line)).toBe(false);
+    expect(p!.labelShown).toBe(true);
+  });
+
+  it('count the announcement only while a line is said', () => {
+    const shown = { visibility: 'visible', display: 'block' };
+    expect(inTheWay(shown, true, true)).toBe(true);
+    expect(inTheWay(shown, true, false)).toBe(false);
+    expect(inTheWay(shown, false, false)).toBe(true);
+    expect(inTheWay({ visibility: 'hidden', display: 'block' }, false, false)).toBe(false);
+    expect(inTheWay({ visibility: 'visible', display: 'none' }, true, true)).toBe(false);
   });
 
   it('keep a clear arrow where it points', () => {
