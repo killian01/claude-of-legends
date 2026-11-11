@@ -7,7 +7,7 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { CHAMPIONS } from '../src/sim/content/champions/index';
+import { CHAMPION_LIST, CHAMPIONS } from '../src/sim/content/champions/index';
 import { ITEMS } from '../src/sim/content/items';
 import { SIGILS } from '../src/sim/content/sigils';
 import { ABILITY_ICON_IMAGES, ITEM_ICON_IMAGES, SIGIL_ICON_IMAGES } from '../src/ui/icon_images';
@@ -38,6 +38,16 @@ describe('painted icon manifest', () => {
 
   it('lists exactly the sigil paintings on disk', () => {
     expect(listed(SIGIL_ICON_IMAGES)).toEqual(paintingsIn('sigils'));
+  });
+
+  it('paints all four abilities of every released champion', () => {
+    for (const champion of CHAMPION_LIST) {
+      for (const key of ['Q', 'W', 'E', 'R']) {
+        expect(ABILITY_ICON_IMAGES.has(`${champion.id}_${key}`), `${champion.id}_${key}`).toBe(
+          true,
+        );
+      }
+    }
   });
 
   it('names real champions, keys, items and sigils', () => {
