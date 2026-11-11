@@ -709,9 +709,11 @@ export class RoyaleHud {
     // from the fight's.
     if (r) this.landing = noteLanding(this.landing, r.st, r.de, time);
     let enemyNear = false;
+    let enemySeen = false;
     for (const o of world.units.values()) {
       if (o.id === selfId || o.dead || o.kind !== 'champion' || o.team === selfTeam) continue;
       if (!world.isVisible(selfTeam, o.id)) continue;
+      enemySeen = true;
       const p = o.pos as { x: number; z: number; y?: number };
       const q = u.pos as { x: number; z: number; y?: number };
       const dy = typeof p.y === 'number' && typeof q.y === 'number' ? p.y - q.y : 0;
@@ -739,6 +741,7 @@ export class RoyaleHud {
       outside: r && !u.dead ? outsideLight(u.pos, r.dusk) : null,
       overtaken: r && !u.dead ? duskOvertakes(u.pos, r.dusk) : null,
       enemyNear,
+      enemySeen,
       takedowns: r?.score ?? u.kills,
       level: u.level,
       ultReady: effectiveRank(u, 'R') > 0 && !rCooling,

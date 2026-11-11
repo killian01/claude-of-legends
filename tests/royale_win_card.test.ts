@@ -162,6 +162,7 @@ const view = (time: number, since: number | null, covered = false): RoyaleStepsV
   outside: false,
   overtaken: false,
   enemyNear: false,
+  enemySeen: true,
   takedowns: 0,
   level: 3,
   ultReady: false,

@@ -53,6 +53,8 @@ export interface RoyaleStepsView extends GuideView {
   overtaken: boolean | null;
   // An enemy champion close by, alive and in sight.
   enemyNear: boolean;
+  // An enemy champion alive and in sight, however far.
+  enemySeen: boolean;
   takedowns: number;
   level: number;
   // R holds a rank and is off cooldown.
@@ -63,8 +65,9 @@ export interface RoyaleStepsView extends GuideView {
   hpFrac: number;
 }
 
-// The fight step shows for this long on landing, whoever is near; after it,
-// only with an enemy champion near.
+// The fight step shows for this long on landing with an enemy champion in
+// sight (a fair first foe stands 9 to 11 m off); after it, only with one
+// near. A quiet landing sees nobody, and the cache comes first.
 export const FIGHT_EARLY_S = 4;
 // When the cache step comes up after landing, and the launch pad's.
 export const CACHE_AFTER_S = 2;
@@ -132,12 +135,15 @@ export function foughtBetween(prev: FightTally, next: FightTally): boolean {
 }
 
 const RULES: Readonly<Record<RoyaleStepId, StepRule<RoyaleStepId, RoyaleStepsView>>> = {
-  // The first card on landing: how to attack and cast. Nothing else in the
-  // guide said it, and a battle royale is played from the first seconds.
-  // Once lapsed it comes back when an enemy is near.
+  // The first card on landing with a foe in sight: how to attack and cast.
+  // Nothing else in the guide said it, and a battle royale is played from
+  // the first seconds. With nobody in sight it waits, rather than tell the
+  // player to click an enemy who is not there, and comes when one is near.
   br_fight: {
     when: (v) =>
-      v.sinceLanding !== null && !v.fought && (v.enemyNear || v.sinceLanding < FIGHT_EARLY_S),
+      v.sinceLanding !== null &&
+      !v.fought &&
+      (v.enemyNear || (v.enemySeen && v.sinceLanding < FIGHT_EARLY_S)),
     over: (v, up) => v.fought || up >= READ_S + SAY_S,
     did: (v) => v.fought,
   },

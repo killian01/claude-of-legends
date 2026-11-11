@@ -35,7 +35,7 @@ import {
   stepRoyaleSteps,
 } from '../src/ui/royale_steps';
 
-// Just landed, in the calm, nothing done.
+// Just landed, in the calm, nothing done, a foe in sight.
 const LANDED: RoyaleStepsView = {
   time: 12,
   covered: false,
@@ -47,6 +47,7 @@ const LANDED: RoyaleStepsView = {
   outside: false,
   overtaken: false,
   enemyNear: false,
+  enemySeen: true,
   takedowns: 0,
   level: 3,
   ultReady: false,
@@ -334,6 +335,18 @@ describe('the fight step', () => {
     s = stepRoyaleSteps(s, at(30 + READ_S + SAY_S, { ...quiet, enemyNear: true }));
     expect(s.current).toBeNull();
     expect(s.done).toContain('br_fight');
+  });
+
+  it('lead a quiet landing with the cache, and the fight once an enemy is near', () => {
+    const quiet = { enemySeen: false };
+    let s = run(royaleStepsStart(false, []), [at(0, quiet), at(1, quiet)]);
+    expect(s.current).toBeNull();
+    s = stepRoyaleSteps(s, at(CACHE_AFTER_S, quiet));
+    expect(s.current).toBe('br_cache');
+    s = run(s, [at(CACHE_AFTER_S + 1, { openedCache: true, ...quiet })]);
+    expect(s.done).toContain('br_cache');
+    s = stepRoyaleSteps(s, at(40, { openedCache: true, enemySeen: true, enemyNear: true }));
+    expect(s.current).toBe('br_fight');
   });
 
   it('counts a cast, a takedown or an assist as a fight, never a fall', () => {
