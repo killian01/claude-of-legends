@@ -117,8 +117,8 @@ The sources stay in `art_src/logo/` (ignored, like the other raw art).
 
 ## Painted ability, item and sigil icons (`public/icons/`)
 
-The 76 paintings that beat the procedural icon painter: every ability
-except Nisk's four, all 28 items, all four sigils.
+The 80 paintings that beat the procedural icon painter: every ability,
+all 28 items, all four sigils.
 They follow the art contract in docs/design/icon-art-style.md, whose
 subject lines come from our own kit and item records (ADR 0004). The
 generators hand back 512px PNG; what ships is the WebP conversion from
