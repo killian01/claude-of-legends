@@ -2,7 +2,8 @@
 // account plays a seat in a 5v5 still running from any of its tabs (the
 // battle royale and Thornfray ask this before seating it), and which of the
 // socket's messages open a way into a 5v5, refused while the account plays
-// a royale or a Thornfray from another tab.
+// a royale or a Thornfray from another tab, and the way out of every door
+// for all the account's tabs when one of them enters either.
 
 export interface ClassicSocket {
   id: number;
@@ -35,4 +36,20 @@ const CLASSIC_DOORS: ReadonlySet<string> = new Set([
 
 export function classicDoorRefused(msgType: string, elsewhere: () => boolean): boolean {
   return CLASSIC_DOORS.has(msgType) && elsewhere();
+}
+
+// Entering a royale or a Thornfray takes every tab of the account out of
+// the 5v5's queue and lobbies, not only the tab that entered: a tab left
+// waiting would be seated in a 5v5 while the account plays elsewhere. A
+// tab other than the entering one that was waiting is told why it left.
+export function leaveClassicDoors(
+  entering: Pick<ClassicSocket, 'id' | 'accountId'>,
+  sockets: Iterable<ClassicSocket>,
+  remove: (clientId: number) => boolean,
+  tell: (clientId: number) => void,
+): void {
+  for (const s of [...sockets]) {
+    if (s.accountId !== entering.accountId) continue;
+    if (remove(s.id) && s.id !== entering.id) tell(s.id);
+  }
 }
