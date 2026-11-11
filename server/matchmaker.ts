@@ -647,9 +647,12 @@ export class Matchmaker {
 
   // The clock is no longer read here (the queue has no countdown left to
   // cancel, ADR 0025); callers still pass it, so the signature stays.
-  removeEverywhere(clientId: number, _now: number = Date.now()): void {
+  // True when the client was waiting in the queue or a lobby.
+  removeEverywhere(clientId: number, _now: number = Date.now()): boolean {
+    let left = false;
     const qg = this.queue.find((g) => g.members.some((m) => m.clientId === clientId));
     if (qg) {
+      left = true;
       qg.members.splice(
         qg.members.findIndex((m) => m.clientId === clientId),
         1,
@@ -660,6 +663,7 @@ export class Matchmaker {
     for (const lobby of [...this.lobbies.values()]) {
       const li = lobby.players.findIndex((p) => p.clientId === clientId);
       if (li === -1) continue;
+      left = true;
       lobby.players.splice(li, 1);
       if (lobby.players.length === 0 || lobby.hostId === clientId) {
         this.lobbies.delete(lobby.code);
@@ -680,5 +684,6 @@ export class Matchmaker {
         if (session.entries.every((e) => e.locked)) this.finishSelect(session);
       }
     }
+    return left;
   }
 }

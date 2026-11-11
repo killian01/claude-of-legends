@@ -76,7 +76,7 @@ import {
 import { buildId, buildInfo, deployStamp, readBuildId } from './build_info';
 import { withBuildTag } from './build_tag';
 import { rejoinClassic } from './classic_rejoin';
-import { classicDoorRefused, classicPlaying } from './classic_seat';
+import { classicDoorRefused, classicPlaying, leaveClassicDoors } from './classic_seat';
 import { ConnectionLimiter } from './conn_limit';
 import { clearCookie, crossSiteRequest, parseCookies, serializeCookie } from './cookies';
 import { authorizeUrl, CALLBACK_PATH, DiscordOauth, discordConfigFromEnv } from './discord_oauth';
@@ -337,6 +337,29 @@ interface MatchEntry {
 }
 const matches = new Map<number, MatchEntry>();
 
+// A tab entering a royale or a Thornfray: it and every other tab of its
+// account leave the 5v5's queue and lobbies (server/classic_seat.ts).
+function leaveClassicQueues(id: number): void {
+  const entering = clients.get(id);
+  if (!entering) {
+    for (const mm of matchmakers) mm.removeEverywhere(id);
+    return;
+  }
+  leaveClassicDoors(
+    entering,
+    clients.values(),
+    (clientId) => {
+      let left = false;
+      for (const mm of matchmakers) left = mm.removeEverywhere(clientId) || left;
+      return left;
+    },
+    (clientId) =>
+      send(clientId, {
+        t: 'error',
+        message: 'You joined another match from another tab.',
+      }),
+  );
+}
 // Whether an account plays a seat in a running 5v5 from any of its tabs
 // (server/classic_seat.ts): the battle royale and Thornfray ask it.
 function playsClassic(owner: number): boolean {
@@ -1086,9 +1109,7 @@ const royale = new RoyaleService({
   newMatchId: () => nextMatchId++,
   newSeed: (id) => (Date.now() % 2_000_000_000) + id,
   capacityLeft: () => MAX_MATCHES - matches.size - royale.load() - thornfray.load(),
-  leaveQueues: (id) => {
-    for (const mm of matchmakers) mm.removeEverywhere(id);
-  },
+  leaveQueues: leaveClassicQueues,
   seatedElsewhere: (owner) => thornfray.holds(owner) || playsClassic(owner),
   bank: (owner, delta) => {
     royaleVeterans.noteBanked(owner);
@@ -1123,9 +1144,7 @@ const thornfray = new ThornfrayService({
   newMatchId: () => nextMatchId++,
   newSeed: (id) => (Date.now() % 2_000_000_000) + id,
   capacityLeft: () => MAX_MATCHES - matches.size - royale.load() - thornfray.load(),
-  leaveQueues: (id) => {
-    for (const mm of matchmakers) mm.removeEverywhere(id);
-  },
+  leaveQueues: leaveClassicQueues,
   seatedElsewhere: (owner) => royale.playing(owner) || playsClassic(owner),
   bank: (owner, delta) => {
     royaleVeterans.noteBanked(owner);
