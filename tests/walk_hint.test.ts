@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { WALK_HINT_GAP_S, WALK_HINT_TIMES, WalkHint, walkHintLine } from '../src/ui/walk_hint';
+import {
+  WALK_HINT_GAP_S,
+  WALK_HINT_TIMES,
+  WALK_KNOWN_CLICKS,
+  WalkHint,
+  walkHintLine,
+} from '../src/ui/walk_hint';
 
 describe('the walk hint', () => {
   it('shows on a W A S D press before any click order', () => {
@@ -11,11 +17,18 @@ describe('the walk hint', () => {
     for (const k of ['q', 'e', 'r', 'f', 'p', 'g', 'b']) expect(hint.key(k, 1)).toBe(false);
   });
 
-  it('never shows once the player has given a click order', () => {
+  it('never shows once the player walks by clicking', () => {
     const hint = new WalkHint();
-    hint.clickOrdered();
+    for (let i = 0; i < WALK_KNOWN_CLICKS; i++) hint.clickOrdered();
     expect(hint.key('w', 1)).toBe(false);
     expect(hint.key('s', 100)).toBe(false);
+  });
+
+  it('still shows after a stray click or two, when the keys come back', () => {
+    const hint = new WalkHint();
+    for (let i = 0; i < WALK_KNOWN_CLICKS - 1; i++) hint.clickOrdered();
+    expect(hint.key('s', 1)).toBe(true);
+    expect(hint.key('a', 1 + WALK_HINT_GAP_S)).toBe(true);
   });
 
   it('waits its gap between two hints and stops after its count', () => {
@@ -30,10 +43,10 @@ describe('the walk hint', () => {
     expect(shown).toBe(WALK_HINT_TIMES);
   });
 
-  it('a click order between hints ends them', () => {
+  it('clicks between hints end them once they are enough', () => {
     const hint = new WalkHint();
     expect(hint.key('w', 0)).toBe(true);
-    hint.clickOrdered();
+    for (let i = 0; i < WALK_KNOWN_CLICKS; i++) hint.clickOrdered();
     expect(hint.key('w', WALK_HINT_GAP_S * 2)).toBe(false);
   });
 
