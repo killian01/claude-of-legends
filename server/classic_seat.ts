@@ -39,9 +39,10 @@ export function classicDoorRefused(msgType: string, elsewhere: () => boolean): b
 }
 
 // Entering a royale or a Thornfray takes every tab of the account out of
-// the 5v5's queue and lobbies, not only the tab that entered: a tab left
-// waiting would be seated in a 5v5 while the account plays elsewhere. A
-// tab other than the entering one that was waiting is told why it left.
+// the 5v5's queue, lobbies and champion select, not only the tab that
+// entered: a tab left waiting would be seated in a 5v5 while the account
+// plays elsewhere (a seat left in a select goes to its bot). A tab other
+// than the entering one that was waiting is told why it left.
 export function leaveClassicDoors(
   entering: Pick<ClassicSocket, 'id' | 'accountId'>,
   sockets: Iterable<ClassicSocket>,

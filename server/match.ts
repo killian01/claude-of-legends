@@ -45,6 +45,9 @@ export interface MatchPick {
   playbook?: PlaybookDef;
   botId?: string;
   botVersion?: number;
+  // Its player left during the select (server/select_absent.ts): nobody
+  // is behind the seat as the match starts, so its bot plays it.
+  absent?: true;
   // A ranked bot the fill seated from the pool (docs/design/bots.md): the
   // owning account, with nobody connected behind the seat.
   ownerId?: number;

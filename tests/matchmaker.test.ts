@@ -244,6 +244,25 @@ describe('matchmaker', () => {
     expect(matches[0]![1]).toMatchObject({ clientId: 2, championId: 'sylra' });
   });
 
+  // A player who leaves the select, locked or not (a closed socket, a
+  // match entered from another tab), is told the match it was in and its
+  // pick says so: nobody behind it any more, a bot takes it.
+  it('marks the pick of a player who left the select, locked or not', () => {
+    const { mm, matches } = harness();
+    for (let i = 1; i <= 3; i++) mm.addToQueue(i, `p${i}`, 0);
+    mm.startNow(1, 0);
+    mm.pick(1, 'vesk', ['riftstep', 'mend']);
+    expect(mm.removeEverywhere(1, 0)).toBe(true);
+    expect(mm.removeEverywhere(2, 0)).toBe(true);
+    mm.pick(3, 'fenn', ['riftstep', 'mend']);
+    expect(matches).toHaveLength(1);
+    expect(matches[0]![0]).toMatchObject({ clientId: 1, championId: 'vesk', absent: true });
+    expect(matches[0]![1]).toMatchObject({ clientId: 2, absent: true });
+    expect(matches[0]![2]).not.toHaveProperty('absent');
+    // Out of the select, it is in nothing left to leave.
+    expect(mm.removeEverywhere(1, 0)).toBe(false);
+  });
+
   // Who sits behind a seat is read as the select starts, while every
   // seat's socket is open, and rides the pick: a seat whose socket closed
   // during the select still says whose it is (server/guests.ts reads it).

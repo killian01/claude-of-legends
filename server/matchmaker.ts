@@ -69,6 +69,9 @@ interface SelectEntry extends Pending {
   // When the claim was made, in the session's claim order: the earlier
   // claim settles first.
   claimedAt: number;
+  // The player left during the select (a closed socket, a match entered
+  // from another tab): the seat goes to its bot when the match starts.
+  left?: true;
 }
 
 // Where a match came from: only public-queue matches are ever rated
@@ -526,7 +529,7 @@ export class Matchmaker {
     const session = this.inSelect(clientId);
     if (!session) return;
     const entry = session.entries.find((e) => e.clientId === clientId);
-    if (!entry) return;
+    if (!entry || entry.left) return;
     // A bot pick (ADR 0013): the resolver is the account boundary; the
     // bot's own champion, sigils and skin replace what the client sent.
     let seat: BotSeat | null = null;
@@ -641,13 +644,14 @@ export class Matchmaker {
       ...(e.locked?.botId !== undefined ? { botId: e.locked.botId } : {}),
       ...(e.locked?.botVersion !== undefined ? { botVersion: e.locked.botVersion } : {}),
       lanes: [lanes.get(e)!],
+      ...(e.left ? { absent: true as const } : {}),
     }));
     this.onMatchReady(picks, session.source);
   }
 
   // The clock is no longer read here (the queue has no countdown left to
   // cancel, ADR 0025); callers still pass it, so the signature stays.
-  // True when the client was waiting in the queue or a lobby.
+  // True when the client was waiting in the queue, a lobby or a select.
   removeEverywhere(clientId: number, _now: number = Date.now()): boolean {
     let left = false;
     const qg = this.queue.find((g) => g.members.some((m) => m.clientId === clientId));
@@ -675,11 +679,14 @@ export class Matchmaker {
       }
     }
     // A player vanishing mid-select is auto-locked with defaults so the
-    // others still get their match; a lane it claimed stays claimed.
+    // others still get their match; a lane it claimed stays claimed. Its
+    // pick, locked or not, says nobody is behind it any more.
     const session = this.inSelect(clientId);
-    if (session) {
-      const entry = session.entries.find((e) => e.clientId === clientId);
-      if (entry && !entry.locked) {
+    const entry = session?.entries.find((e) => e.clientId === clientId);
+    if (session && entry && !entry.left) {
+      left = true;
+      entry.left = true;
+      if (!entry.locked) {
         entry.locked = { championId: DEFAULT_CHAMPION_ID, sigils: DEFAULT_SIGILS, skin: 0 };
         if (session.entries.every((e) => e.locked)) this.finishSelect(session);
       }
