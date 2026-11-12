@@ -181,6 +181,7 @@ import {
   type SeenQuality,
   seeQuality,
 } from './seat_report';
+import { leaveAbsentToBots } from './select_absent';
 import { COOKIE_NAME, SESSION_TTL_MS, SessionStore } from './sessions';
 import { BOOT_OPEN_RETRY, openWithRetry } from './sqlite_open';
 import { starOrchard } from './star_orchard';
@@ -952,6 +953,9 @@ function onMatchReady(forge: boolean) {
         });
       }
     }
+    // A seat whose player left during the select is its bot's from the
+    // first tick (server/select_absent.ts).
+    const gone = leaveAbsentToBots(match, id, picks, (cid) => clients.has(cid), rejoins);
     matches.set(id, {
       match,
       endedAt: null,
@@ -979,7 +983,7 @@ function onMatchReady(forge: boolean) {
     });
     for (const p of picks) {
       const c = clients.get(p.clientId);
-      if (!c) continue;
+      if (!c || gone.has(p.clientId)) continue;
       c.matchId = id;
       const player = match.players.get(p.clientId);
       if (player) {
@@ -994,6 +998,10 @@ function onMatchReady(forge: boolean) {
       }
     }
     console.log(`match ${id} started with ${picks.length} player(s)${forge ? ' (forge)' : ''}`);
+    if (![...match.players.keys()].some((cid) => clients.has(cid))) {
+      matches.get(id)!.abandonedAt = Date.now();
+      console.log(`match ${id} abandoned: holding for rejoin grace`);
+    }
   };
 }
 
