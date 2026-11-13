@@ -962,13 +962,7 @@ function onMatchReady(forge: boolean) {
       failures: 0,
       abandonedAt: null,
       // A Guest seated by hand makes it unrated for everyone (ADR 0024).
-      ratedEligible: ratedWithGuests(
-        source === 'queue',
-        picks.flatMap((p) => {
-          const c = clients.get(p.clientId);
-          return c ? [c.accountId] : [];
-        }),
-      ),
+      ratedEligible: ratedWithGuests(source === 'queue', picks),
       forge,
       botSeats,
       publicQueue: source === 'queue' && !forge,

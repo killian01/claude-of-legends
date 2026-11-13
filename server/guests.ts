@@ -90,9 +90,23 @@ export function guestClaim(guest: Guest | undefined): GuestClaim | undefined {
 }
 
 // Whether a match may be rated: the queue's rule, and no Guest seated by
-// hand in it (ADR 0024). Bot seats and house bots do not count here.
-export function ratedWithGuests(fromQueue: boolean, humanIds: readonly number[]): boolean {
-  return fromQueue && !humanIds.some(isGuestId);
+// hand in it (ADR 0024). Bot seats and house bots do not count here. Read
+// off the picks, like gentleTeams below: a Guest whose socket closed during
+// the select was still seated, and its bot plays the seat.
+export function ratedWithGuests(
+  fromQueue: boolean,
+  picks: readonly Pick<MatchPick, 'accountId' | 'bot' | 'ownerId'>[],
+): boolean {
+  return (
+    fromQueue &&
+    !picks.some(
+      (p) =>
+        p.bot === undefined &&
+        p.ownerId === undefined &&
+        p.accountId !== undefined &&
+        isGuestId(p.accountId),
+    )
+  );
 }
 
 // The teams whose house lane seats play the Gentle player (CONTEXT.md:
