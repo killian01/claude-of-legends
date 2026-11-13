@@ -107,10 +107,22 @@ describe('guests', () => {
   });
 
   it('make the match they sit in unrated, for everyone', () => {
-    expect(ratedWithGuests(true, [3, 8])).toBe(true);
-    expect(ratedWithGuests(true, [3, -1])).toBe(false);
-    expect(ratedWithGuests(false, [3, 8])).toBe(false);
+    expect(ratedWithGuests(true, [{ accountId: 3 }, { accountId: 8 }])).toBe(true);
+    expect(ratedWithGuests(true, [{ accountId: 3 }, { accountId: -1 }])).toBe(false);
+    expect(ratedWithGuests(false, [{ accountId: 3 }, { accountId: 8 }])).toBe(false);
     expect(ratedWithGuests(true, [])).toBe(true);
+  });
+
+  it('keep the match unrated when they leave during the select', () => {
+    // The seat is read off the pick, which says whose it is from the
+    // select's start, not off the sockets still open as it ends.
+    const left = { accountId: -1, absent: true as const };
+    expect(ratedWithGuests(true, [{ accountId: 3 }, left])).toBe(false);
+  });
+
+  it('count no seat a bot holds for nobody', () => {
+    expect(ratedWithGuests(true, [{ accountId: 3 }, { bot: 'house' }])).toBe(true);
+    expect(ratedWithGuests(true, [{ accountId: 3 }, { ownerId: 8 }])).toBe(true);
   });
 
   it('have the public queue and the match, and no other door', () => {
