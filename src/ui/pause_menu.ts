@@ -1,19 +1,36 @@
 // The pause menu (the Escape menu): the title, then its boxes laid over the
 // screen (ui/pause_layout.ts has the grid): the actions (Resume, Toggle
 // fullscreen, Leave match), the settings panel, and the ladder box over the
-// feedback box. The HUD makes the overlay, the ladder box, the feedback box
+// feedback box. While a Respawn champion is down, the title's row says when
+// it comes back (pauseWaitLine), so the menu opened over a fall does not
+// read as the match's end. The HUD makes the overlay, the ladder box, the feedback box
 // and the settings panel, and keeps their behavior; this places them and
 // gives the menu its look. A box shows what it holds: the ladder box stays
 // hidden in a match that does not score, and the feedback box takes the
 // stack's height then.
 
 import { pauseLayoutCss } from './pause_layout';
+import { backLine } from './royale_text';
 
 export const PAUSE_TITLE = 'Paused view';
 export const PAUSE_RESUME = 'Resume (Esc)';
 export const PAUSE_FULLSCREEN = 'Toggle fullscreen';
 export const PAUSE_LEAVE = 'Leave match';
 export const PAUSE_SETTINGS = 'Settings';
+
+// The title row's line over a fall: in Respawn, while the own champion is
+// down and the match goes on, when it comes back and that it keeps its
+// level and build (royale_text.ts backLine); null anywhere else, the line
+// hidden.
+export function pauseWaitLine(
+  variant: 'respawn' | 'one_life' | null,
+  dead: boolean,
+  over: boolean,
+  left: number,
+): string | null {
+  if (variant !== 'respawn' || !dead || over) return null;
+  return backLine(left, true);
+}
 
 // Every rule under the menu's own class, at a weight above the HUD's
 // rules for its modal overlays and the boxes' rules on the end screen
@@ -45,6 +62,11 @@ ${M} .hud-pause-head { display: flex; align-items: center; gap: 16px; min-width:
 ${M} .hud-pause-title {
   font-family: Cinzel, Georgia, serif; font-size: 30px; font-weight: 700; letter-spacing: 2px;
   line-height: 1; color: #f2e6c0; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8); white-space: nowrap;
+}
+/* The wait's line beside the title: one line, cut short before it wraps. */
+${M} .hud-pause-wait {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 15px; font-weight: 700; color: #f0d27a; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
 }
 ${M} .hud-pause-head::after {
   content: ''; flex: 1; height: 1px;
@@ -133,6 +155,8 @@ export interface PauseMenuParts {
   settings: HTMLElement;
   ladder: HTMLElement;
   feedback: HTMLElement;
+  // The wait's line (pauseWaitLine), kept by the HUD.
+  wait: HTMLElement;
   onResume: () => void;
   onFullscreen: () => void;
   onLeave: () => void;
@@ -173,7 +197,8 @@ export function fillPauseMenu(overlay: HTMLElement, parts: PauseMenuParts): void
   const sheet = div('hud-pause-sheet');
 
   const head = div('hud-pause-head');
-  head.appendChild(div('hud-pause-title', PAUSE_TITLE));
+  parts.wait.classList.add('hud-pause-wait');
+  head.append(div('hud-pause-title', PAUSE_TITLE), parts.wait);
 
   const actions = div('hud-pause-card hud-pause-actions');
   actions.append(

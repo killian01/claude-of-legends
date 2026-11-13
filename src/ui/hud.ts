@@ -142,7 +142,7 @@ import {
   objectiveLine,
   wrathChipText,
 } from './objective_line';
-import { fillPauseMenu, settlePauseFocus } from './pause_menu';
+import { fillPauseMenu, pauseWaitLine, settlePauseFocus } from './pause_menu';
 import { firstPointsText, pointsWord, popText } from './points_text';
 import {
   type RangeStepsState,
@@ -1381,6 +1381,8 @@ export class Hud {
   // already had its line: one is asked for, not one per place it is asked.
   private readonly endFeedback: FeedbackBox;
   private readonly pauseFeedback: FeedbackBox;
+  // The pause menu's line over a Respawn fall (ui/pause_menu.ts).
+  private readonly pauseWait: HTMLElement;
   private feedbackSent = false;
   // The line at the start of a match that points at the box.
   private readonly nudgeEl: HTMLElement;
@@ -2165,11 +2167,14 @@ export class Hud {
     // And in the pause menu, which is the other door out: whoever is
     // about to press Leave match is the one with something to say.
     this.pauseFeedback = this.buildFeedback('pause');
+    this.pauseWait = el('div', '');
+    this.pauseWait.hidden = true;
     // Its boxes laid over the screen (ui/pause_menu.ts).
     fillPauseMenu(this.escapeOverlay, {
       settings: buildSettingsPanel(),
       ladder: this.pauseLadder.root,
       feedback: this.pauseFeedback.root,
+      wait: this.pauseWait,
       onResume: () => this.toggleEscapeMenu(),
       onFullscreen: () => toggleGameFullscreen(),
       onLeave: () => onExit('menu'),
@@ -3881,6 +3886,11 @@ export class Hud {
         if (this.deathTitle.textContent !== words.title) this.deathTitle.textContent = words.title;
         setText(this.deathSub, this.deathRecap ? `${this.deathRecap} · ${words.sub}` : words.sub);
       }
+      // And the pause menu, opened over the fall, says it comes back.
+      const left = u.respawnAt - time;
+      const wait = pauseWaitLine(this.royaleVariant, u.dead, this.royale.resultShown(), left);
+      if (wait !== null) setText(this.pauseWait, wait);
+      if (this.pauseWait.hidden !== (wait === null)) this.pauseWait.hidden = wait === null;
       // Respawn only: what the life that just ended held.
       const life = dead && this.royaleVariant === 'respawn' ? this.royaleLife.line(selfRow) : null;
       if (life !== null) setText(this.deathLife, life);
