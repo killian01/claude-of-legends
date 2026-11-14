@@ -11,14 +11,22 @@ import { buildObservation } from '../src/sim/observe';
 import { Sim } from '../src/sim/sim';
 
 describe('skin content', () => {
-  it('every champion has at least three skins, default first, unique names', () => {
+  it('every champion has at least four skins, default first, unique names', () => {
     for (const c of CHAMPION_LIST) {
       const list = SKINS[c.id];
       expect(list, c.id).toBeDefined();
-      expect(list!.length, c.id).toBeGreaterThanOrEqual(3);
+      expect(list!.length, c.id).toBeGreaterThanOrEqual(4);
       expect(list![0]!.body, `${c.id} default body`).toBeNull();
       const names = list!.map((s) => s.name);
       expect(new Set(names).size, `${c.id} skin names`).toBe(names.length);
+    }
+  });
+
+  it('every champion wears the Gloamglass line as its fourth skin', () => {
+    for (const c of CHAMPION_LIST) {
+      const glass = SKINS[c.id]![3]!;
+      expect(glass.name, c.id).toBe('Gloamglass');
+      expect(glass.body, `${c.id} Gloamglass body`).not.toBeNull();
     }
   });
 

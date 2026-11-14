@@ -35,6 +35,15 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
+    day: '2026-11-15',
+    title: 'Gloamglass: a fourth look for every champion',
+    body: [
+      'All twelve champions now have a fourth skin, Gloamglass: a body of dark glass lit from within, each champion in their own glow. It is the same line across the whole roster, so a crew can match.',
+      'Pick it under the champion card before a match, in the battle royale, in Thornfray and in a 5v5, or for your own bot in the Academy. In the battle royale, the house bots wear it too.',
+    ],
+    link: { label: 'Play', to: 'play' },
+  },
+  {
     day: '2026-11-10',
     title: 'The Pyrefang and the Voidmaul wake early in Respawn',
     body: [

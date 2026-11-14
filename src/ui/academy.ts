@@ -18,6 +18,7 @@ import type { RecordEntry, RecordRow, RecordTallies } from '../net/record';
 import { CHAMPION_LIST, CHAMPIONS, homeLane } from '../sim/content/champions';
 import { ITEMS } from '../sim/content/items';
 import { SIGIL_LIST, SIGILS } from '../sim/content/sigils';
+import { SKINS } from '../sim/content/skins';
 import {
   applyPatchOp,
   type Behavior,
@@ -1180,10 +1181,10 @@ export function openAcademy(container: HTMLElement, opts: AcademyOptions = {}): 
     );
     who.append(el('div', 'ac-fieldlabel', 'Skin'));
     const skin = el('select', 'ac-select') as HTMLSelectElement;
-    for (let i = 0; i < 3; i++) {
+    for (const [i, s] of (SKINS[bot.championId] ?? []).entries()) {
       const o = document.createElement('option');
       o.value = String(i);
-      o.textContent = `Skin ${i + 1}`;
+      o.textContent = s.name;
       skin.append(o);
     }
     skin.value = String(bot.skin);
