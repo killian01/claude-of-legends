@@ -46,7 +46,7 @@ import { ArenaRunner } from './arena_runner';
 import { type ArenaDeps, challenge, playNow, roundDue, runArenaRound } from './arena_service';
 import { chooseArt, deleteArtFor, generateArt, iconsOf, listArt, splashOf } from './art';
 import { appendExchange, botChat, clearBotChat, windowTurns } from './bot_chats';
-import { fillWithBots, type PoolSeat, TEAM_SIZE } from './bot_fill';
+import { fillWithBots, TEAM_SIZE } from './bot_fill';
 import { type BotPageDeps, describeBotPage } from './bot_page';
 import {
   addEntry,
@@ -157,6 +157,7 @@ import { buildPointsLadder, type PointsEntry, type PointsReader } from './points
 import { PracticeReportStore, parsePracticeReport } from './practice_reports';
 import { buildProfile } from './profile';
 import { CEILING_DEFAULTS, checkQuota, DAY_MS, spendQuota } from './quotas';
+import { rankedPool } from './ranked_pool';
 import { BASE_RATING, LEAVER_LOCKOUT_MS } from './rating';
 import { talliesOf } from './record_tally';
 import { buildMatchRecord, type MatchRecord } from './records';
@@ -903,18 +904,14 @@ function onMatchReady(forge: boolean) {
     const seed = (Date.now() % 2_000_000_000) + id;
     // The ranked pool fills before house bots (docs/design/bots.md): every
     // ranked bot whose account holds no seat here is a candidate, seated
-    // from the seed, rated on its account's live way at the end.
-    const present = new Set<number>();
-    for (const p of picks) {
-      const c = clients.get(p.clientId);
-      if (c) present.add(c.accountId);
-    }
-    const pool: PoolSeat[] = [];
-    for (const bot of botStore.listDeposited()) {
-      if (present.has(bot.accountId)) continue;
-      const owner = registry.findById(bot.accountId)?.name;
-      if (owner) pool.push({ bot, owner });
-    }
+    // from the seed, rated on its account's live way at the end
+    // (server/ranked_pool.ts).
+    const pool = rankedPool(
+      picks,
+      botStore.listDeposited(),
+      (accountId) => registry.findById(accountId)?.name,
+      (cid) => clients.get(cid)?.accountId,
+    );
     // A public match of Guests alone meets the Gentle player on the enemy
     // lane seats (server/guests.ts): a newcomer's fair first fight. Read
     // off the picks, which say whose each seat is, so an account whose
