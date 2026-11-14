@@ -176,6 +176,7 @@ import {
   returnGlobeOn,
   returnHint,
   returnWashLeftCss,
+  SeatFalls,
 } from './royale_return';
 import {
   hideRoyaleSteps,
@@ -1438,6 +1439,8 @@ export class Hud {
   // Thornfray's bouts switch the rule set (setBout).
   private royaleVariant: RoyaleVariant | null;
   private royaleLife = new RoyaleLife();
+  // The own falls: the wait's globe stays down over the first.
+  private readonly seatFalls = new SeatFalls();
   private royaleSeen = new SeenChampions();
   // What the battle royale's layer is built with, kept for a Thornfray's
   // next bout (setBout).
@@ -3911,7 +3914,8 @@ export class Hud {
       if (burr !== null) setText(this.deathBurr, burr);
       if (this.deathBurr.hidden !== (burr === null)) this.deathBurr.hidden = burr === null;
       // The wait's globe: the lines up top, and what a tap on it does.
-      const globe = dead && view !== null && returnGlobeOn(view, u, time);
+      const first = this.seatFalls.firstFall(u.id, u.dead);
+      const globe = dead && view !== null && returnGlobeOn(view, u, time, first);
       this.deathOverlay.classList.toggle('returning', globe);
       this.rootEl.classList.toggle('wait-globe', globe);
       const hint = globe ? returnHint(this.coarsePointer, view?.bk !== undefined) : null;

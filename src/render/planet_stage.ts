@@ -20,7 +20,13 @@ import { boutLineOf } from '../net/thornfray_client';
 import { heartwoodOf } from '../sim/content/grafts';
 import { segmentDist, type Vec3 } from '../sim/geo';
 import { DT, type Vec2 } from '../sim/types';
-import { returnGlobeOn, returnLight, type WaitMarks, waitMarks } from '../ui/royale_return';
+import {
+  returnGlobeOn,
+  returnLight,
+  SeatFalls,
+  type WaitMarks,
+  waitMarks,
+} from '../ui/royale_return';
 import type { IWorld } from '../world_api';
 import { type ChartView, ChartWindow, ChartWorld } from './chart_world';
 import { BEND_UNIFORMS, bendTree } from './planet_bend';
@@ -156,6 +162,8 @@ export class PlanetStage {
   // The champion whose landing a tap on the globe picks (the renderer's
   // followed unit).
   picker: number | null = null;
+  // Its falls: the wait's globe stays down over the first (SeatFalls).
+  private readonly falls = new SeatFalls();
   // Where the renderer draws a unit, in its scene space, when it says: the
   // Grace's shimmer stands there (planet_grace.ts).
   drawnAt: ((unitId: number) => Vec2 | null) | null = null;
@@ -399,7 +407,8 @@ export class PlanetStage {
   returnNow(): boolean {
     const r = this.base.royaleView?.() ?? null;
     const u = this.picker !== null ? this.base.units.get(this.picker) : undefined;
-    return r !== null && u !== undefined && returnGlobeOn(r, u, this.base.time);
+    if (r === null || u === undefined) return false;
+    return returnGlobeOn(r, u, this.base.time, this.falls.firstFall(u.id, u.dead));
   }
 
   private rayOnSphere(ray: THREE.Ray): Vec3 | null {

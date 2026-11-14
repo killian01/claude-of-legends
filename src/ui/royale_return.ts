@@ -33,10 +33,43 @@ export interface ReturnView {
 // Whether the globe shows over a dead champion now: in Respawn's play,
 // RETURN_GLOBE_AFTER_S after the fall, until the champion stands again
 // (a slow snapshot keeps it up past the return's time, never down early).
-export function returnGlobeOn(r: ReturnView, u: ReturnSeat, time: number): boolean {
+// Never over the seat's first fall (`firstFall`, SeatFalls): a drop-in has
+// not seen the globe yet, and four seconds are too few to learn it, so
+// the camera stays on the match (the Death beat) and the champion comes
+// back at the light's edge; the choice comes from the second fall on.
+export function returnGlobeOn(
+  r: ReturnView,
+  u: ReturnSeat,
+  time: number,
+  firstFall = false,
+): boolean {
   if (r.v !== 'respawn' || r.st !== 'play') return false;
-  if (!u.dead || !Number.isFinite(u.respawnAt)) return false;
+  if (!u.dead || !Number.isFinite(u.respawnAt) || firstFall) return false;
   return time >= u.respawnAt - RESPAWN_S + RETURN_GLOBE_AFTER_S;
+}
+
+// The followed champion's falls, counted on its standing-to-down edges,
+// so the death wash (ui/hud.ts) and the stage (render/planet_stage.ts)
+// agree on the first. Reading it again in the same update counts nothing
+// twice; following another champion starts the count over.
+export class SeatFalls {
+  private unitId: number | null = null;
+  private falls = 0;
+  private wasDead = false;
+
+  // The champion followed and whether it is down now; true while it lies
+  // in its first fall.
+  firstFall(unitId: number, dead: boolean): boolean {
+    if (unitId !== this.unitId) {
+      this.unitId = unitId;
+      this.falls = 0;
+      // A champion first seen down: that fall was not seen to begin.
+      this.wasDead = dead;
+    }
+    if (dead && !this.wasDead) this.falls += 1;
+    this.wasDead = dead;
+    return dead && this.falls === 1;
+  }
 }
 
 // The light a return comes back in, as the wire tells the Dusk (src/sim/
