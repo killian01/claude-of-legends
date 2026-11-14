@@ -17,7 +17,7 @@
 // expiry extensions, which costs a player nothing but an earlier login.
 
 import { randomBytes } from 'node:crypto';
-import { loadJson, saveJsonAtomic } from './store';
+import { isRecordList, loadJson, saveJsonAtomic } from './store';
 
 export interface SessionRecord {
   id: string;
@@ -51,7 +51,7 @@ export class SessionStore {
     private readonly ttlMs: number = SESSION_TTL_MS,
     private readonly idGen: () => string = randomId,
   ) {
-    for (const s of loadJson<SessionRecord[]>(file, [])) this.byId.set(s.id, s);
+    for (const s of loadJson<SessionRecord[]>(file, [], isRecordList)) this.byId.set(s.id, s);
   }
 
   private persist(): void {

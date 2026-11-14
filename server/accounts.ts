@@ -37,7 +37,7 @@ import { championPrice, dayIndex, matchLaurels, STARTER_COLLECTION } from './lau
 import { hashPassword, type PasswordHash, validatePassword, verifyPassword } from './password';
 import { BASE_RATING } from './rating';
 import { wholeBest } from './royale_ranking';
-import { loadJson, saveJsonAtomic } from './store';
+import { isRecord, isRecordList, loadJson, saveJsonAtomic } from './store';
 
 export interface AccountEmail {
   // As the owner typed it; this is what mail is addressed to.
@@ -204,6 +204,14 @@ interface StoredState {
   names: [string, number][];
 }
 
+// What the constructor walks; anything else is set aside rather than thrown
+// on at boot. Only the walk is checked, so an older account missing a field
+// still loads.
+function isStoredState(v: unknown): boolean {
+  if (!isRecord(v) || !isRecordList(v.accounts) || !Array.isArray(v.names)) return false;
+  return v.names.every((n) => Array.isArray(n) && n.length === 2);
+}
+
 export class AccountRegistry {
   private readonly byId = new Map<number, Account>();
   // Folded name -> account id. Never shrinks: see the header.
@@ -224,7 +232,7 @@ export class AccountRegistry {
   private dirty = false;
 
   constructor(private readonly file: string) {
-    const state = loadJson<StoredState>(file, { accounts: [], names: [] });
+    const state = loadJson<StoredState>(file, { accounts: [], names: [] }, isStoredState);
     for (const a of state.accounts) {
       this.byId.set(a.id, a);
       this.nextId = Math.max(this.nextId, a.id + 1);
