@@ -33,6 +33,7 @@ import {
   returnWashLeftCss,
   returnWashLeftPx,
   returnWashPhoneBox,
+  SeatFalls,
   waitMarks,
 } from '../src/ui/royale_return';
 import { TOUCH_BAR_CSS, touchBarLeftBox } from '../src/ui/touch_bar';
@@ -49,6 +50,32 @@ describe('the wait for a return', () => {
     // A slow snapshot past the return's time keeps it up, never down early.
     expect(returnGlobeOn(respawn, seat, seat.respawnAt + 0.3)).toBe(true);
     expect(returnGlobeOn(respawn, { ...seat, dead: false }, fellAt + 3)).toBe(false);
+  });
+
+  it("keeps the globe down over the seat's first fall, and raises it from the second", () => {
+    const falls = new SeatFalls();
+    const t = fellAt + RETURN_GLOBE_AFTER_S + 1;
+    expect(falls.firstFall(7, false)).toBe(false);
+    // The first fall: no globe, however long the wait runs.
+    expect(falls.firstFall(7, true)).toBe(true);
+    expect(falls.firstFall(7, true)).toBe(true);
+    expect(returnGlobeOn(respawn, seat, t, true)).toBe(false);
+    expect(returnGlobeOn(respawn, seat, seat.respawnAt + 0.3, true)).toBe(false);
+    // Back on its feet, then down again: the globe rises as before.
+    expect(falls.firstFall(7, false)).toBe(false);
+    expect(falls.firstFall(7, true)).toBe(false);
+    expect(returnGlobeOn(respawn, seat, t, false)).toBe(true);
+  });
+
+  it('counts the falls of the champion followed, one first seen down not as its first', () => {
+    const falls = new SeatFalls();
+    // Joined in the middle of a wait: that fall was not seen to begin.
+    expect(falls.firstFall(3, true)).toBe(false);
+    expect(falls.firstFall(3, false)).toBe(false);
+    expect(falls.firstFall(3, true)).toBe(true);
+    // Another champion followed: its count starts over.
+    expect(falls.firstFall(4, false)).toBe(false);
+    expect(falls.firstFall(4, true)).toBe(true);
   });
 
   it('never shows it in One life, the drop or the end', () => {
