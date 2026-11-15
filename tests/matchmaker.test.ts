@@ -926,6 +926,19 @@ describe('a lobby that outlives its match', () => {
     expect(join(4, 104, 'd', a.toLowerCase())).toBe('joined');
   });
 
+  it('a walk-out finds its member by the match socket, after a Guest retired into an account', () => {
+    const { mm, sent, code, join } = played();
+    join(3, 103, 'late', code);
+    // The friend registers in another tab mid-match: the member is
+    // remembered under the new id, but socket 2 still answers to the old.
+    mm.renameMember(102, 77);
+    mm.leftMatch(2, 102, 1);
+    expect(view(sent.get(3))?.players.map((p) => p.n)).toEqual([1, 3]);
+    // Without its match socket, the account still finds a member.
+    mm.leftMatch(999, 101, 1);
+    expect(view(sent.get(3))?.players.map((p) => p.n)).toEqual([3]);
+  });
+
   it('a held seat goes back into the match, and a walk-out gives it up', () => {
     const { mm, sent, code, join } = played();
     join(3, 103, 'late', code);
@@ -937,7 +950,7 @@ describe('a lobby that outlives its match', () => {
     mm.enteredMatch(22, 102, 1);
     expect(view(sent.get(3))?.players.map((p) => p.playing ?? false)).toEqual([true, true, false]);
     // The opener walks out for good.
-    mm.leftMatch(101, 1);
+    mm.leftMatch(1, 101, 1);
     expect(view(sent.get(3))?.players.map((p) => p.n)).toEqual([2, 3]);
     mm.matchOver(1, 1000);
     // The friend who played is waited for, and hosts through the wait as

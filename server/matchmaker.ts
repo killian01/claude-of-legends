@@ -623,12 +623,21 @@ export class Matchmaker {
     }
   }
 
-  // An account walked out of a lobby's match: its seat there is given up,
-  // and it waits for the next one if it is in the lobby.
-  leftMatch(accountId: number, matchId: number, now: number = Date.now()): void {
+  // A socket walked out of a lobby's match: its seat there is given up,
+  // and it waits for the next one if it is in the lobby. The member is
+  // found by the socket that plays, else by the account (a Guest retired
+  // into an account mid-match still plays on a socket under the old id).
+  leftMatch(
+    clientId: number,
+    accountId: number | null,
+    matchId: number,
+    now: number = Date.now(),
+  ): void {
     for (const lobby of this.lobbies.values()) {
       if (lobby.phase !== 'match' || lobby.matchId !== matchId) continue;
-      const member = memberOfAccount(lobby, accountId);
+      const member =
+        lobby.members.find((m) => m.inPlay && m.playClientId === clientId) ??
+        memberOfAccount(lobby, accountId);
       if (!member?.inPlay) continue;
       member.inPlay = false;
       member.playClientId = null;

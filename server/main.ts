@@ -1229,7 +1229,7 @@ function walkOutOfMatch(
   rejoins.drop(client.accountId);
   // A private lobby's member gives up their seat in its match, and waits
   // in the lobby for the next one if they are in it.
-  matchmaker.leftMatch(client.accountId, matchId, Date.now());
+  matchmaker.leftMatch(client.id, client.accountId, matchId, Date.now());
   // A coach walking out leaves nothing behind: the bot keeps playing, so
   // there is no leaver to punish.
   const coach = entry.match.players.get(client.id)?.coach === true;
