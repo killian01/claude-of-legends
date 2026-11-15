@@ -78,6 +78,7 @@ import { buildId, buildInfo, deployStamp, readBuildId } from './build_info';
 import { withBuildTag } from './build_tag';
 import { rejoinClassic } from './classic_rejoin';
 import { classicDoorRefused, classicPlaying, leaveClassicDoors } from './classic_seat';
+import { budgetKey, CodeGuard, NAME_LIMIT_MESSAGE } from './code_guess';
 import { ConnectionLimiter } from './conn_limit';
 import { clearCookie, crossSiteRequest, parseCookies, serializeCookie } from './cookies';
 import { authorizeUrl, CALLBACK_PATH, DiscordOauth, discordConfigFromEnv } from './discord_oauth';
@@ -127,7 +128,12 @@ import {
 import { buildHomePage } from './home_page';
 import { buildBotLadder, buildLadder } from './ladder';
 import { type BotSummary, buildLadderPage, type LadderSeed, placeOf } from './ladder_page';
-import { buildLandingPage, type LandingOwnInput } from './landing_page';
+import {
+  buildLandingPage,
+  guardedLookup,
+  type LandingOwnInput,
+  landingInvite,
+} from './landing_page';
 import {
   backfillLaurels,
   CHAMPION_PRICES,
@@ -135,6 +141,7 @@ import {
   rotationAt,
   STARTER_COLLECTION,
 } from './laurels';
+import { isLobbyDoor, lobbyDoor, lobbyOfUnits, seatTags } from './lobby_doors';
 import { accountKey, addressKey, LoginThrottle } from './login_throttle';
 import { confirmMail, confirmUrl, publicOrigin, resetMail, resetUrl } from './mail_messages';
 import { mailerFromEnv } from './mailer';
@@ -298,6 +305,9 @@ interface Client {
   // The session this socket came in on, so closing it can be traced back
   // to a logout elsewhere.
   sessionId: string;
+  // The connection's key for the private lobby's budgets
+  // (server/code_guess.ts budgetKey): in memory only, never logged.
+  budgetKey: string;
   matchId: number | null;
   msgWindowStart: number;
   msgCount: number;
@@ -338,6 +348,9 @@ interface MatchEntry {
   // holds the teams the match's start seated the Gentle player on, which
   // weigh the points of the seats facing them.
   points: MatchPoints | null;
+  // The private lobby each seat came from, by unit (ADR 0036), for the
+  // seat's match_start at the start and on a rejoin.
+  lobbyOfUnit: Map<number, string>;
 }
 const matches = new Map<number, MatchEntry>();
 
@@ -932,7 +945,7 @@ function onMatchReady(forge: boolean) {
     // A seat whose player left during the select is its bot's from the
     // first tick (server/select_absent.ts).
     const gone = leaveAbsentToBots(match, id, picks, (cid) => clients.has(cid), rejoins);
-    matches.set(id, {
+    const entry: MatchEntry = {
       match,
       endedAt: null,
       failures: 0,
@@ -950,7 +963,9 @@ function onMatchReady(forge: boolean) {
       // would be a points machine. The Gentle teams decided above stay with
       // it: a seat facing the Gentle player earns half.
       points: source === 'queue' && !forge ? new MatchPoints(match.sim, gentle) : null,
-    });
+      lobbyOfUnit: lobbyOfUnits(picks, (i) => match.unitIdOfPick(i)),
+    };
+    matches.set(id, entry);
     for (const p of picks) {
       const c = clients.get(p.clientId);
       if (!c || gone.has(p.clientId)) continue;
@@ -964,14 +979,17 @@ function onMatchReady(forge: boolean) {
           ...(player.coach ? { coach: true as const } : {}),
           ...forgedPayload(match),
           ...teamsPayload(match),
+          ...seatTags(entry, player.unitId),
         });
       }
     }
     console.log(`match ${id} started with ${picks.length} player(s)${forge ? ' (forge)' : ''}`);
     if (![...match.players.keys()].some((cid) => clients.has(cid))) {
-      matches.get(id)!.abandonedAt = Date.now();
+      entry.abandonedAt = Date.now();
       console.log(`match ${id} abandoned: holding for rejoin grace`);
     }
+    // The Matchmaker learns which match a private lobby plays (ADR 0036).
+    return id;
   };
 }
 
@@ -1012,6 +1030,9 @@ function pointsEntries(): PointsEntry[] {
 
 const matchmaker = new Matchmaker(send, onMatchReady(false), undefined, {
   resolveAccount: accountOfClient,
+  // A private lobby's party queues only when no member present is still
+  // locked out of the queue for leaving a rated match.
+  queueLockedMs: (accountId) => rejoins.queueLockRemaining(accountId, Date.now()),
   // What this client may pick of the roster (ADR 0018): its collection
   // plus the week's rotation. A client with no account picks nothing here
   // anyway, so answering null for one leaves the wall to the account wall.
@@ -1069,6 +1090,18 @@ const forgeMatchmaker = new Matchmaker(send, onMatchReady(true), undefined, {
 // Every pre-match surface acts on both queues: a message routes to the one
 // holding the client and no-ops on the other.
 const matchmakers = [matchmaker, forgeMatchmaker];
+// The private lobby's budgets per connection (server/code_guess.ts): wrong
+// codes, lobbies opened, Guest names changed. In memory only.
+const codeGuard = new CodeGuard();
+// The private lobby's doors on the socket (server/lobby_doors.ts): the
+// lobbies live on the classic matchmaker, and a Forge-queue seat is given
+// up on the way in, like any other queue switch.
+const lobbyDoors = {
+  lobbies: matchmaker,
+  guard: codeGuard,
+  leaveOthers: (clientId: number, now: number) => forgeMatchmaker.removeEverywhere(clientId, now),
+  send,
+};
 
 // The battle royale's sim builder (ADR 0031), on the Wanderseed this
 // process reads once (server/planet.ts), on first use.
@@ -1193,6 +1226,9 @@ function walkOutOfMatch(
   reportSeat(client, entry, how);
   client.matchId = null;
   rejoins.drop(client.accountId);
+  // A private lobby's member gives up their seat in its match, and waits
+  // in the lobby for the next one if they are in it.
+  matchmaker.leftMatch(client.accountId, matchId, Date.now());
   // A coach walking out leaves nothing behind: the bot keeps playing, so
   // there is no leaver to punish.
   const coach = entry.match.players.get(client.id)?.coach === true;
@@ -1282,6 +1318,7 @@ function dropInto(client: Client): boolean {
     dropIn: true,
     ...forgedPayload(entry.match),
     ...teamsPayload(entry.match),
+    ...seatTags(entry, null),
   });
   tellSeat(entry, 'joined', { name: client.name, team: seat.team }, client.id);
   console.log(`match ${matchId}: ${client.name} dropped in on team ${seat.team}`);
@@ -1463,6 +1500,8 @@ const server = http.createServer(async (req, res) => {
         if (guest) {
           guests.retire(guest.id);
           addCookie(res, clearCookie(GUEST_COOKIE, { secure: cookieSecure(req) }));
+          // Its private lobbies know the person under the new account.
+          matchmaker.renameMember(guest.id, created.value.id, now);
         }
         openSession(res, req, created.value);
         sendJson(res, 200, selfAccount(created.value));
@@ -1524,6 +1563,12 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 409, { error: 'Your name on the ladder is your account name.' });
         return;
       }
+      // A budget of name changes per connection (server/code_guess.ts).
+      const key = budgetKey(clientAddress(req.headers, req.socket.remoteAddress, EDGE));
+      if (!codeGuard.mayRename(key, now)) {
+        sendJson(res, 429, { error: NAME_LIMIT_MESSAGE });
+        return;
+      }
       const guest = guestForRequest(req, now);
       const body = await readJsonBody(req);
       const name = typeof body?.name === 'string' ? body.name.trim() : '';
@@ -1534,6 +1579,13 @@ const server = http.createServer(async (req, res) => {
         sendJson(res, 409, { error: guestNameMessage(named.error) });
         return;
       }
+      codeGuard.renamed(key, now);
+      // The new name reaches the Guest's open sockets and its private
+      // lobbies at once.
+      for (const c of clients.values()) {
+        if (c.accountId === named.value.id) c.name = named.value.name;
+      }
+      matchmaker.renameLive(named.value.id, named.value.name, now);
       sendJson(res, 200, { name: named.value.name });
       return;
     }
@@ -1618,6 +1670,9 @@ const server = http.createServer(async (req, res) => {
     // own panel and the week. No ids. A POST, since it may issue a Guest;
     // a signed-in account reads its own and is handed no Guest. Another
     // site's page is answered nothing (server/cookies.ts crossSiteRequest).
+    // An invite code comes in the body, never the address (ADR 0036), and
+    // is answered behind the connection's budget of wrong codes; it is
+    // never logged.
     if (url === '/api/public/landing') {
       if (req.method !== 'POST') {
         sendJson(res, 405, { error: 'use POST' });
@@ -1628,6 +1683,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       const now = Date.now();
+      const body = await readJsonBody(req);
       const account = accountForRequest(req, now);
       let own: LandingOwnInput;
       if (account) {
@@ -1650,7 +1706,12 @@ const server = http.createServer(async (req, res) => {
           since: guest.createdAt,
         };
       }
-      sendJson(res, 200, buildLandingPage({ entries: pointsEntries(), own, now }));
+      const key = budgetKey(clientAddress(req.headers, req.socket.remoteAddress, EDGE));
+      const invite = landingInvite(
+        body?.join,
+        guardedLookup(codeGuard, matchmaker, key, own.key, now),
+      );
+      sendJson(res, 200, buildLandingPage({ entries: pointsEntries(), own, now, invite }));
       return;
     }
 
@@ -1764,6 +1825,7 @@ const server = http.createServer(async (req, res) => {
       if (guest) {
         guests.retire(guest.id);
         addCookie(res, clearCookie(GUEST_COOKIE, { secure: cookieSecure(req) }));
+        matchmaker.renameMember(guest.id, created.value.id, now);
       }
       openSession(res, req, created.value);
       // 'joined' says the account was made AND the player is now in the
@@ -2736,6 +2798,7 @@ const server = http.createServer(async (req, res) => {
           matches: matches.size,
           royale: royale.matches.size,
           thornfray: thornfray.entries.size,
+          lobbies: matchmaker.lobbyCount,
           uptimeS: Math.round(process.uptime()),
           // How the world loop kept up over its last window (server/tick_meter.ts).
           tick: meter.last(),
@@ -2918,6 +2981,7 @@ wss.on('connection', (ws, req) => {
     name: who.name,
     guest: who.guest,
     sessionId: who.sessionId,
+    budgetKey: budgetKey(ip),
     country: countryOf(req.headers['cf-ipcountry']),
     mobile: isMobileAgent(req.headers['user-agent']),
     pings: [],
@@ -2983,7 +3047,14 @@ wss.on('connection', (ws, req) => {
       if (back) {
         const { seat, entry, start } = back;
         client.matchId = seat.matchId;
-        send(id, { ...start, ...forgedPayload(entry.match), ...teamsPayload(entry.match) });
+        // A private lobby's member plays its match on this socket now.
+        matchmaker.enteredMatch(id, client.accountId, seat.matchId, now);
+        send(id, {
+          ...start,
+          ...forgedPayload(entry.match),
+          ...teamsPayload(entry.match),
+          ...seatTags(entry, seat.unitId),
+        });
         tellSeat(entry, 'back', seat, id);
         console.log(`match ${seat.matchId}: ${seat.name} reconnected`);
       } else royale.rejoin(client);
@@ -3053,7 +3124,7 @@ wss.on('connection', (ws, req) => {
         if (!inMatch) for (const mm of matchmakers) mm.startNow(id, now);
         break;
       case 'leave': {
-        for (const mm of matchmakers) mm.removeEverywhere(id);
+        for (const mm of matchmakers) mm.removeEverywhere(id, now, 'leave');
         // A deliberate walk-out from a live match: hand the champion to a
         // bot for good and hold NO seat reservation. Reservations are for
         // dropped connections; a player who chose to leave (end screen,
@@ -3075,35 +3146,16 @@ wss.on('connection', (ws, req) => {
         }
         break;
       }
+      // The private lobby's doors (server/lobby_doors.ts): the budgets of
+      // the connection, the capacity, and every refusal inside a lobby a
+      // notice on it.
       case 'create_lobby':
-        if (inMatch) break;
-        if (atCapacity) refuseCapacity();
-        else {
-          // Lobbies live on the classic matchmaker; a Forge-queue seat is
-          // given up on the way in, like any other queue switch.
-          forgeMatchmaker.removeEverywhere(id, now);
-          matchmaker.createLobby(id, client.name, now);
-        }
-        break;
       case 'join_lobby':
-        if (!inMatch) {
-          forgeMatchmaker.removeEverywhere(id, now);
-          matchmaker.joinLobby(id, client.name, String(msg.code ?? ''));
-        }
-        break;
       case 'lobby_team':
-        if (!inMatch) matchmaker.setLobbyTeam(id, msg.team);
-        break;
       case 'queue_party':
-        if (inMatch) break;
-        if (atCapacity) refuseCapacity();
-        else if (rejoins.queueLockRemaining(client.accountId, now) > 0) {
-          const locked = rejoins.queueLockRemaining(client.accountId, now);
-          send(id, {
-            t: 'error',
-            message: `You left a rated match. The queue unlocks in ${Math.ceil(locked / 1000)}s.`,
-          });
-        } else matchmaker.queuePartyFromLobby(id, now);
+      case 'start_lobby':
+      case 'lobby_remove':
+        if (!inMatch && isLobbyDoor(msg)) lobbyDoor(msg, client, atCapacity, lobbyDoors, now);
         break;
       case 'spectate': {
         if (inMatch) break;
@@ -3126,9 +3178,6 @@ wss.on('connection', (ws, req) => {
         });
         break;
       }
-      case 'start_lobby':
-        if (!inMatch) matchmaker.startLobby(id, now);
-        break;
       case 'pick':
         for (const mm of matchmakers) {
           mm.pick(id, msg.championId, msg.sigils, msg.skin, msg.bot, msg.lane);
@@ -3200,7 +3249,9 @@ wss.on('connection', (ws, req) => {
   ws.on('close', () => {
     clearInterval(pinger);
     connections.release(ip);
-    for (const mm of matchmakers) mm.removeEverywhere(id);
+    // A drop, not a leave: a private lobby waits for this member through a
+    // grace (a reload keeps the lobby), and a seat in its play stays held.
+    for (const mm of matchmakers) mm.removeEverywhere(id, Date.now(), 'drop');
     thornfray.disconnect(client);
     royale.disconnect(client);
     const matchId = client.matchId;
@@ -3240,7 +3291,16 @@ wss.on('connection', (ws, req) => {
 // while a match is on, and the last window on /healthz.
 const meter = new TickMeter(Date.now());
 
-const closing = { matches, rejoins, clients, send };
+// However a match closes, a private lobby playing it reopens (ADR 0036).
+const closing = {
+  matches,
+  rejoins,
+  clients,
+  send,
+  over: (matchId: number) => {
+    for (const mm of matchmakers) mm.matchOver(matchId, Date.now());
+  },
+};
 
 let last = Date.now();
 let acc = 0;
@@ -3320,6 +3380,9 @@ setInterval(() => {
         }
         if (entry.match.sim.winner !== null && entry.endedAt === null) {
           entry.endedAt = now;
+          // A private lobby playing it reopens at once, so Back to the
+          // lobby from the end screen finds it open.
+          for (const mm of matchmakers) mm.matchOver(matchId, now);
           for (const p of entry.match.players.values()) {
             const c = clients.get(p.clientId);
             if (c) reportSeat(c, entry, 'ended');
@@ -3553,6 +3616,8 @@ setInterval(() => {
   guests.purgeExpired(now);
   // Rate-limit windows are a minute long; addresses idle past one go.
   apiLimiter.purge(now);
+  // The private lobby's budgets and the codes issued a day ago and more.
+  codeGuard.purge(now);
   // Quota events older than the day window will never be counted again.
   forgeStore.pruneQuotaEvents(now - DAY_MS);
   botStore.pruneArenaEvents(now - DAY_MS);
