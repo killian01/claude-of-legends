@@ -7,7 +7,9 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { WRONG_CODE_WINDOW_MS } from '../server/code_guess';
 import { GUEST_COOKIE, GUEST_COOKIE_MAX_AGE_S, GUEST_KEPT_TTL_MS } from '../server/guests';
+import { addMember, LOBBY_REMOVED, openLobby, removeFromLobby } from '../server/lobby';
 import { STATS_SCRIPT, statsTag } from '../server/stats_tag';
 import { VISIT_COOKIE } from '../server/visit_cookie';
 import {
@@ -160,5 +162,27 @@ describe('the visit cookie', () => {
     const block = main.slice(at, at + 600);
     expect(block).toContain('randomBytes');
     expect(block).not.toContain('accountForRequest');
+  });
+});
+
+describe('what a private lobby keeps', () => {
+  it('is named on the page as the server keeps it', () => {
+    const page = read('PRIVACY.md').replace(/\s+/g, ' ');
+    expect(LOBBY_REMOVED).toBe(20);
+    expect(page).toContain('twenty such ids at most, the oldest dropped first');
+    expect(page).toContain('can come back as a new Guest');
+    expect(WRONG_CODE_WINDOW_MS).toBe(10 * 60_000);
+    expect(page).toContain(
+      'the wrong codes it asked, each with the time it was asked, for ten minutes',
+    );
+    expect(page).toContain('with the time each was handed out and nothing else');
+  });
+
+  it('keeps nothing of a removed member but their id', () => {
+    const lobby = openLobby('QWERTY', { clientId: 1, accountId: 1, name: 'Mira' }, 0, null);
+    const member = addMember(lobby, { clientId: 2, accountId: 7, name: 'Ashveil', team: 1 });
+    removeFromLobby(lobby, member);
+    expect(JSON.stringify(lobby)).not.toContain('Ashveil');
+    expect(lobby.removed).toEqual([7]);
   });
 });

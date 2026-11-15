@@ -98,23 +98,27 @@ for each of the people who have been in it, twenty at most, the name they
 joined under, the side they play, whether they played its last match, and
 the id of their account or Guest, which is how it knows them again after a
 match or a reload; who hosts it; and the connection its opener opened it
-from, for the limits below. A member the host removes stays in it as an id
-its code refuses. Whoever has its code or its link reads, before joining,
-the name of the person who opened it, how many are in it, and whether they
-are queued or playing, and never another name (`server/landing_page.ts`);
-everyone in it sees the others' names and sides. It is forgotten at the
-latest thirty minutes after the last person left it or after two hours in
-which nothing happened in it, and by every restart.
+from, for the limits below. When the host removes a member, nothing of
+theirs stays in it but the id of their account or Guest, twenty such ids at
+most, the oldest dropped first, which its code refuses; a Guest removed
+this way can come back as a new Guest. Whoever has its code or its link
+reads, before joining, the name of the person who opened it, how many are
+in it, and whether they are queued or playing, and never another name
+(`server/landing_page.ts`); everyone in it sees the others' names and
+sides. It is forgotten at the latest thirty minutes after the last person
+left it or after two hours in which nothing happened in it, and by every
+restart.
 
-To keep codes from being guessed, the server counts, for each connection
+To keep codes from being guessed, the server keeps, for each connection
 (the address a request comes from, or for IPv6 its first half, which the
-devices of one network share), the different wrong codes asked and the
-lobbies opened in the last ten minutes, and a Guest's name changes in the
+devices of one network share), the wrong codes it asked, each with the time
+it was asked, for ten minutes, so that each is counted once; when it opened
+lobbies in the last ten minutes; and when it changed a Guest's name in the
 last hour (`server/code_guess.ts`). It also keeps the codes it handed out
-in the last day, with nothing beside them, so an old link reads as a closed
-lobby rather than as a wrong code. All of it is in memory, against the
-address alone: it is never written to a file or to the log, it is dropped
-when it runs out, and a restart forgets it.
+in the last day, with the time each was handed out and nothing else, so an
+old link reads as a closed lobby rather than as a wrong code. All of it is
+in memory, against the address alone: it is never written to a file or to
+the log, it is dropped when it runs out, and a restart forgets it.
 
 Your browser keeps two codes for a lobby, in the tab's own session storage,
 which the browser empties when the tab closes (`src/game/lobby_memory.ts`).

@@ -189,7 +189,7 @@ export const LANDING_WAYS: readonly LandingWay[] = [
     kicker: 'Star Orchard',
     title: 'Private lobby',
     line: 'Your friends and one shared link. A 5v5 that is never rated.',
-    // The home's lobby tile wears it: the door and the room look alike.
+    // The home's lobby tile wears it: the door and the lobby look alike.
     art: tileArtUrl('lobby'),
     door: { call: 'Play with friends', kind: 'guest', play: { to: 'lobby' } },
   },
