@@ -386,5 +386,20 @@ describe('the end screens', () => {
     // The words stay the cards' own.
     expect(hud).toContain("'Play again'");
     expect(hud).toContain("'Return to menu'");
+    // A match whose private lobby lives on goes back to it (ADR 0036).
+    expect(hud).toContain("'Back to the lobby'");
+  });
+
+  it("asks the match whether it scores rather than guessing from a Guest's seat", () => {
+    // A Guest plays a private lobby's match too, which banks no points
+    // (ADR 0036): match_start says which matches do (ADR 0027).
+    const hud = readFileSync(path.join(ROOT, 'src/ui/hud.ts'), 'utf8');
+    const boot = readFileSync(path.join(ROOT, 'src/game/boot.ts'), 'utf8');
+    const main = readFileSync(path.join(ROOT, 'src/main.ts'), 'utf8');
+    expect(hud).not.toContain("return this.pointsSeen || (this.guest && this.mode === 'online');");
+    expect(boot).toContain('options.scores === true');
+    expect(boot).toContain("options.again ?? 'play'");
+    expect(main).toContain('scores: world.scores,');
+    expect(main).toContain("again: world.lobby !== null ? 'lobby' : 'play',");
   });
 });

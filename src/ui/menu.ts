@@ -18,7 +18,7 @@ import {
 } from '../game/practice_bots';
 import { getSettings } from '../game/settings';
 import { applyUiScale, effectiveUiScale } from '../game/ui_scale';
-import type { LobbyPlayer, SelectClaim, SelectPlayer } from '../net/protocol';
+import type { SelectClaim, SelectPlayer } from '../net/protocol';
 import { preloadChampionAssets } from '../render/champions';
 import { CHAMPION_LIST, CHAMPIONS, type ChampionRole } from '../sim/content/champions';
 import { SIGIL_LIST } from '../sim/content/sigils';
@@ -37,6 +37,7 @@ import {
 } from './collection';
 import { describeAbility, describeSigil } from './describe';
 import { startBackdrop } from './home_backdrop';
+import { type SaveOutcome, saveName } from './ladder_box';
 import {
   botLane,
   chooseLane,
@@ -53,6 +54,30 @@ import {
   reconcile,
   stillChoosing,
 } from './lane_select';
+import {
+  canStart,
+  LOBBY_CHANGE,
+  LOBBY_NOTICE_MS,
+  LOBBY_REJOIN,
+  LOBBY_REMOVE,
+  type LobbyMsg,
+  type LobbyRow,
+  lobbyHint,
+  lobbyNameValue,
+  lobbyRows,
+  lobbyStatus,
+  partyFits,
+  seatedOn,
+} from './lobby_view';
+import {
+  nameShapeError,
+  OWN_CANCEL,
+  OWN_CHANGE_LABEL,
+  OWN_FIELD_HINT,
+  OWN_FIELD_LABEL,
+  OWN_SAVE,
+} from './own_panel';
+import { NAME_FIELD_MAX } from './points_text';
 import { attachTooltip, hideTooltip } from './tooltips';
 
 const CSS = `
@@ -297,6 +322,36 @@ const CSS = `
   }
   .menu .menu-select-actions { background: rgb(6, 10, 20); }
 }
+/* The private lobby (ADR 0036): one line a member, its tags after the
+   name, the host's Remove and a Guest's Change as small links. */
+.menu-lobby-rows { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.menu-lobby-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px;
+  min-width: 0; line-height: 1.35; }
+.menu-lobby-who { min-width: 0; overflow-wrap: anywhere; }
+.menu-lobby-tag { font-size: 10.5px; color: #c9a84a; }
+.menu-lobby-link { margin: 0; padding: 0; border: 0; background: none; font: inherit;
+  font-size: 11px; color: #9db2cf; text-decoration: underline; cursor: pointer; }
+.menu-lobby-link:hover, .menu-lobby-link:focus-visible { color: #fff3cf; outline: none; }
+.menu-lobby-empty { color: #7e93b2; }
+.menu-lobby-status { margin-top: 6px; }
+.menu-lobby-status[hidden], .menu-lobby-notice[hidden], .menu-lobby-hint[hidden],
+  .menu-lobby-name[hidden] { display: none; }
+.menu-lobby-notice { margin: 6px 0 0; font-size: 13px; color: #f5c48a; }
+.menu-lobby-hint { margin: 6px 0 0; font-size: 12px; color: #c9a84a; }
+.menu-lobby-name { margin: 4px 0 6px; }
+.menu-lobby-name .menu-input { font-size: 16px; min-width: 0; flex: 2 1 0; }
+.menu-lobby-name-say { margin-top: 4px; font-size: 11px; color: #9db2cf; }
+.menu-teams .menu-team { min-width: 0; }
+@media (orientation: landscape) and (max-height: 500px) {
+  /* A phone held sideways: the code smaller and the calls side by side,
+     so the card scrolls as little as it can. */
+  .menu-card.lobby { padding: 10px 14px; max-height: 96vh; }
+  .menu-card.lobby .menu-title { font-size: 16px; }
+  .menu-card.lobby .menu-code { font-size: 22px; margin: 2px 0; }
+  .menu-card.lobby .menu-btn { padding: 7px; }
+  .menu-lobby-actions { display: flex; flex-wrap: wrap; gap: 0 6px; }
+  .menu-lobby-actions .menu-btn { flex: 1 1 0; min-width: 0; }
+}
 /* The landing's dress on the pre-game cards (the queue, the lobby, champion
    select, the notices, the loading card): dark cards edged in gold over the
    painted backdrop, titles in Cinzel gold, and gold, not blue, on what is
@@ -398,10 +453,12 @@ export interface QueueController {
   remove(): void;
 }
 
+// `cancelLabel`: a party's queue reads Back to the lobby (ADR 0036).
 export function showQueue(
   container: HTMLElement,
   onStartNow: () => void,
   onCancel: () => void,
+  cancelLabel = 'Cancel',
 ): QueueController {
   const { root, card } = screen(container);
   card.append(el('h1', 'menu-title', 'In queue'));
@@ -412,7 +469,7 @@ export function showQueue(
     requestGameFullscreen();
     onStartNow();
   });
-  const cancel = el('button', 'menu-btn', 'Cancel');
+  const cancel = el('button', 'menu-btn', cancelLabel);
   cancel.addEventListener('click', () => {
     root.remove();
     onCancel();
@@ -438,20 +495,32 @@ export function showQueue(
 }
 
 export interface LobbyController {
-  update(code: string, host: boolean, selfTeam: TeamId, players: readonly LobbyPlayer[]): void;
+  // Every lobby message, as the server sent it (ADR 0036).
+  update(msg: LobbyMsg): void;
   remove(): void;
 }
 
-export function showLobby(
-  container: HTMLElement,
-  onStart: () => void,
-  onLeave: () => void,
-  onPickTeam: (team: TeamId) => void,
-  onQueueParty: () => void,
-): LobbyController {
+export interface LobbyHandlers {
+  onStart: () => void;
+  onLeave: () => void;
+  onPickTeam: (team: TeamId) => void;
+  onQueueParty: () => void;
+  // The host's Remove, by the member's number in the lobby.
+  onRemove: (member: number) => void;
+  // A held seat taken back (hello).
+  onRejoin: () => void;
+  // A Guest's session: its own row offers Change, and the hint for a
+  // handed-out name shows to a Guest host.
+  guest: boolean;
+  // The rename route, injectable for a test (ui/ladder_box.ts saveName).
+  saveName?: (name: string) => Promise<SaveOutcome>;
+}
+
+export function showLobby(container: HTMLElement, h: LobbyHandlers): LobbyController {
   const { root, card } = screen(container);
+  card.classList.add('lobby');
   card.append(el('h1', 'menu-title', 'Private lobby'));
-  const codeEl = el('div', 'menu-code', '-----');
+  const codeEl = el('div', 'menu-code', '------');
 
   // The invite link: one click to share, one click for the friend to land
   // here (src/main.ts consumes ?join=CODE at boot).
@@ -467,64 +536,193 @@ export function showLobby(
     });
   });
 
+  // What the lobby is doing, a refusal that left it standing, and the
+  // hint for a Guest host still wearing a handed-out name.
+  const status = el('div', 'menu-status menu-lobby-status');
+  status.hidden = true;
+  const notice = el('div', 'menu-lobby-notice');
+  notice.setAttribute('role', 'status');
+  notice.hidden = true;
+  const hint = el('div', 'menu-lobby-hint');
+  hint.hidden = true;
+  let noticeTimer = 0;
+  const showNoticeLine = (text: string): void => {
+    window.clearTimeout(noticeTimer);
+    notice.textContent = text;
+    notice.hidden = false;
+    noticeTimer = window.setTimeout(() => {
+      notice.hidden = true;
+    }, LOBBY_NOTICE_MS);
+  };
+
   // Two team columns with a switch button each: friends duo on one side
   // against the bot fill, or split into two human sides.
   const teamsWrap = el('div', 'menu-teams');
   const cols = ([0, 1] as const).map((team) => {
     const box = el('div', `menu-team ${team === 0 ? 'blue' : 'red'}`);
     box.appendChild(el('h4', '', `Team ${team + 1}`));
-    const list = el('div', '');
+    const list = el('div', 'menu-lobby-rows');
     const btn = el('button', 'menu-btn', 'Play on this side');
-    btn.addEventListener('click', () => onPickTeam(team));
+    btn.addEventListener('click', () => h.onPickTeam(team));
     box.append(list, btn);
     teamsWrap.appendChild(box);
     return { list, btn };
   });
 
+  // A Guest's own name, changed in place (the own panel's rules): the
+  // server renames the member live and the next lobby message shows it.
+  const nameForm = el('form', 'menu-lobby-name');
+  nameForm.hidden = true;
+  const field = el('input', 'menu-input') as HTMLInputElement;
+  field.type = 'text';
+  field.maxLength = NAME_FIELD_MAX;
+  field.autocomplete = 'off';
+  field.setAttribute('autocapitalize', 'off');
+  field.spellcheck = false;
+  field.enterKeyHint = 'done';
+  field.setAttribute('aria-label', OWN_FIELD_LABEL);
+  const save = el('button', 'menu-btn primary', OWN_SAVE) as HTMLButtonElement;
+  save.type = 'submit';
+  const cancel = el('button', 'menu-btn', OWN_CANCEL) as HTMLButtonElement;
+  cancel.type = 'button';
+  const nameRow = el('div', 'menu-row');
+  nameRow.append(field, save, cancel);
+  const nameSay = el('div', 'menu-lobby-name-say');
+  nameForm.append(el('div', 'menu-label', OWN_FIELD_LABEL), nameRow, nameSay);
+  let myName = '';
+  let busy = false;
+  const openName = (): void => {
+    field.value = lobbyNameValue(myName);
+    nameSay.textContent = OWN_FIELD_HINT;
+    nameForm.hidden = false;
+    field.focus();
+    field.select();
+  };
+  cancel.addEventListener('click', () => {
+    nameForm.hidden = true;
+  });
+  nameForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (busy) return;
+    const typed = field.value.trim();
+    if (typed === myName) {
+      nameForm.hidden = true;
+      return;
+    }
+    const wrong = nameShapeError(typed);
+    if (wrong) {
+      nameSay.textContent = wrong;
+      field.focus();
+      return;
+    }
+    busy = true;
+    save.disabled = true;
+    void (h.saveName ?? saveName)(typed).then((out) => {
+      busy = false;
+      save.disabled = false;
+      if (!out.ok) {
+        nameSay.textContent = out.error;
+        field.focus();
+        return;
+      }
+      nameForm.hidden = true;
+    });
+  });
+
+  const rejoin = el('button', 'menu-btn primary', LOBBY_REJOIN);
+  rejoin.style.display = 'none';
+  rejoin.addEventListener('click', () => {
+    // Inside the click gesture, so the match opens already fullscreen.
+    requestGameFullscreen();
+    h.onRejoin();
+  });
   const start = el('button', 'menu-btn primary', 'Start match');
   start.style.display = 'none';
   start.addEventListener('click', () => {
     // Inside the click gesture, so the match opens already fullscreen.
     requestGameFullscreen();
-    onStart();
+    h.onStart();
   });
   // Host only, parties of up to five: the whole lobby queues publicly
   // on ONE side (the two-column split above is for private matches).
   const party = el('button', 'menu-btn', 'Queue as a party') as HTMLButtonElement;
   party.style.display = 'none';
-  party.addEventListener('click', onQueueParty);
+  party.addEventListener('click', h.onQueueParty);
   const leave = el('button', 'menu-btn', 'Leave');
   leave.addEventListener('click', () => {
+    window.clearTimeout(noticeTimer);
     root.remove();
-    onLeave();
+    h.onLeave();
   });
+  const actions = el('div', 'menu-lobby-actions');
+  actions.append(rejoin, start, party, leave);
   card.append(
     el('div', 'menu-label', 'Share this code'),
     codeEl,
     copy,
+    status,
+    notice,
+    hint,
     teamsWrap,
-    start,
-    party,
-    leave,
+    nameForm,
+    actions,
   );
+
+  const rowEl = (row: LobbyRow): HTMLElement => {
+    const line = el('div', 'menu-lobby-row');
+    line.appendChild(el('span', 'menu-lobby-who', row.name));
+    for (const tag of row.tags) line.appendChild(el('span', 'menu-lobby-tag', tag));
+    if (row.change) {
+      const change = el('button', 'menu-lobby-link', LOBBY_CHANGE);
+      change.type = 'button';
+      change.setAttribute('aria-label', OWN_CHANGE_LABEL);
+      change.addEventListener('click', openName);
+      line.appendChild(change);
+    }
+    if (row.remove) {
+      const remove = el('button', 'menu-lobby-link', LOBBY_REMOVE);
+      remove.type = 'button';
+      remove.setAttribute('aria-label', `${LOBBY_REMOVE} ${row.name}`);
+      remove.addEventListener('click', () => h.onRemove(row.n));
+      line.appendChild(remove);
+    }
+    return line;
+  };
+
   return {
-    update(code, host, selfTeam, players) {
-      codeEl.textContent = code;
-      link = inviteUrl(window.location.origin, code);
+    update(msg) {
+      codeEl.textContent = msg.code;
+      link = inviteUrl(window.location.origin, msg.code);
+      myName = msg.players.find((p) => p.you)?.name ?? myName;
+      const rows = lobbyRows(msg, h.guest);
       for (const team of [0, 1] as const) {
         const col = cols[team]!;
-        const members = players.filter((p) => p.team === team);
-        col.list.textContent =
-          members.length > 0 ? members.map((p) => p.name).join(', ') : 'Empty (bots fill in)';
+        const members = rows.filter((r) => r.team === team);
+        col.list.replaceChildren(
+          ...(members.length > 0
+            ? members.map(rowEl)
+            : [el('div', 'menu-lobby-empty', 'Empty (bots fill in)')]),
+        );
         // Your own side needs no button; a full side takes nobody else.
-        col.btn.style.display = selfTeam === team ? 'none' : 'block';
-        col.btn.disabled = members.length >= 5;
+        col.btn.style.display = msg.team === team ? 'none' : 'block';
+        col.btn.disabled = seatedOn(msg.players, team) >= 5;
       }
-      start.style.display = host ? 'block' : 'none';
-      party.style.display = host ? 'block' : 'none';
-      party.disabled = players.length > 5;
+      const said = lobbyStatus(msg);
+      status.textContent = said.line;
+      status.hidden = said.line === '';
+      rejoin.style.display = said.rejoin ? 'block' : 'none';
+      // A message without a notice leaves the last one up.
+      if (msg.notice) showNoticeLine(msg.notice);
+      const hinted = lobbyHint(msg, h.guest);
+      hint.textContent = hinted ?? '';
+      hint.hidden = hinted === null;
+      const starts = canStart(msg);
+      start.style.display = starts ? 'block' : 'none';
+      party.style.display = starts ? 'block' : 'none';
+      party.disabled = !partyFits(msg.players);
     },
     remove() {
+      window.clearTimeout(noticeTimer);
       root.remove();
     },
   };
@@ -1161,7 +1359,13 @@ export function showSelect(container: HTMLElement, opts: SelectOptions): SelectC
 // Resolves when the player dismisses the notice; the caller decides what
 // "back to menu" means (no reload: the app routes on the same page now).
 // The browser's Back dismisses it too: it is a layer (src/game/nav.ts).
-export function showNotice(container: HTMLElement, title: string, body: string): Promise<void> {
+// `button` names the way out: a Guest's leads back to the landing.
+export function showNotice(
+  container: HTMLElement,
+  title: string,
+  body: string,
+  button = 'Back to menu',
+): Promise<void> {
   return new Promise((resolve) => {
     const { root, card } = screen(container);
     card.append(el('h1', 'menu-title', title), el('p', 'menu-sub', body));
@@ -1170,7 +1374,7 @@ export function showNotice(container: HTMLElement, title: string, body: string):
       frame.closed();
       resolve();
     };
-    const back = el('button', 'menu-btn primary', 'Back to menu');
+    const back = el('button', 'menu-btn primary', button);
     back.addEventListener('click', dismiss);
     card.appendChild(back);
     const frame = appNav().push('notice', dismiss);

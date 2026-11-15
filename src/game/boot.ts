@@ -189,6 +189,12 @@ export function startPresentation(
     royale?: RoyaleVariant;
     // The Range (CONTEXT.md): the HUD calls no wave, lane or creature.
     range?: boolean;
+    // The end screen's first button: Play again, or Back to the lobby when
+    // the match's private lobby lives on (match_start.lobby, ADR 0036).
+    again?: 'play' | 'lobby';
+    // The match banks points on the ladder (match_start.scores, ADR 0027):
+    // the end screen and the pause menu show where the player stands.
+    scores?: boolean;
   },
 ): Presentation {
   const guide = options.guide ?? 'play';
@@ -220,6 +226,8 @@ export function startPresentation(
     guide,
     options.royale ?? null,
     options.range === true,
+    options.again ?? 'play',
+    options.scores === true,
   );
   // The thumb controls (CONTEXT.md: Thumb stick): a touchscreen playing
   // by the stick, which moves the minimap and the touch bar out of the
