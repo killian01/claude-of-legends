@@ -14,6 +14,7 @@
 // lobby in a band under the bar (ui/invite_card.ts, ADR 0036).
 // The chrome it shares with the signed-in home lives in ui/page.ts.
 
+import { CODE_MAX } from '../game/invite';
 import { rememberPendingJoin, tabStore } from '../game/lobby_memory';
 import { appNav } from '../game/nav';
 import { updateSettings } from '../game/settings';
@@ -844,7 +845,7 @@ export function showLanding(
     const codeField = el('input', 'menu-input pg-code-field');
     codeField.id = 'pg-code-field';
     codeField.type = 'text';
-    codeField.maxLength = 6;
+    codeField.maxLength = CODE_MAX;
     codeField.autocomplete = 'off';
     codeField.setAttribute('autocapitalize', 'characters');
     codeField.spellcheck = false;

@@ -3,7 +3,7 @@
 // sit on a scrim at the foot. Under the row, the join line: a code typed
 // or carried in by an invite link, and Join.
 
-import { normalizeJoinCode } from '../game/invite';
+import { CODE_MAX, normalizeJoinCode } from '../game/invite';
 import type { PlayTile } from './home_tiles';
 import { tileArtUrl } from './home_tiles';
 import { el } from './menu';
@@ -157,7 +157,7 @@ export function buildJoinLine(
   code.id = 'home-join-code';
   label.htmlFor = code.id;
   code.placeholder = 'CODE';
-  code.maxLength = 5;
+  code.maxLength = CODE_MAX;
   code.autocomplete = 'off';
   code.spellcheck = false;
   code.setAttribute('autocapitalize', 'characters');
