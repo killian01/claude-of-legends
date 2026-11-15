@@ -8,7 +8,7 @@ import { RejoinRegistry } from '../server/rejoin';
 
 function dropped(): {
   rejoins: RejoinRegistry;
-  matches: Map<number, { match: Match; abandonedAt: number | null }>;
+  matches: Map<number, { match: Match; abandonedAt: number | null; endedAt: number | null }>;
   unitId: number;
 } {
   const match = new Match(7, [
@@ -19,7 +19,9 @@ function dropped(): {
   const left = match.handleDisconnect(1)!;
   const rejoins = new RejoinRegistry();
   rejoins.reserve(41, { matchId: 3, ...left });
-  const matches = new Map([[3, { match, abandonedAt: 1000 as number | null }]]);
+  const matches = new Map([
+    [3, { match, abandonedAt: 1000 as number | null, endedAt: null as number | null }],
+  ]);
   return { rejoins, matches, unitId: left.unitId };
 }
 
@@ -65,25 +67,20 @@ describe('the classic rejoin', () => {
     expect(entry.match.sim.policies.has(unitId)).toBe(true);
   });
 
-  // A match that ended lingers so its end screen can show: a reload in that
-  // window takes the seat back, and the close at the end of the linger then
-  // tells the new socket and sets it free to queue again.
-  it('takes a seat back in an ended match, and the close lets the new socket go', () => {
-    const { rejoins, matches, unitId } = dropped();
+  // A match that ended lingers so its end screen can show. A new session
+  // (Back to the lobby, a reload on the end screen) is not pulled back into
+  // it: the held seat is spent, and the close at the end of the linger
+  // frees whoever is still on it.
+  it('gives nothing back once the match has a winner', () => {
+    const { rejoins, matches } = dropped();
     const entry = matches.get(3)!;
     entry.match.sim.winner = 1;
+    entry.endedAt = 5000;
 
-    const back = rejoinClassic(rejoins, matches, 41, 9);
-    expect(back?.start).toEqual({ t: 'match_start', selfUnitId: unitId, team: 0 });
-    expect(entry.match.players.get(9)?.unitId).toBe(unitId);
-    expect(entry.abandonedAt).toBeNull();
-
-    const clients = new Map([[9, { matchId: 3 as number | null }]]);
-    const sent: number[] = [];
-    closeMatch({ matches, rejoins, clients, send: (cid) => sent.push(cid) }, 3);
-    expect(sent).toContain(9);
-    expect(clients.get(9)?.matchId).toBeNull();
-    expect(matches.has(3)).toBe(false);
+    expect(rejoinClassic(rejoins, matches, 41, 9)).toBeNull();
+    expect(entry.match.players.has(9)).toBe(false);
+    expect(rejoins.held(41)).toBeUndefined();
+    expect(entry.abandonedAt).toBe(1000);
   });
 
   it('gives nothing back once the linger closed the match, even for a seat held in it', () => {
