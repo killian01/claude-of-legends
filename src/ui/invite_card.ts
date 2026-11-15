@@ -95,6 +95,14 @@ const CSS = `
 @media (max-width: 1120px) {
   .pg-invite { max-width: 620px; }
 }
+/* The band the width of the cards: the words keep the left, and the
+   painting of friends round a table takes the right in full, so the
+   band reads as one picture rather than a box half empty. */
+@media (min-width: 1121px) {
+  .pg-invite::before { left: auto; width: 60%; background-position: 50% 32%; opacity: 0.95; }
+  .pg-invite::after { background: linear-gradient(90deg, #0a1120 0%, #0a1120 40%,
+    rgba(10, 17, 32, 0.6) 58%, rgba(10, 17, 32, 0.12) 100%); }
+}
 /* A phone held sideways: the title on one line, the count on one, the
    field and Join on one row, the links on one line. */
 @media (max-height: 560px) {
