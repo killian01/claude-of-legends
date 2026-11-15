@@ -203,6 +203,8 @@ export interface LobbyInvite {
 }
 
 const NOT_FOUND = 'Lobby not found or full.';
+// What the tab a member's other tab took over from hears.
+const OTHER_TAB = 'You opened this lobby in another tab.';
 const TOO_MANY_LOBBIES = 'Too many private lobbies are open right now. Try again in a bit.';
 const PARTY_TOO_BIG =
   'A party of up to five can queue together; a full lobby starts its own match.';
@@ -517,6 +519,10 @@ export class Matchmaker {
     if (a.kind === 'new') member = addMember(lobby, { clientId, accountId, name, team: a.team });
     else {
       member = a.member;
+      // The tab this one takes over from is told, so its screen closes.
+      if (a.kind === 'rebind' && member.clientId !== null && member.clientId !== clientId) {
+        this.send(member.clientId, { t: 'error', message: OTHER_TAB });
+      }
       member.clientId = clientId;
       if (a.kind === 'seat') member.team = a.team;
     }

@@ -763,6 +763,23 @@ describe('a lobby that outlives its match', () => {
     expect(view(sent.get(22))?.players).toHaveLength(2);
   });
 
+  it('the tab a second socket takes over from is told, once, and its screen closes', () => {
+    const { sent, open, join } = lobbyHarness();
+    const code = open(1, 101, 'host');
+    join(2, 102, 'friend', code);
+    join(11, 101, 'host', code);
+    expect(last(sent.get(1), 'error')).toEqual({
+      t: 'error',
+      message: 'You opened this lobby in another tab.',
+    });
+    expect(view(sent.get(11))).toMatchObject({ host: true });
+    // The new tab joining again tells nobody else.
+    const before = sent.get(1)?.length;
+    join(11, 101, 'host', code);
+    expect(sent.get(1)?.length).toBe(before);
+    expect(last(sent.get(11), 'error')).toBeUndefined();
+  });
+
   it('a playing lobby lives on; an empty one expires; one never played goes when left', () => {
     const left = lobbyHarness();
     const a = left.open(1, 101, 'a');
