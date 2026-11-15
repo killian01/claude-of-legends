@@ -556,15 +556,12 @@ export class Matchmaker {
     this.startSelect(this.takeIntoPlay(lobby, now, 'select'), now, 'lobby');
   }
 
-  // A start the caller refused (the server at capacity): the lobby this
-  // client is in hears why, and stays standing.
+  // A start or a party the caller refused (the server at capacity): the
+  // lobby this client hosts hears why, and stays standing. A non-host's
+  // Start is ignored, refused or not.
   refuseStart(clientId: number, message: string, now: number = Date.now()): void {
-    for (const lobby of this.lobbies.values()) {
-      if (memberOnSocket(lobby, clientId)) {
-        this.broadcastLobby(lobby, now, message);
-        return;
-      }
-    }
+    const lobby = this.lobbyHostedBy(clientId, now);
+    if (lobby) this.broadcastLobby(lobby, now, message);
   }
 
   // The host of an open lobby removes a member by number (never the host,

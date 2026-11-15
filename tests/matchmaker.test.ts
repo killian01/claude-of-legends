@@ -696,6 +696,20 @@ describe('a lobby that outlives its match', () => {
     expect(view(sent.get(2))?.host).toBe(true);
   });
 
+  it("a start refused at a full server is the host's notice, the lobby standing", () => {
+    const { mm, sent, open, join } = lobbyHarness();
+    const code = open(1, 101, 'host');
+    join(2, 102, 'friend', code);
+    const full = 'The server is at capacity, try again in a bit.';
+    // A non-host's Start is ignored, refused or not.
+    mm.refuseStart(2, full, 0);
+    expect(view(sent.get(2))?.notice).toBeUndefined();
+    mm.refuseStart(1, full, 0);
+    expect(view(sent.get(1))?.notice).toBe(full);
+    expect(view(sent.get(2))?.notice).toBe(full);
+    expect(last(sent.get(1), 'error')).toBeUndefined();
+  });
+
   it('a lobby select that loses everyone reopens the lobby and starts no match', () => {
     const { mm, matches, sent, open, join } = lobbyHarness();
     const code = open(1, 101, 'host');
