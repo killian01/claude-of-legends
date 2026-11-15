@@ -90,7 +90,8 @@ export type ClientMsg =
   // landing on the same side of whatever match forms.
   | { t: 'queue_party' }
   // Host only, in an open lobby: remove a member by its number in the
-  // lobby (LobbyPlayer.n); the code refuses that person from then on.
+  // lobby (LobbyPlayer.n); the code refuses that account or Guest from
+  // then on, by its id (ADR 0036).
   | { t: 'lobby_remove'; member: number }
   // Watch a live match from one team's point of view (fog included): the
   // server answers with match_start carrying selfUnitId 0, then streams
