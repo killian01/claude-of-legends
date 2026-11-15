@@ -145,20 +145,40 @@ describe('creating lobbies', () => {
 });
 
 describe('naming', () => {
-  it('allows five successful renames per connection per hour', () => {
+  it('allows five renames per connection per hour', () => {
     const g = new CodeGuard();
-    for (let i = 0; i < NAMES_ALLOWED; i++) {
-      expect(g.mayRename('k', i)).toBe(true);
-      g.renamed('k', i);
-    }
-    expect(g.mayRename('k', 10)).toBe(false);
-    expect(g.mayRename('other', 10)).toBe(true);
-    expect(g.mayRename('k', NAME_WINDOW_MS + 5)).toBe(true);
+    for (let i = 0; i < NAMES_ALLOWED; i++) expect(g.tryRename('k', i)).toBe(true);
+    expect(g.tryRename('k', 10)).toBe(false);
+    expect(g.tryRename('other', 10)).toBe(true);
+    expect(g.tryRename('k', NAME_WINDOW_MS + 5)).toBe(true);
   });
 
-  it('counts only what was renamed, never what was only asked', () => {
+  it('charges a rename when it begins, so six begun at once let only five through', () => {
     const g = new CodeGuard();
-    for (let i = 0; i < 50; i++) expect(g.mayRename('k', i)).toBe(true);
+    // Six requests check the budget before any of them has read its body.
+    const begun = Array.from({ length: 6 }, () => g.tryRename('k', 0));
+    expect(begun.filter((ok) => ok)).toHaveLength(NAMES_ALLOWED);
+    expect(begun[5]).toBe(false);
+  });
+
+  it('gives the slot back when the rename does not happen', () => {
+    const g = new CodeGuard();
+    for (let i = 0; i < NAMES_ALLOWED; i++) expect(g.tryRename('k', i)).toBe(true);
+    expect(g.tryRename('k', 10)).toBe(false);
+    // The last one was refused (a taken name, a failure): its slot comes back.
+    g.refundRename('k', NAMES_ALLOWED - 1);
+    expect(g.tryRename('k', 11)).toBe(true);
+    expect(g.tryRename('k', 12)).toBe(false);
+  });
+
+  it('counts only what was charged, never a refund twice', () => {
+    const g = new CodeGuard();
+    g.refundRename('k', 0);
+    for (let i = 0; i < 50; i++) {
+      expect(g.tryRename('k', i)).toBe(true);
+      g.refundRename('k', i);
+      g.refundRename('k', i);
+    }
   });
 });
 
@@ -167,7 +187,7 @@ describe('memory', () => {
     const g = new CodeGuard();
     g.miss('a', 'AAAAAA', 0);
     g.mayCreate('b', 0, 0);
-    g.renamed('c', 0);
+    g.tryRename('c', 0);
     g.issued('ZZZZZZ', 0);
     expect(g.trackedKeys).toBe(3);
     g.purge(NAME_WINDOW_MS + 1);
