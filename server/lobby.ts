@@ -150,6 +150,11 @@ export function comingBack(m: LobbyMember, now: number): boolean {
   return !m.removed && !isPresent(m) && m.returning && withinGrace(m, now);
 }
 
+// Away within a grace of either kind: back from the match, or dropped.
+export function awayInGrace(m: LobbyMember, now: number): boolean {
+  return !m.removed && !isPresent(m) && withinGrace(m, now);
+}
+
 // Seats taken, on one side or both.
 export function seatedCount(lobby: Lobby, team?: TeamId): number {
   return lobby.members.filter((m) => isSeated(m) && (team === undefined || m.team === team)).length;
@@ -342,7 +347,10 @@ export function rowsOf(lobby: Lobby, recipient: LobbyMember | null, now: number)
   const rows: LobbyPlayer[] = [];
   for (const m of lobby.members) {
     const seated = isSeated(m);
-    if (!seated && !comingBack(m, now)) continue;
+    // Not here but expected: back from the lobby's match, or a socket that
+    // dropped, within its grace. Shown, so whoever waits for them (a host
+    // whose phone slept included) is named.
+    if (!seated && !awayInGrace(m, now)) continue;
     rows.push({
       n: m.n,
       name: m.name,
