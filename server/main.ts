@@ -48,6 +48,7 @@ import { chooseArt, deleteArtFor, generateArt, iconsOf, listArt, splashOf } from
 import { appendExchange, botChat, clearBotChat, windowTurns } from './bot_chats';
 import { fillWithBots, TEAM_SIZE } from './bot_fill';
 import { type BotPageDeps, describeBotPage } from './bot_page';
+import { botSeatsOf } from './bot_record_seats';
 import {
   addEntry,
   getEntry,
@@ -919,37 +920,14 @@ function onMatchReady(forge: boolean) {
     const gentle = gentleTeams(source === 'queue' && !forge, picks);
     const seated = fillWithBots(picks, seed, TEAM_SIZE, pool, gentle);
     const match = new Match(seed, seated);
-    const botSeats = new Map<
-      number,
-      { accountId: number; name: string; botId?: string; version?: number }
-    >();
-    for (const p of seated) {
-      if (p.playbook === undefined) continue;
-      if (p.ownerId !== undefined) {
-        // A pool seat: nobody connected; the unit id is the seat's index in
-        // pick order, as buildMatchSim allocates them.
-        const unitId = match.unitIdOfPick(seated.indexOf(p));
-        if (unitId !== undefined) {
-          botSeats.set(unitId, {
-            accountId: p.ownerId,
-            name: p.name,
-            ...(p.botId !== undefined ? { botId: p.botId } : {}),
-            ...(p.botVersion !== undefined ? { version: p.botVersion } : {}),
-          });
-        }
-        continue;
-      }
-      const c = clients.get(p.clientId);
-      const player = match.players.get(p.clientId);
-      if (c && player) {
-        botSeats.set(player.unitId, {
-          accountId: c.accountId,
-          name: p.name,
-          ...(p.botId !== undefined ? { botId: p.botId } : {}),
-          ...(p.botVersion !== undefined ? { version: p.botVersion } : {}),
-        });
-      }
-    }
+    // The bot seats played for an account, read off the picks, so a seat
+    // whose player left during the select keeps its bot's Record
+    // (server/bot_record_seats.ts).
+    const botSeats = botSeatsOf(
+      seated,
+      (i) => match.unitIdOfPick(i),
+      (cid) => clients.get(cid)?.accountId,
+    );
     // A seat whose player left during the select is its bot's from the
     // first tick (server/select_absent.ts).
     const gone = leaveAbsentToBots(match, id, picks, (cid) => clients.has(cid), rejoins);
