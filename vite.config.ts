@@ -1,6 +1,7 @@
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
+import { configDefaults } from 'vitest/config';
 import { offlineApiNotice, offlineApiReply } from './scripts/dev_api_fallback.ts';
 import { precompressDir } from './scripts/precompress.ts';
 import { STAMPS_FILE, stampTable } from './scripts/public_stamps.ts';
@@ -129,6 +130,9 @@ export default defineConfig(({ mode }) => {
       // slow rather than wrong. The bound is here to catch a hang, not to
       // measure the sim.
       testTimeout: 60_000,
+      // A worktree under .claude/ is another checkout of this repository:
+      // its tests belong to its own run, not this one.
+      exclude: [...configDefaults.exclude, '.claude/**'],
     },
   };
 });
