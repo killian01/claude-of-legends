@@ -1378,6 +1378,7 @@ export class Hud {
   // No account behind this match: a Guest's (ADR 0024) or a visitor's
   // practice.
   private readonly guest: boolean;
+  private readonly matchScores: boolean;
   // The two feedback boxes (ui/feedback_box.ts) and whether this match has
   // already had its line: one is asked for, not one per place it is asked.
   private readonly endFeedback: FeedbackBox;
@@ -1480,8 +1481,14 @@ export class Hud {
     royale: RoyaleVariant | null = null,
     // The Range (CONTEXT.md): no waves, no lanes, no creatures to call.
     range = false,
+    // The end screen's first button: Play again, or Back to the lobby when
+    // the match's private lobby lives on (ADR 0036). Either is 'again'.
+    again: 'play' | 'lobby' = 'play',
+    // The match banks points on the ladder (match_start.scores, ADR 0027).
+    scores = false,
   ) {
     this.range = range;
+    this.matchScores = scores;
     this.world = world;
     this.selfId = selfId;
     this.selfTeam = selfTeam;
@@ -2123,11 +2130,16 @@ export class Hud {
     this.endSub = el('div', 'hud-end-sub');
     this.endRating = el('div', 'hud-end-rating');
     this.endStats = el('div', 'hud-end-card');
-    const endAgain = el('button', 'hud-menu-btn primary', 'Play again');
+    const endAgain = el(
+      'button',
+      'hud-menu-btn primary',
+      again === 'lobby' ? 'Back to the lobby' : 'Play again',
+    );
     endAgain.addEventListener('click', () => {
       // The rematch may reuse the last pick and skip the lock-in click, so
       // this click is the gesture that takes the next match fullscreen.
-      requestGameFullscreen();
+      // The lobby's own Start match asks for it when the next one begins.
+      if (again === 'play') requestGameFullscreen();
       onExit('again');
     });
     const endReturn = el('button', 'hud-menu-btn', 'Return to menu');
@@ -2817,11 +2829,12 @@ export class Hud {
     if (open) this.pauseLadder.refresh();
   }
 
-  // Whether this match scores on the ladder (ADR 0027), as far as the HUD
-  // can tell: it has banked points, or a Guest plays it online, since the
-  // public queue is the only match a Guest can be in.
+  // Whether this match scores on the ladder (ADR 0027): match_start said
+  // so, or it has banked points. A Guest's battle royale or Thornfray
+  // scores from its first match, which the planet's start does not say.
   private scores(): boolean {
-    return this.pointsSeen || (this.guest && this.mode === 'online');
+    if (this.pointsSeen || this.matchScores) return true;
+    return this.guest && this.mode === 'online' && this.royaleVariant !== null;
   }
 
   isChatOpen(): boolean {

@@ -1,6 +1,7 @@
 // What a Guest's way in from the landing leads to (src/game/guest_route.ts,
 // ui/landing_modes.ts LandingPlay): every door the landing draws routes to
-// its own loop, and only the 5v5's reaches the public queue. main.ts's
+// its own loop, and only the 5v5's reaches the public queue; a private
+// lobby is opened anew or joined by its code (ADR 0036). main.ts's
 // playAsGuest runs the loop the route names, and nothing else decides it.
 
 import { readFileSync } from 'node:fs';
@@ -23,6 +24,11 @@ describe("a Guest's way in", () => {
     ]);
   });
 
+  it('opens a private lobby, or joins one by its code', () => {
+    expect(guestLoop({ to: 'lobby' })).toEqual({ loop: 'lobby', code: null });
+    expect(guestLoop({ to: 'lobby', code: 'KMNPQR' })).toEqual({ loop: 'lobby', code: 'KMNPQR' });
+  });
+
   it('sends the gold button and the ladder to Respawn in Solo', () => {
     expect(guestLoop(PLAY_NOW.play)).toEqual({ loop: 'royale', variant: 'respawn', solo: true });
   });
@@ -33,6 +39,8 @@ describe("a Guest's way in", () => {
       { to: 'royale', variant: 'one_life', solo: true },
       { to: 'thornfray' },
       { to: 'classic' },
+      { to: 'lobby' },
+      { to: 'lobby', code: 'KMNPQ' },
     ];
     for (const play of plays) {
       expect(guestLoop(play).loop === 'queue').toBe(play.to === 'classic');
@@ -52,11 +60,39 @@ describe("a Guest's way in", () => {
     expect(body).toContain('const route = guestLoop(play);');
     expect(body).toContain("if (route.loop === 'thornfray') return thornfrayLoop(true);");
     expect(body).not.toContain('play.to');
+    // Every session of the loop is a Guest's, Back to the lobby included,
+    // and the way after a match is flow.ts's.
+    expect(body).toContain('runOnline(choice, true, back)');
+    expect(body).toContain('nextStep(end.action, choice.mode, end.lobby)');
     // The home's Thornfray tile runs the same loop for an account.
     expect(main).toContain("} else if (choice.mode === 'thornfray') {");
     expect(main).toContain('action = await thornfrayLoop(false);');
     // The dev server's address door is gone: the landing and the home are
     // the Thornfray's doors now.
     expect(main).not.toContain("has('thornfray')");
+  });
+
+  it('wires Start and the party on every lobby screen, a join as much as a create', () => {
+    // A host comes back through a join, and the host can pass to a member
+    // who joined: the server ignores whoever does not host.
+    const main = readFileSync(path.join(ROOT, 'src/main.ts'), 'utf8');
+    const at = main.indexOf('const openLobby = (): LobbyController =>');
+    expect(at).toBeGreaterThan(0);
+    const body = main.slice(at, main.indexOf('});', at));
+    expect(body).toContain("onStart: () => send({ t: 'start_lobby' })");
+    expect(body).toContain("onQueueParty: () => send({ t: 'queue_party' })");
+    expect(body).toContain("onRemove: (member) => send({ t: 'lobby_remove', member })");
+    expect(body).toContain("onRejoin: () => send({ t: 'hello' })");
+    expect(main).toContain(
+      "const lobbySession = choice.mode === 'create' || choice.mode === 'join';",
+    );
+  });
+
+  it('never sends a Guest the server did not answer from a lobby door into the offline match', () => {
+    const main = readFileSync(path.join(ROOT, 'src/main.ts'), 'utf8');
+    expect(main).toContain("if (guestLoop(entry.play).loop === 'lobby') {");
+    expect(main).toContain(
+      "await showNotice(container, 'Server unreachable', GUEST_NO_ANSWER, 'Back');",
+    );
   });
 });

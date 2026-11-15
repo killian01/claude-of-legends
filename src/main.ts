@@ -15,12 +15,19 @@ import { creatureNowFrom, riseCreatureNow } from './game/creature_now';
 import { measureMovement } from './game/cursor_lock';
 import { drawnQuality } from './game/drawn_quality';
 import { FIRST_FRAME_WAIT_MS, untilDrawn } from './game/first_frame';
-import { nextStep, type PostMatchAction } from './game/flow';
+import { nextStep, type OnlineEnd, type PostMatchAction } from './game/flow';
 import { registerForgedAssets } from './game/forged_visuals';
 import { frameRate, watchFrames } from './game/frame_rate';
 import { requestGameFullscreen } from './game/fullscreen';
 import { guestLoop } from './game/guest_route';
-import { parseJoinCode } from './game/invite';
+import { normalizeJoinCode, parseJoinCode } from './game/invite';
+import {
+  forgetLobby,
+  readLobby,
+  rememberLobby,
+  tabStore,
+  takePendingJoin,
+} from './game/lobby_memory';
 import { appNav, installNav, sectionFromHash } from './game/nav';
 import { loadPlanetRecords, planetWalk } from './game/planet_records';
 import { type PracticeBots, practiceOpponents } from './game/practice_bots';
@@ -109,6 +116,13 @@ import { preloadBackdrop } from './ui/home_backdrop';
 import { HOME_SECTION_KEYS, type HomeChoice, showHome } from './ui/home_screen';
 import { showLanding } from './ui/landing';
 import type { LandingPlay } from './ui/landing_modes';
+import {
+  GUEST_NO_ANSWER,
+  LOBBY_BACK_TO,
+  LOBBY_DISCONNECTED,
+  LOBBY_GONE_ERROR,
+  lobbyClosedWords,
+} from './ui/lobby_view';
 import {
   type BotPick,
   type CommunityPick,
@@ -881,16 +895,19 @@ async function runSpectate(matchId: number, team: TeamId): Promise<PostMatchActi
 }
 
 // One online session (queue or lobby, select, match); resolves with the
-// exit the player chose, or 'menu' when the connection story ends it.
-// `guest` when a Guest plays it (ADR 0024).
-async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAction> {
+// exit the player chose, or 'menu' when the connection story ends it, and
+// the private lobby the session belongs to when it lives on (ADR 0036).
+// `guest` when a Guest plays it (ADR 0024). `returning` when a join goes
+// back into a lobby the player was in (Back to the lobby, a reload),
+// which words a closed lobby as theirs.
+async function runOnline(choice: HomeChoice, guest = false, returning = false): Promise<OnlineEnd> {
   const orchard = await loadOrchardRecords();
-  if (!orchard) return 'menu';
+  if (!orchard) return { action: 'menu', lobby: null };
   // The model downloads while the queue and the select run, so that by the
   // first snapshot it is usually on hand; the card at the match's door
   // says how far it is when it is not, and reports a failure there.
   loadStarOrchardModel(orchard, () => {}).catch(() => undefined);
-  return new Promise((resolve) => {
+  return new Promise<OnlineEnd>((resolve) => {
     const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const ws = new WebSocket(`${proto}://${window.location.host}/ws`);
     // The map's walkability grid, for the own champion's prediction
@@ -926,6 +943,22 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
     let opened = false;
     let matchEnded = false;
     let finished = false;
+    // The private lobby this session belongs to (ADR 0036): every lobby
+    // message names it, and match_start names the lobby the seat came from
+    // (or none). Kept in the tab while the session is open, so a reload
+    // comes back to it (game/lobby_memory.ts).
+    let lobbyCode: string | null = null;
+    const lobbySession = choice.mode === 'create' || choice.mode === 'join';
+    const keepLobby = (code: string | null): void => {
+      lobbyCode = code;
+      if (code === null) forgetLobby(tabStore());
+      else rememberLobby(tabStore(), code);
+    };
+    // A match_start has come: from here no lobby message reopens the lobby
+    // screen over the match. hello is sent once by itself when the lobby
+    // first says the seat in its running match is held.
+    let matchStarted = false;
+    let seatAsked = false;
 
     const clearMenus = (): void => {
       queueUi?.remove();
@@ -942,6 +975,8 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
     const finish = (action: PostMatchAction): void => {
       if (finished) return;
       finished = true;
+      // Leaving for the menu leaves the lobby too: a reload goes home.
+      if (action === 'menu') forgetLobby(tabStore());
       ends?.report();
       ends?.dispose();
       ends = null;
@@ -957,7 +992,7 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
         ws.close();
       }
       layer.closed();
-      resolve(action);
+      resolve({ action, lobby: lobbyCode });
     };
     // The whole session is one layer (src/game/nav.ts). In the queue or
     // the lobby, Back is the Cancel or Leave button. From champion select
@@ -998,6 +1033,10 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
         // a drop-in and a rejoin are told it too; a coach seat hears where
         // its bot plays, with no walk (ADR 0026).
         guide: world.coach ? 'coach' : 'play',
+        // Both from match_start: Back to the lobby when the match's lobby
+        // lives on (ADR 0036), and the ladder when the match scores.
+        again: world.lobby !== null ? 'lobby' : 'play',
+        scores: world.scores,
       });
       pres = opened;
       ends = matchEndReporter('online', () => ({ winner: world.winner, seconds: world.time }));
@@ -1093,26 +1132,37 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
           () => ws.send(JSON.stringify({ t: 'start_now' })),
           () => finish('menu'),
         );
-      } else if (choice.mode === 'create') {
-        ws.send(JSON.stringify({ t: 'create_lobby' }));
-        lobbyUi = showLobby(
-          container,
-          () => ws.send(JSON.stringify({ t: 'start_lobby' })),
-          () => finish('menu'),
-          (team) => ws.send(JSON.stringify({ t: 'lobby_team', team })),
-          () => ws.send(JSON.stringify({ t: 'queue_party' })),
-        );
-      } else if (choice.mode === 'join' && choice.code) {
-        ws.send(JSON.stringify({ t: 'join_lobby', code: choice.code }));
-        lobbyUi = showLobby(
-          container,
-          () => undefined,
-          () => finish('menu'),
-          (team) => ws.send(JSON.stringify({ t: 'lobby_team', team })),
-          () => undefined,
-        );
+      } else if (lobbySession) {
+        // Opened or joined alike (ADR 0036): the host can pass, and a host
+        // comes back through a join, so every lobby screen is wired for
+        // Start and the party; the server ignores whoever does not host.
+        if (choice.mode === 'join') {
+          if (!choice.code) {
+            finish('menu');
+            return;
+          }
+          ws.send(JSON.stringify({ t: 'join_lobby', code: choice.code }));
+        } else {
+          ws.send(JSON.stringify({ t: 'create_lobby' }));
+        }
+        lobbyUi = openLobby();
       }
     });
+
+    // The lobby screen, with every member's way to act on it.
+    const openLobby = (): LobbyController =>
+      showLobby(container, {
+        onStart: () => send({ t: 'start_lobby' }),
+        onLeave: () => finish('menu'),
+        onPickTeam: (team) => send({ t: 'lobby_team', team }),
+        onQueueParty: () => send({ t: 'queue_party' }),
+        onRemove: (member) => send({ t: 'lobby_remove', member }),
+        onRejoin: () => send({ t: 'hello' }),
+        guest,
+      });
+    const send = (msg: ClientMsg): void => {
+      if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
+    };
 
     ws.addEventListener('message', (event) => {
       if (finished) return;
@@ -1126,20 +1176,43 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
         case 'queue_status':
           // A lobby that queued as a party gets queue updates: swap the
           // lobby screen for the queue screen the first time one lands.
+          // Its Cancel goes back to the lobby rather than home.
           if (lobbyUi && !queueUi) {
             lobbyUi.remove();
             lobbyUi = null;
             queueUi = showQueue(
               container,
               () => ws.send(JSON.stringify({ t: 'start_now' })),
-              () => finish('menu'),
+              () => finish(lobbyCode !== null ? 'again' : 'menu'),
+              lobbyCode !== null ? LOBBY_BACK_TO : 'Cancel',
             );
           }
           queueUi?.setStatus(msg.count, msg.needed, msg.startsIn, msg.ready);
           break;
-        case 'lobby':
-          lobbyUi?.update(msg.code, msg.host, msg.team, msg.players);
+        case 'lobby': {
+          keepLobby(normalizeJoinCode(msg.code) ?? lobbyCode);
+          // Once a match is on its way, the lobby's word is only its code.
+          if (matchStarted) break;
+          // Back from a select that started no match (or a queue the lobby
+          // left): the select closes and the lobby screen comes back.
+          if (!lobbyUi) {
+            queueUi?.remove();
+            queueUi = null;
+            selectUi?.remove();
+            selectUi = null;
+            lastSelectUpdate = null;
+            layer.unguard();
+            lobbyUi = openLobby();
+          }
+          lobbyUi.update(msg);
+          // The seat in the lobby's running match is held: taken back once
+          // by itself; the screen's Rejoin the match asks again.
+          if (msg.seat && msg.phase === 'match' && !seatAsked) {
+            seatAsked = true;
+            send({ t: 'hello' });
+          }
           break;
+        }
         case 'select_start': {
           clearMenus();
           layer.guard(() => undefined);
@@ -1193,10 +1266,12 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
               ([own, community, collection]) => openSelect(own, community, [], collection),
             );
           } else {
-            // The classic select offers the account's bots (ADR 0013).
-            void Promise.all([fetchBots(), collectionState]).then(([bots, collection]) =>
-              openSelect([], [], bots, collection),
-            );
+            // The classic select offers the account's bots (ADR 0013); a
+            // Guest has none to ask for.
+            void Promise.all([
+              guest ? Promise.resolve<BotPick[]>([]) : fetchBots(),
+              collectionState,
+            ]).then(([bots, collection]) => openSelect([], [], bots, collection));
           }
           break;
         }
@@ -1239,6 +1314,11 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
           forgedIds = Object.keys(msg.forgedAssets ?? {});
           droppedIn = msg.dropIn === true;
           world.applyServer(msg);
+          matchStarted = true;
+          // The lobby the seat came from, which lives on after the match
+          // (ADR 0036), or none: the end screen's first button and the way
+          // after it read the same code.
+          keepLobby(world.lobby);
           // A rejoin can arrive while the queue or lobby screen is still up.
           clearMenus();
           selectUi?.remove();
@@ -1308,7 +1388,18 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
           // session: tear down first, then explain over the home screen.
           console.warn('server:', msg.message);
           const message = msg.message;
-          if (!pres) {
+          if (!pres && choice.mode === 'join' && message === LOBBY_GONE_ERROR) {
+            // The lobby is gone (ADR 0036): said as the reader's own lobby
+            // when they were coming back to it, as a friend's otherwise.
+            clearMenus();
+            selectUi?.remove();
+            selectUi = null;
+            forgetLobby(tabStore());
+            const words = lobbyClosedWords(returning, guest);
+            void showNotice(container, words.title, words.line, words.button).then(() =>
+              finish('menu'),
+            );
+          } else if (!pres) {
             clearMenus();
             selectUi?.remove();
             selectUi = null;
@@ -1338,6 +1429,14 @@ async function runOnline(choice: HomeChoice, guest = false): Promise<PostMatchAc
           'Server unreachable',
           'Could not reach the game server. Start it in another terminal with "pnpm server" ' +
             '(keep it running), restart "pnpm dev" if it predates vite.config.ts, then try again.',
+        ).then(() => finish('menu'));
+      } else if (lobbySession || lobbyCode !== null) {
+        // The invite link goes back in, to the lobby or the held seat.
+        void showNotice(
+          container,
+          'Disconnected',
+          LOBBY_DISCONNECTED,
+          guest ? 'Back' : undefined,
         ).then(() => finish('menu'));
       } else {
         void showNotice(
@@ -1926,15 +2025,39 @@ async function thornfrayLoop(guest: boolean): Promise<PostMatchAction> {
 
 // What a Guest plays from the landing (ui/landing_modes.ts LandingPlay,
 // routed by game/guest_route.ts): the battle royale, which Play now
-// launches, a Thornfray, or the 5v5's public queue, Play again queueing
-// again. Resolves with the exit that ended it.
-async function playAsGuest(guestName: string, play: LandingPlay): Promise<PostMatchAction> {
+// launches, a Thornfray, the 5v5's public queue, Play again queueing
+// again, or a private lobby (ADR 0036), opened anew or joined by its code,
+// lobby to match and back to the lobby. Every session of the loop is a
+// Guest's. `returning` when the code is a lobby the tab was in. Resolves
+// with the exit that ended it.
+async function playAsGuest(
+  guestName: string,
+  play: LandingPlay,
+  returning = false,
+): Promise<PostMatchAction> {
   const route = guestLoop(play);
   if (route.loop === 'royale') return royaleLoop(route.variant, true, route.solo);
   if (route.loop === 'thornfray') return thornfrayLoop(true);
-  let action: PostMatchAction = 'again';
-  while (action === 'again') action = await runOnline({ name: guestName, mode: 'queue' }, true);
-  return action;
+  let choice: HomeChoice =
+    route.loop === 'queue'
+      ? { name: guestName, mode: 'queue' }
+      : route.code === null
+        ? { name: guestName, mode: 'create' }
+        : { name: guestName, mode: 'join', code: route.code };
+  let back = returning;
+  for (;;) {
+    const end = await runOnline(choice, true, back);
+    const step = nextStep(end.action, choice.mode, end.lobby);
+    if (step === 'lobby' && end.lobby !== null) {
+      choice = { name: guestName, mode: 'join', code: end.lobby };
+      back = true;
+    } else if (step === 'requeue') {
+      choice = { name: guestName, mode: 'queue' };
+      back = false;
+    } else {
+      return end.action;
+    }
+  }
 }
 
 // Battle royales back to back (game/royale_flow.ts): the quick pick once,
@@ -1981,9 +2104,10 @@ async function boot(): Promise<void> {
   // The section the address names (#ladder), read before the navigation
   // takes the address over: a reload in a section lands back in it.
   let startSection = sectionFromHash(window.location.hash, HOME_SECTION_KEYS);
-  // An invite link (?join=CODE) deep-links into the friend's lobby: with a
-  // stored name we go straight in; a first-time visitor gets the home
-  // screen with the code prefilled. Consumed once, so reloads stay home.
+  // An invite link (?join=CODE) deep-links into the friend's lobby: an
+  // account goes straight in; a visitor without one gets the invitation on
+  // the first landing of this page load. Taken off the address, so a
+  // reload does not ask again.
   let joinCode = parseJoinCode(window.location.search);
   if (joinCode !== null) window.history.replaceState(null, '', window.location.pathname);
   // From here on the browser's history mirrors the screens (ADR 0020):
@@ -2008,13 +2132,26 @@ async function boot(): Promise<void> {
   // A successful one arrives with a session already open, so only the
   // failures ever have a screen to land on: the entry page shows them.
   let discordResult = takeDiscordResult();
+  // An invitation put down before the Discord round trip (ADR 0036) is
+  // picked up on the way back, once: with a session it takes the account
+  // into the lobby, without one the landing offers it again.
+  if (discordResult !== null && joinCode === null) {
+    joinCode = takePendingJoin(tabStore(), Date.now());
+  }
+  // With no code from a link or a sign-in, the lobby this tab was in (a
+  // reload, or the reload a deploy asks for) is gone back into directly.
+  let rememberedLobby = joinCode === null ? readLobby(tabStore()) : null;
   // An account made through Discord arrives as a flag on the address;
   // the form's own signup reports itself (src/ui/auth.ts).
   if (discordResult === 'created' || discordResult === 'joined') trackStep('account');
   let confirmed = takeConfirmResult();
   // The app loop: home, one match, back, forever on the same page. 'again'
-  // replays the same offline pick or re-enters the public queue (flow.ts).
+  // replays the same offline pick, goes back into the match's private
+  // lobby, or re-enters the public queue (flow.ts).
   let next: HomeChoice | null = null;
+  // The next join goes back into a lobby the player was in (Back to the
+  // lobby, a reload), for the words a closed one is told in.
+  let returning = false;
   // A replay opened from the Academy returns there, on the same bot.
   let reopenAcademy: { botId: string } | null = null;
   let lastPick: OfflinePick | null = null;
@@ -2028,28 +2165,49 @@ async function boot(): Promise<void> {
   warmChampionArt();
 
   for (;;) {
-    // The way in (ADR 0006): everything but the offline practice match
-    // needs an account, so the sign-in screen stands in front of the home
-    // screen rather than beside it. An invite code survives the detour and
-    // lands in the join field on the other side.
+    // The way in (ADR 0006): what needs an account stands behind the
+    // landing. An invite code is the first landing's invitation (ADR
+    // 0036), and a sign-in from it carries the code to the other side.
     if (account === null) {
-      const entry = await showLanding(container, discordResult);
+      // A Guest whose tab was in a lobby goes back into it, no landing.
+      if (rememberedLobby !== null) {
+        const code = rememberedLobby;
+        rememberedLobby = null;
+        const guestName = await openGuest();
+        if (guestName === null) {
+          await showNotice(container, 'Server unreachable', GUEST_NO_ANSWER, 'Back');
+          continue;
+        }
+        await playAsGuest(guestName, { to: 'lobby', code }, true);
+        continue;
+      }
+      const invite = joinCode;
+      joinCode = null;
+      const entry = await showLanding(container, discordResult, invite);
       if (entry.kind === 'account') {
         // Signing in starts the page over rather than swapping the home
         // screen in over the landing (game/reentry.ts): the session
         // cookie is set by now, so the boot on the other side comes back
         // with the account and skips this screen. Nothing below runs.
-        reenterAsAccount({ joinCode, confirmed });
+        reenterAsAccount({ joinCode: entry.join, confirmed });
         return;
       }
-      // The public queue as a Guest (ADR 0024), on the ladder from the
-      // first points (ADR 0027): Play again queues again, anything else is
-      // back to the way in. No server to hand out a Guest falls through to
-      // the offline match below, which needs none.
+      // Shown once: the next landing is the plain one.
+      discordResult = null;
+      // A Guest's way in (ADR 0024), on the ladder from the first points
+      // (ADR 0027): Play again plays again, a private lobby goes back to
+      // its lobby (ADR 0036), anything else is back to the way in. No
+      // server to hand out a Guest falls through to the offline match
+      // below, which needs none, except from a lobby door.
       if (entry.kind === 'guest') {
         const guestName = await openGuest();
         if (guestName !== null) {
           await playAsGuest(guestName, entry.play);
+          continue;
+        }
+        // A private lobby needs the server: never the offline match.
+        if (guestLoop(entry.play).loop === 'lobby') {
+          await showNotice(container, 'Server unreachable', GUEST_NO_ANSWER, 'Back');
           continue;
         }
       }
@@ -2065,6 +2223,11 @@ async function boot(): Promise<void> {
       continue;
     }
     if (joinCode !== null) next = { name: account.name, mode: 'join', code: joinCode };
+    else if (rememberedLobby !== null) {
+      next = { name: account.name, mode: 'join', code: rememberedLobby };
+      returning = true;
+    }
+    rememberedLobby = null;
     const choice: HomeChoice =
       next ??
       (await showHome(
@@ -2082,7 +2245,10 @@ async function boot(): Promise<void> {
     discordResult = null;
     joinCode = null;
     next = null;
+    const back = returning;
+    returning = false;
     let action: PostMatchAction;
+    let lobby: string | null = null;
     if (choice.mode === 'practice') {
       // A Forge test drive arrives with its draft; a plain practice run
       // goes through champion select as always.
@@ -2115,12 +2281,17 @@ async function boot(): Promise<void> {
     } else if (choice.mode === 'thornfray') {
       action = await thornfrayLoop(false);
     } else {
-      action = await runOnline(choice);
+      ({ action, lobby } = await runOnline(choice, false, back));
     }
     reopenAcademy = choice.academy ?? null;
-    const step = nextStep(action, choice.mode);
+    const step = nextStep(action, choice.mode, lobby);
     if (step === 'replay') {
       next = choice;
+    } else if (step === 'lobby' && lobby !== null) {
+      // Back to the lobby: every member comes back through a join, on
+      // their side, the opener hosting again (ADR 0036).
+      next = { name: choice.name, mode: 'join', code: lobby };
+      returning = true;
     } else if (step === 'requeue') {
       // Play again re-enters the queue the match came from.
       next = {
