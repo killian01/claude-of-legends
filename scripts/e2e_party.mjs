@@ -14,8 +14,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function clickButton(page, text) {
   const ok = await page.evaluate((t) => {
-    const b = [...document.querySelectorAll('button')].find((e) =>
-      (e.textContent || '').trim().startsWith(t),
+    const b = [...document.querySelectorAll('button')].find(
+      (e) => e.offsetParent !== null && (e.textContent || '').trim().startsWith(t),
     );
     if (!b || b.disabled) return false;
     b.click();
@@ -33,20 +33,21 @@ async function waitFor(page, fnBody, label, timeout = 40000) {
   throw new Error(`timeout waiting for: ${label}`);
 }
 
+// A button on screen: hidden ones (Start for whoever does not host) do not count.
 const findBtn = (t) =>
-  `[...document.querySelectorAll('button')].some((e) => (e.textContent || '').trim().startsWith('${t}'))`;
+  `[...document.querySelectorAll('button')].some((e) => e.offsetParent !== null && (e.textContent || '').trim().startsWith('${t}'))`;
 const LOBBY_UP = `/^[A-Z]{5,6}$/.test(document.querySelector('.menu-code')?.textContent ?? '')`;
 
 async function newContextPage(browser) {
   const ctx = await browser.createBrowserContext();
   const page = await ctx.newPage();
-  await page.setViewport({ width: 1500, height: 900 });
+  await page.setViewport({ width: 1100, height: 660 });
   return page;
 }
 
 async function newIsolatedPage(browser, name) {
   const page = await newContextPage(browser);
-  await page.goto(URL, { waitUntil: 'load' });
+  await page.goto(`${URL}/?quality=low`, { waitUntil: 'load' });
   await signIn(page, e2eName(name));
   return page;
 }
@@ -62,10 +63,10 @@ const run = async () => {
       '--use-angle=swiftshader',
       '--enable-unsafe-swiftshader',
       '--ignore-gpu-blocklist',
-      '--window-size=1500,900',
+      '--window-size=1100,660',
       '--mute-audio',
     ],
-    defaultViewport: { width: 1500, height: 900 },
+    defaultViewport: { width: 1100, height: 660 },
   });
   const errors = [];
 
@@ -79,7 +80,7 @@ const run = async () => {
 
   const friend = await newIsolatedPage(browser, 'wing');
   friend.on('pageerror', (e) => errors.push(`friend: ${e}`));
-  await friend.goto(`${URL}/?join=${code}`, { waitUntil: 'load' });
+  await friend.goto(`${URL}/?join=${code}&quality=low`, { waitUntil: 'load' });
   await waitFor(
     friend,
     `document.body.textContent.includes('chief') && document.body.textContent.includes('wing')`,
@@ -89,7 +90,7 @@ const run = async () => {
   // A Guest with no account, through the invitation card.
   const guest = await newContextPage(browser);
   guest.on('pageerror', (e) => errors.push(`guest: ${e}`));
-  await guest.goto(`${URL}/?join=${code}`, { waitUntil: 'load' });
+  await guest.goto(`${URL}/?join=${code}&quality=low`, { waitUntil: 'load' });
   await waitFor(guest, findBtn('Join the lobby'), 'the invitation card');
   await clickButton(guest, 'Join the lobby');
   await waitFor(
@@ -139,34 +140,41 @@ const run = async () => {
   ]) {
     await waitFor(page, findBtn('Lock in'), `${label} in select`);
   }
-  // Same side: every name under the same team column on the host's view.
+  // Same side: on the host's view, its own column (headed '(you)': the
+  // select names a seat's own row 'You', ADR 0026) holds the other two.
   const sameSide = await host.evaluate((g) => {
     const blue = document.querySelector('.menu-team.blue')?.textContent ?? '';
     const red = document.querySelector('.menu-team.red')?.textContent ?? '';
-    const all = (t) => t.includes('chief') && t.includes('wing') && t.includes(g);
+    const all = (t) => t.includes('(you)') && t.includes('wing') && t.includes(g);
     return all(blue) || all(red);
   }, guestName);
   if (!sameSide) throw new Error('party split across teams in select');
   console.log('select shows the party on one side');
 
-  // Three different champions, the Guest's from its own collection.
+  // The friend's and the Guest's tabs close during the select (bots take
+  // their seats, held for them): only the host draws the match, since three
+  // software renders at once outgrow the machine these runs share.
+  await friend.close();
+  await guest.close();
   await host.evaluate(() => document.querySelectorAll('button.menu-champ')[0].click());
   await clickButton(host, 'Lock in');
-  await friend.evaluate(() => document.querySelectorAll('button.menu-champ')[1].click());
-  await clickButton(friend, 'Lock in');
-  await guest.evaluate(() => {
-    const free = [...document.querySelectorAll('button.menu-champ:not(.locked)')];
-    (free[2] ?? free[free.length - 1]).click();
-  });
-  await clickButton(guest, 'Lock in');
-  for (const [label, page] of [
-    ['host', host],
-    ['friend', friend],
-    ['guest', guest],
-  ]) {
-    await waitFor(page, `!!document.querySelector('.hud')`, `${label} HUD`);
-  }
+  await waitFor(host, `!!document.querySelector('.hud')`, 'host HUD');
   console.log('party match running');
+
+  // The party's lobby lives on behind its queue match (ADR 0036): once the
+  // host leaves and the match is reaped, the old link opens the lobby again.
+  await host.keyboard.press('Escape');
+  await sleep(300);
+  await clickButton(host, 'Leave match');
+  await sleep(65000);
+  await host.goto(`${URL}/?join=${code}&quality=low`, { waitUntil: 'load' });
+  await waitFor(
+    host,
+    `/^[A-Z]{5,6}$/.test(document.querySelector('.menu-code')?.textContent ?? '')`,
+    'the party lobby open again',
+    60000,
+  );
+  console.log('the party lobby lives on after its match');
 
   if (errors.length > 0) {
     console.log('PAGE ERRORS:', errors.join('\n'));
