@@ -122,6 +122,7 @@ import {
   LOBBY_DISCONNECTED,
   LOBBY_GONE_ERROR,
   lobbyClosedWords,
+  lobbyVerdict,
   sessionBackAction,
 } from './ui/lobby_view';
 import {
@@ -1411,10 +1412,16 @@ async function runOnline(choice: HomeChoice, guest = false, returning = false): 
             clearMenus();
             selectUi?.remove();
             selectUi = null;
-            void showNotice(container, 'Notice', message).then(() => finish('menu'));
+            // Removed or expired: the tab forgets the lobby before the
+            // notice, so a reload while it is up goes home.
+            if (lobbyVerdict(message)) forgetLobby(tabStore());
+            // A Guest's way out lands on the landing.
+            void showNotice(container, 'Notice', message, guest ? 'Back' : undefined).then(() =>
+              finish('menu'),
+            );
           } else {
             finish('menu');
-            void showNotice(container, 'Notice', message);
+            void showNotice(container, 'Notice', message, guest ? 'Back' : undefined);
           }
           break;
         }
@@ -1437,6 +1444,7 @@ async function runOnline(choice: HomeChoice, guest = false, returning = false): 
           'Server unreachable',
           'Could not reach the game server. Start it in another terminal with "pnpm server" ' +
             '(keep it running), restart "pnpm dev" if it predates vite.config.ts, then try again.',
+          guest ? 'Back' : undefined,
         ).then(() => finish('menu'));
       } else if (lobbySession || lobbyCode !== null) {
         // The invite link goes back in, to the lobby or the held seat.

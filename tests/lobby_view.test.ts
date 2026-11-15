@@ -2,6 +2,7 @@
 // their tags, who sees Remove and Change, the status line in every phase,
 // the hint for a handed-out name, and the words for a lobby that closed.
 
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { LobbyPlayer } from '../src/net/protocol';
 import {
@@ -11,14 +12,17 @@ import {
   LOBBY_AWAY_TAG,
   LOBBY_BACK_TO,
   LOBBY_DISCONNECTED,
+  LOBBY_EXPIRED_ERROR,
   LOBBY_GONE_ERROR,
   LOBBY_NOTICE_MS,
+  LOBBY_REMOVED_ERROR,
   type LobbyMsg,
   lobbyClosedWords,
   lobbyHint,
   lobbyNameValue,
   lobbyRows,
   lobbyStatus,
+  lobbyVerdict,
   partyFits,
   seatedOn,
   sessionBackAction,
@@ -234,5 +238,19 @@ describe('the words around a lobby session', () => {
     expect(sessionBackAction(true, null)).toBe('menu');
     expect(sessionBackAction(false, 'KMNPQR')).toBe('menu');
     expect(sessionBackAction(false, null)).toBe('menu');
+  });
+
+  // The server's verdicts that end the reader's place in the lobby: the tab
+  // forgets the code before the notice, so a reload goes home.
+  it("knows the verdicts that end a place in the lobby, in the server's own words", () => {
+    expect(LOBBY_REMOVED_ERROR).toBe('You were removed from the lobby.');
+    expect(LOBBY_EXPIRED_ERROR).toBe('Lobby expired.');
+    expect(lobbyVerdict(LOBBY_REMOVED_ERROR)).toBe(true);
+    expect(lobbyVerdict(LOBBY_EXPIRED_ERROR)).toBe(true);
+    expect(lobbyVerdict(LOBBY_GONE_ERROR)).toBe(false);
+    expect(lobbyVerdict('Too many private lobbies opened from this connection.')).toBe(false);
+    const server = readFileSync(new URL('../server/matchmaker.ts', import.meta.url), 'utf8');
+    expect(server).toContain(`message: '${LOBBY_REMOVED_ERROR}'`);
+    expect(server).toContain(`message: '${LOBBY_EXPIRED_ERROR}'`);
   });
 });

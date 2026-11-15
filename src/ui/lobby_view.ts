@@ -30,6 +30,11 @@ export const LOBBY_NOTICE_MS = 8000;
 // The server's answer for a code it cannot seat (server/matchmaker.ts),
 // which a join session turns into lobbyClosedWords.
 export const LOBBY_GONE_ERROR = 'Lobby not found or full.';
+// The server's verdicts that end the reader's place in a lobby that may
+// still stand (server/matchmaker.ts): the host removed them, or the lobby
+// expired. The tab forgets the code before the notice shows.
+export const LOBBY_REMOVED_ERROR = 'You were removed from the lobby.';
+export const LOBBY_EXPIRED_ERROR = 'Lobby expired.';
 export const LOBBY_DISCONNECTED =
   'Disconnected from the lobby. Open your invite link again to come back.';
 // A Guest's way into a lobby when the server hands out no Guest.
@@ -87,6 +92,11 @@ export function partyFits(players: readonly LobbyPlayer[]): boolean {
 // with the code); anywhere else, what Leave does.
 export function sessionBackAction(partyQueue: boolean, lobbyCode: string | null): 'again' | 'menu' {
   return partyQueue && lobbyCode !== null ? 'again' : 'menu';
+}
+
+// A server error that ends the reader's place in the lobby.
+export function lobbyVerdict(message: string): boolean {
+  return message === LOBBY_REMOVED_ERROR || message === LOBBY_EXPIRED_ERROR;
 }
 
 // Start match and Queue as a party: the host of an open lobby.
