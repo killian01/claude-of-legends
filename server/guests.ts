@@ -130,18 +130,14 @@ export function gentleTeams(
   return ([0, 1] as const).filter((team) => !people.some((p) => p.team === team));
 }
 
-// What a Guest may not ask for on the socket: lobbies, the Forge queue,
-// spectating. Everything else is the public queue, the select, and the
-// match itself.
+// What a Guest may not ask for on the socket: the Forge queue and
+// spectating. Everything else is the public queue, the private lobby
+// (ADR 0036: its own match is never rated, and a party it sends into the
+// queue is a queue match like any other), the select, and the match itself.
 export function guestRefused(msg: { t: string; forge?: unknown }): boolean {
   switch (msg.t) {
     case 'queue':
       return msg.forge === true;
-    case 'create_lobby':
-    case 'join_lobby':
-    case 'lobby_team':
-    case 'queue_party':
-    case 'start_lobby':
     case 'spectate':
       return true;
     default:

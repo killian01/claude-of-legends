@@ -281,8 +281,9 @@ interface Client {
   // with it finds anything.
   accountId: number;
   name: string;
-  // A Guest (ADR 0024): the public queue and the match it lands in, and
-  // nothing else.
+  // A Guest (ADR 0024): the public queue, the private lobby (ADR 0036)
+  // and the match it lands in; spectating and the Forge queue need an
+  // account.
   guest: boolean;
   // For the seat report (server/seat_report.ts, PRIVACY.md): the country
   // Cloudflare names for the connection, whether the browser says it is a
@@ -2999,8 +3000,9 @@ wss.on('connection', (ws, req) => {
     const atCapacity = matches.size + royale.load() + thornfray.load() >= MAX_MATCHES;
     const refuseCapacity = (): void =>
       send(id, { t: 'error', message: 'The server is at capacity, try again in a bit.' });
-    // A Guest has the public queue and the match it lands in (ADR 0024);
-    // every other door on the socket still needs an account.
+    // A Guest has the public queue, the private lobby and the match it
+    // lands in (ADR 0024, ADR 0036); spectating and the Forge queue still
+    // need an account.
     if (client.guest && guestRefused(msg)) {
       send(id, { t: 'error', message: 'This needs an account.' });
       return;
