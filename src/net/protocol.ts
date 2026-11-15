@@ -89,6 +89,9 @@ export type ClientMsg =
   // Host only: the whole lobby enters the public queue as one party,
   // landing on the same side of whatever match forms.
   | { t: 'queue_party' }
+  // Host only, in an open lobby: remove a member by its number in the
+  // lobby (LobbyPlayer.n); the code refuses that person from then on.
+  | { t: 'lobby_remove'; member: number }
   // Watch a live match from one team's point of view (fog included): the
   // server answers with match_start carrying selfUnitId 0, then streams
   // that team's snapshots with self null.
@@ -413,14 +416,20 @@ export interface SelectClaim {
   locked: boolean;
 }
 
-// One person of a private lobby (ADR 0036): names are not unique (two
-// Guests can share one), so who hosts is a flag on the row, not a name.
-// playing marks a member seated in the lobby's running select, queue or
+// One person of a private lobby (ADR 0036). Names are not unique (two
+// Guests can share one), so the row carries what a name cannot: n, the
+// member's number in this lobby (stable for the lobby's life, never an
+// account id, what the host's Remove names); host, who hosts; you, the
+// recipient's own row; back, coming back from the lobby's last match and
+// not here yet; playing, seated in the lobby's running queue, select or
 // match, shown to whoever waits in the lobby for the next one.
 export interface LobbyPlayer {
+  n: number;
   name: string;
   team: TeamId;
   host?: true;
+  you?: true;
+  back?: true;
   playing?: true;
 }
 
@@ -461,19 +470,22 @@ export type ServerMsg =
       startsIn: number | null;
       ready: boolean;
     }
-  // team is the recipient's own side; players carry everyone's. playing:
-  // the lobby's members are in its select, queue or match, and the
-  // recipient waits for the next one (ADR 0036). notice: a refusal that
-  // leaves the lobby standing (Start at a full server, a party with a
-  // member still locked out), shown on the lobby screen; 'error' stays for
-  // a lobby that is gone, full or expired, which ends the session.
+  // team is the recipient's own side; players carry everyone's. phase:
+  // the lobby's members are in its queue, select or match, and the
+  // recipient waits for the next one (ADR 0036). seat: the recipient's own
+  // seat in that select or match is held for them, and hello takes it
+  // back. notice: a refusal that leaves the lobby standing (Start at a full
+  // server, a party with a member still locked out), shown on the lobby
+  // screen; 'error' stays for a lobby that is gone, full or expired, which
+  // ends the session.
   | {
       t: 'lobby';
       code: string;
       host: boolean;
       team: TeamId;
       players: LobbyPlayer[];
-      playing?: true;
+      phase?: 'queue' | 'select' | 'match';
+      seat?: true;
       notice?: string;
     }
   // forge marks a Forge-queue select, so the client also offers the

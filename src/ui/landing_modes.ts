@@ -92,7 +92,10 @@ export function accountCardWords(own: LandingOwn | null): { title: string; line:
 export type LandingPlay =
   | { to: 'royale'; variant: RoyaleVariant; solo?: true }
   | { to: 'thornfray' }
-  | { to: 'classic' };
+  | { to: 'classic' }
+  // A private lobby (ADR 0036): opened anew without a code, joined with one
+  // (an invitation, or a code typed on the landing).
+  | { to: 'lobby'; code?: string };
 
 // The way in that needs nothing: what its button says, and what the
 // landing resolves with when it is pressed (ui/landing.ts). The Play now

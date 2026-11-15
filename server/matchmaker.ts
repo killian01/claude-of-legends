@@ -392,7 +392,7 @@ export class Matchmaker {
         code: lobby.code,
         host: p.clientId === lobby.hostId,
         team: p.team,
-        players: lobby.players.map((x) => ({ name: x.name, team: x.team })),
+        players: lobby.players.map((x, i) => ({ n: i + 1, name: x.name, team: x.team })),
       });
     }
   }

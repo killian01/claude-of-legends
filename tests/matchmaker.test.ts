@@ -97,8 +97,8 @@ describe('matchmaker', () => {
     mm.joinLobby(2, 'friend', code);
     const joined = last(sent.get(2), 'lobby');
     expect(joined?.t === 'lobby' && joined.players).toEqual([
-      { name: 'host', team: 0 },
-      { name: 'friend', team: 1 },
+      { n: 1, name: 'host', team: 0 },
+      { n: 2, name: 'friend', team: 1 },
     ]);
 
     mm.joinLobby(3, 'lost', 'ZZZZZ');
@@ -129,8 +129,8 @@ describe('matchmaker', () => {
     expect(view?.t === 'lobby' && view.team).toBe(0);
     const hostView = last(sent.get(1), 'lobby');
     expect(hostView?.t === 'lobby' && hostView.players).toEqual([
-      { name: 'host', team: 0 },
-      { name: 'friend', team: 0 },
+      { n: 1, name: 'host', team: 0 },
+      { n: 2, name: 'friend', team: 0 },
     ]);
     // Junk team values are ignored.
     mm.setLobbyTeam(2, 5);

@@ -15,7 +15,7 @@ describe('lobby invite links', () => {
     expect(parseJoinCode('')).toBeNull();
     expect(parseJoinCode('?join=')).toBeNull();
     expect(parseJoinCode('?join=ABC')).toBeNull();
-    expect(parseJoinCode('?join=ABCDEF')).toBeNull();
+    expect(parseJoinCode('?join=ABCDEFG')).toBeNull();
     expect(parseJoinCode('?join=AB1DE')).toBeNull();
     expect(parseJoinCode('?other=ABCDE')).toBeNull();
   });
@@ -32,6 +32,12 @@ describe('lobby invite links', () => {
     expect(normalizeJoinCode('')).toBeNull();
     expect(normalizeJoinCode('abc')).toBeNull();
     expect(normalizeJoinCode('AB1DE')).toBeNull();
-    expect(normalizeJoinCode('abcdef')).toBeNull();
+    expect(normalizeJoinCode('abcdefg')).toBeNull();
+  });
+
+  it('reads the six letters the server issues, and five from an older link', () => {
+    expect(parseJoinCode('?join=kmnpqr')).toBe('KMNPQR');
+    expect(normalizeJoinCode(' kmnpqr ')).toBe('KMNPQR');
+    expect(parseJoinCode('?join=KMNPQ')).toBe('KMNPQ');
   });
 });

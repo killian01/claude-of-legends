@@ -572,8 +572,10 @@ function ensureCss(): void {
 }
 
 export type LandingResult =
-  // Signed in: everything the server allows is now reachable.
-  | { kind: 'account'; account: AuthedAccount }
+  // Signed in: everything the server allows is now reachable. join: the
+  // invite code still to honour on the other side of the sign-in (ADR
+  // 0036), null when there is none or the invitation was turned down.
+  | { kind: 'account'; account: AuthedAccount; join: string | null }
   // Chose a match as a Guest (ADR 0024), on the ladder from its first
   // points (ADR 0027): the battle royale on one of its rule sets (ADR
   // 0031), or the 5v5's public queue.
@@ -581,10 +583,12 @@ export type LandingResult =
 
 // `discordResult` is what a round trip through Discord came back with, if
 // this load came from one; the credential panel is the only thing on this
-// page that has anything to say about it (ADR 0009).
+// page that has anything to say about it (ADR 0009). `invite` is the code
+// of an invite link this load came from, for the invitation (ADR 0036).
 export function showLanding(
   container: HTMLElement,
   discordResult: DiscordResult | null = null,
+  invite: string | null = null,
 ): Promise<LandingResult> {
   ensureCss();
   // The landing's one request (src/net/landing.ts), asked once as the page
@@ -769,7 +773,7 @@ export function showLanding(
     const authControl: AuthFormControl = { register: () => {} };
     formPanel.appendChild(
       buildAuthForm(
-        (account) => finish({ kind: 'account', account }),
+        (account) => finish({ kind: 'account', account, join: invite }),
         discordResult,
         'login',
         authControl,
