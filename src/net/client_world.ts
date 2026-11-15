@@ -4,6 +4,7 @@
 // server scopes snapshots to this client's team before sending.
 // Transport-agnostic: give it a send function, feed it server messages.
 
+import { normalizeJoinCode } from '../game/invite';
 import { ChampionRegistry } from '../sim/champion_registry';
 import { specForRank } from '../sim/combat/casting';
 import type { Status } from '../sim/combat/status';
@@ -229,6 +230,12 @@ export class ClientWorld implements IWorld {
   // A coach seat (ADR 0013): the orders translate into coach orders and
   // the hands-on verbs are refused here already; the bot plays by itself.
   coach = false;
+  // The private lobby this seat came from, which lives on after the match
+  // (ADR 0036), and whether the match banks points on the ladder (ADR
+  // 0027): both from the latest match_start, a rejoin's included. The end
+  // screen's first button and its ladder box read them.
+  lobby: string | null = null;
+  scores = false;
   private scoreRows: readonly ScoreRow[] = [];
   private objAt: number | null = null;
   private rings: RingClock[] = [];
@@ -612,6 +619,8 @@ export class ClientWorld implements IWorld {
       this.selfTeam = msg.team;
       this.teamCount = msg.teams ?? TWO_TEAMS;
       this.coach = msg.coach === true;
+      this.lobby = typeof msg.lobby === 'string' ? normalizeJoinCode(msg.lobby) : null;
+      this.scores = msg.scores === true;
       // Forge queue: the match's forged definitions land here, before any
       // snapshot can name one of them.
       if (msg.forged) this.registerForged(msg.forged);
