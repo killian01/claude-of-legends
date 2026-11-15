@@ -413,9 +413,15 @@ export interface SelectClaim {
   locked: boolean;
 }
 
+// One person of a private lobby (ADR 0036): names are not unique (two
+// Guests can share one), so who hosts is a flag on the row, not a name.
+// playing marks a member seated in the lobby's running select, queue or
+// match, shown to whoever waits in the lobby for the next one.
 export interface LobbyPlayer {
   name: string;
   team: TeamId;
+  host?: true;
+  playing?: true;
 }
 
 // Why a seat earned points (server/points.ts, ADR 0027): a minion or camp
@@ -455,8 +461,21 @@ export type ServerMsg =
       startsIn: number | null;
       ready: boolean;
     }
-  // team is the recipient's own side; players carry everyone's.
-  | { t: 'lobby'; code: string; host: boolean; team: TeamId; players: LobbyPlayer[] }
+  // team is the recipient's own side; players carry everyone's. playing:
+  // the lobby's members are in its select, queue or match, and the
+  // recipient waits for the next one (ADR 0036). notice: a refusal that
+  // leaves the lobby standing (Start at a full server, a party with a
+  // member still locked out), shown on the lobby screen; 'error' stays for
+  // a lobby that is gone, full or expired, which ends the session.
+  | {
+      t: 'lobby';
+      code: string;
+      host: boolean;
+      team: TeamId;
+      players: LobbyPlayer[];
+      playing?: true;
+      notice?: string;
+    }
   // forge marks a Forge-queue select, so the client also offers the
   // account's own finalized forged champions. self is the recipient's own
   // index in players.
@@ -497,6 +516,14 @@ export type ServerMsg =
       royale?: { v: RoyaleVariant; seats: number; c?: 3 | 5; tf?: BoutStart };
       forged?: ForgedChampionDef[];
       forgedAssets?: Record<string, ForgedMatchAssets>;
+      // The private lobby this seat came from, which lives on after the
+      // match (ADR 0036): a lobby's own match, or a party it sent into the
+      // Ranked queue. The end screen's first button goes back to it. Sent
+      // again on a rejoin; absent for a queued seat, a drop-in, a spectator.
+      lobby?: string;
+      // The match banks points on the ladder (ADR 0027): the classic public
+      // queue's. Absent for a private lobby's match and the Forge queue's.
+      scores?: true;
     }
   | {
       t: 'snap';
