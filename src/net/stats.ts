@@ -183,7 +183,29 @@ export function beforeSend<T extends StatsPayload>(_type: string, payload: T): T
   const out = { ...payload };
   if (typeof out.url === 'string') out.url = scrubUrl(out.url);
   if (typeof out.referrer === 'string') out.referrer = scrubUrl(out.referrer);
+  if (!out.referrer && typeof out.url === 'string') {
+    const site = linkSite(out.url);
+    if (site !== null) out.referrer = `https://${site}/`;
+  }
   return out;
+}
+
+// The site a link was posted on when it says so itself: an app that opens
+// links without a referrer (an assistant's answer, a chat) often tags them
+// with its own domain in utm_source. Read as the referrer, so the counter
+// files the visit under that site rather than under no source at all. A
+// utm_source that is a plain word (an announcement's tag) is no site.
+const SITE_SHAPE = /^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/;
+
+export function linkSite(url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url, 'http://relative.invalid');
+  } catch {
+    return null;
+  }
+  const source = (parsed.searchParams.get('utm_source') ?? '').trim().toLowerCase();
+  return SITE_SHAPE.test(source) ? source : null;
 }
 
 export interface Tracker {

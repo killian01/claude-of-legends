@@ -142,6 +142,28 @@ describe('what an address is reduced to', () => {
   it('leaves a record with no address alone', () => {
     expect(beforeSend('identify', { id: 'x' })).toEqual({ id: 'x' });
   });
+
+  it('names the site a link came from when the app sent no referrer but its utm_source', () => {
+    const out = beforeSend('event', {
+      url: 'https://claudeoflegends.com/?utm_source=chatgpt.com',
+      referrer: '',
+    });
+    expect(out.url).toBe('https://claudeoflegends.com/?utm_source=chatgpt.com');
+    expect(out.referrer).toBe('https://chatgpt.com/');
+  });
+
+  it('keeps a real referrer, and a utm_source that is not a site, as they are', () => {
+    const real = beforeSend('event', {
+      url: 'https://claudeoflegends.com/?utm_source=chatgpt.com',
+      referrer: 'https://www.google.com/',
+    });
+    expect(real.referrer).toBe('https://www.google.com/');
+    const word = beforeSend('event', {
+      url: 'https://claudeoflegends.com/?utm_source=discord',
+      referrer: '',
+    });
+    expect(word.referrer).toBe('');
+  });
 });
 
 describe('the events', () => {

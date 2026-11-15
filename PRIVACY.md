@@ -99,7 +99,10 @@ it, and everything it takes away before a record leaves your browser.
   (`scrubUrl`), so a link somebody sent you is not in the record.
 - The page that linked you here, as your browser reports it in the
   referrer header, which is how a Reddit thread can be told from a search
-  result. Its query is stripped the same way.
+  result. Its query is stripped the same way. When your browser sent none
+  but the link names the site it was posted on (`?utm_source=` with a
+  domain, as an assistant's answer tags its links), that site stands in
+  for it, so the visit is filed under it rather than under no source.
 - Four events, each at most once per page: `stayed` (still here 30
   seconds later), `played` (a match started in this browser: practice, test
   drive or live game, never a replay, which is watching rather than

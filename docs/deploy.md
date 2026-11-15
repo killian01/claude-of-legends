@@ -250,7 +250,10 @@ Where they came from is the dashboard's own Referrers panel: a search engine
 sends its domain, so Google, Bing and DuckDuckGo appear by name, and an
 empty referrer is a direct visit, a bookmark, or a link opened inside an app
 like Discord, which sends none. Tag what you post (`?utm_source=reddit`) and
-the Reports, then UTM panel separates them for good.
+the Reports, then UTM panel separates them for good. A `utm_source` that is a
+domain, as an assistant's answer tags its links (`?utm_source=chatgpt.com`),
+stands in for a missing referrer (`beforeSend`), so such visits land in the
+Referrers panel and the Channels' AI line rather than under Unknown.
 
 Your own browser is a visitor like any other, which on a quiet day is most of
 the count. Open the site once with `?stats=off` and it stops being counted, on
