@@ -118,7 +118,7 @@ type LobbyPlayPhase = 'queue' | 'select' | 'match';
 // lobby's ten and its phase while its members play; closed (unknown,
 // expired, gone: one answer); or limited, when the connection asked too
 // many wrong codes and nothing was looked up. A full lobby is open with
-// players at seats.
+// players at seats, and never full for a reader who is its member.
 export type LandingInvite =
   | {
       open: true;
@@ -126,6 +126,9 @@ export type LandingInvite =
       players: number;
       seats: number;
       phase?: LobbyPlayPhase;
+      // The reader is a remembered member of this lobby, not removed: it
+      // is never full for them, since their way back is always let in.
+      member?: true;
     }
   | { open: false; limited?: true };
 
@@ -136,6 +139,8 @@ export interface InviteLookup {
   // back to their own lobby never is).
   limited(code: string): boolean;
   find(code: string): { host: string; players: number; phase?: LobbyPlayPhase } | null;
+  // Whether the reader is a remembered member of this lobby.
+  member(code: string): boolean;
   // Charges a lookup that found nothing: the code, or null for a join
   // that is not one.
   miss(code: string | null): void;
@@ -162,6 +167,7 @@ export function landingInvite(join: unknown, lookup: InviteLookup): LandingInvit
     players: found.players,
     seats: LOBBY_SEATS,
     ...(found.phase !== undefined ? { phase: found.phase } : {}),
+    ...(lookup.member(code) ? { member: true as const } : {}),
   };
 }
 
@@ -184,6 +190,7 @@ export function guardedLookup(
   return {
     limited: (code) => guard.limited(key, now, lobbies.remembers(code, reader)),
     find: (code) => lobbies.lobbyInvite(code),
+    member: (code) => lobbies.remembers(code, reader),
     miss: (code) => guard.miss(key, code, now),
   };
 }
@@ -197,6 +204,7 @@ function inviteOut(invite: LandingInvite): LandingInvite {
     players: invite.players,
     seats: invite.seats,
     ...(invite.phase !== undefined ? { phase: invite.phase } : {}),
+    ...(invite.member ? { member: true as const } : {}),
   };
 }
 

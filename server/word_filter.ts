@@ -8,13 +8,13 @@
 
 // Substring terms: blocked wherever they appear, since padding a slur
 // with letters is the oldest trick. Keep this list to terms with no
-// innocent containing word.
+// innocent containing word, short of the few named in INNOCENT_HOSTS; a
+// term that lives inside many ordinary words (spic in spicy, despicable,
+// auspicious) belongs with the word terms instead.
 const SUBSTRING_TERMS: readonly string[] = [
   'nigger',
   'nigga',
   'faggot',
-  'kike',
-  'spic',
   'wetback',
   'chink',
   'tranny',
@@ -22,9 +22,18 @@ const SUBSTRING_TERMS: readonly string[] = [
   'porchmonkey',
 ];
 
+// The ordinary words that hold a substring term, read past before the
+// substring scan, so they pass while the term padded any other way does
+// not.
+const INNOCENT_HOSTS: readonly string[] = ['snigger', 'chinkapin', 'chinking', 'chinked'];
+
 // Whole-word terms: blocked only as words, because they live inside
 // innocent ones (Scunthorpe holds classes about this).
 const WORD_TERMS: readonly string[] = [
+  'spic',
+  'spics',
+  'kike',
+  'kikes',
   'fuck',
   'fucker',
   'motherfucker',
@@ -81,7 +90,9 @@ function squeeze(text: string): string {
 // inside an innocent one (the Scunthorpe rule) never trips it.
 export function findBlockedWord(texts: readonly string[]): string | null {
   for (const text of texts) {
-    const squeezedAll = squeeze(text);
+    let squeezedAll = squeeze(text);
+    // A separator in the host's place, so the letters around it never join.
+    for (const host of INNOCENT_HOSTS) squeezedAll = squeezedAll.split(host).join('|');
     for (const term of SUBSTRING_TERMS) {
       if (squeezedAll.includes(term)) return term;
     }

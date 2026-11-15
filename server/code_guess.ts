@@ -162,19 +162,26 @@ export class CodeGuard {
     return true;
   }
 
-  // Whether this connection may change a Guest's name once more.
-  mayRename(key: string, now: number): boolean {
-    const st = this.keys.get(key);
-    if (!st) return true;
-    this.trim(st, now);
-    return st.names.length < NAMES_ALLOWED;
-  }
-
-  // A successful Guest rename from this connection.
-  renamed(key: string, now: number): void {
+  // Whether this connection may change a Guest's name once more; an
+  // allowed rename is charged here, in the same step as the check, so
+  // renames begun together cannot all pass before any is charged. The
+  // caller gives the slot back with refundRename when the rename does
+  // not happen.
+  tryRename(key: string, now: number): boolean {
     const st = this.touch(key);
     this.trim(st, now);
+    if (st.names.length >= NAMES_ALLOWED) return false;
     st.names.push(now);
+    return true;
+  }
+
+  // Gives back the slot tryRename charged at this time, for a rename that
+  // was refused or failed.
+  refundRename(key: string, at: number): void {
+    const st = this.keys.get(key);
+    if (!st) return;
+    const i = st.names.lastIndexOf(at);
+    if (i >= 0) st.names.splice(i, 1);
   }
 
   // Drops whatever ran out, and every connection left with nothing.

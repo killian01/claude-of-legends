@@ -763,6 +763,23 @@ describe('a lobby that outlives its match', () => {
     expect(view(sent.get(22))?.players).toHaveLength(2);
   });
 
+  it('the tab a second socket takes over from is told, once, and its screen closes', () => {
+    const { sent, open, join } = lobbyHarness();
+    const code = open(1, 101, 'host');
+    join(2, 102, 'friend', code);
+    join(11, 101, 'host', code);
+    expect(last(sent.get(1), 'error')).toEqual({
+      t: 'error',
+      message: 'You opened this lobby in another tab.',
+    });
+    expect(view(sent.get(11))).toMatchObject({ host: true });
+    // The new tab joining again tells nobody else.
+    const before = sent.get(1)?.length;
+    join(11, 101, 'host', code);
+    expect(sent.get(1)?.length).toBe(before);
+    expect(last(sent.get(11), 'error')).toBeUndefined();
+  });
+
   it('a playing lobby lives on; an empty one expires; one never played goes when left', () => {
     const left = lobbyHarness();
     const a = left.open(1, 101, 'a');
@@ -898,6 +915,30 @@ describe('a lobby that outlives its match', () => {
     expect(mm.remembers(code, 103)).toBe(true);
   });
 
+  it('a removed id stays refused however many others join and leave', () => {
+    const { mm, open, join } = lobbyHarness();
+    const code = open(1, 101, 'host');
+    join(2, 102, 'friend', code);
+    mm.removeMember(1, 2);
+    for (let i = 0; i < 25; i++) {
+      expect(join(100 + i, 1000 + i, `p${i}`, code)).toBe('joined');
+      mm.removeEverywhere(100 + i, 0, 'leave');
+    }
+    expect(join(22, 102, 'friend', code)).toBe('refused');
+  });
+
+  it("a removed member's name is no longer held by the lobby", () => {
+    const { mm, sent, open, join } = lobbyHarness();
+    const code = open(1, 101, 'host');
+    join(2, 102, 'friend', code);
+    mm.removeMember(1, 2);
+    // Renaming the removed account reaches no lobby: nothing of theirs is kept.
+    const before = sent.get(1)?.length;
+    mm.renameLive(102, 'Ash');
+    expect(sent.get(1)?.length).toBe(before);
+    expect(mm.lobbyInvite(code)?.players).toBe(1);
+  });
+
   it('follows a Guest renamed or retired into an account', () => {
     const { mm, sent, open, join } = lobbyHarness();
     const code = open(1, -5, 'Wanderer 0005');
@@ -926,6 +967,39 @@ describe('a lobby that outlives its match', () => {
     expect(join(4, 104, 'd', a.toLowerCase())).toBe('joined');
   });
 
+  it('a walk-out finds its member by the match socket, after a Guest retired into an account', () => {
+    const { mm, sent, code, join } = played();
+    join(3, 103, 'late', code);
+    // The friend registers in another tab mid-match: the member is
+    // remembered under the new id, but socket 2 still answers to the old.
+    mm.renameMember(102, 77);
+    mm.leftMatch(2, 102, 1);
+    expect(view(sent.get(3))?.players.map((p) => p.n)).toEqual([1, 3]);
+    // Without its match socket, the account still finds a member.
+    mm.leftMatch(999, 101, 1);
+    expect(view(sent.get(3))?.players.map((p) => p.n)).toEqual([3]);
+  });
+
+  it('a reload takes a held seat back by account, from a socket that never joined the lobby', () => {
+    const { mm, sent, code, join } = played();
+    join(3, 103, 'late', code);
+    // The friend's match socket drops; the reloaded tab's hello comes
+    // before its join_lobby, so socket 22 is not in the lobby yet.
+    mm.removeEverywhere(2, 0, 'drop');
+    mm.enteredMatch(22, 102, 1);
+    expect(view(sent.get(3))?.players.find((p) => p.n === 2)).toMatchObject({ playing: true });
+    // Socket 22 plays the seat now: its leave gives the seat up.
+    mm.removeEverywhere(22, 0, 'leave');
+    expect(view(sent.get(3))?.players.map((p) => p.n)).toEqual([1, 3]);
+    // Another match's id never finds the member by account.
+    const other = played();
+    other.join(3, 103, 'late', other.code);
+    other.mm.removeEverywhere(2, 0, 'drop');
+    other.mm.enteredMatch(22, 102, 99);
+    other.mm.removeEverywhere(22, 0, 'leave');
+    expect(view(other.sent.get(3))?.players.map((p) => p.n)).toEqual([1, 2, 3]);
+  });
+
   it('a held seat goes back into the match, and a walk-out gives it up', () => {
     const { mm, sent, code, join } = played();
     join(3, 103, 'late', code);
@@ -937,7 +1011,7 @@ describe('a lobby that outlives its match', () => {
     mm.enteredMatch(22, 102, 1);
     expect(view(sent.get(3))?.players.map((p) => p.playing ?? false)).toEqual([true, true, false]);
     // The opener walks out for good.
-    mm.leftMatch(101, 1);
+    mm.leftMatch(1, 101, 1);
     expect(view(sent.get(3))?.players.map((p) => p.n)).toEqual([2, 3]);
     mm.matchOver(1, 1000);
     // The friend who played is waited for, and hosts through the wait as

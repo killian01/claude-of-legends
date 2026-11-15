@@ -30,6 +30,7 @@ import {
   forgetOldest,
   hostOf,
   isPresent,
+  isRemoved,
   LOBBY_SIDE,
   type Lobby,
   type LobbyMember,
@@ -40,6 +41,7 @@ import {
   mergeAccounts,
   notePresence,
   openLobby,
+  removeFromLobby,
   reopen,
   returningCount,
   seatedCount,
@@ -203,6 +205,8 @@ export interface LobbyInvite {
 }
 
 const NOT_FOUND = 'Lobby not found or full.';
+// What the tab a member's other tab took over from hears.
+const OTHER_TAB = 'You opened this lobby in another tab.';
 const TOO_MANY_LOBBIES = 'Too many private lobbies are open right now. Try again in a bit.';
 const PARTY_TOO_BIG =
   'A party of up to five can queue together; a full lobby starts its own match.';
@@ -517,6 +521,10 @@ export class Matchmaker {
     if (a.kind === 'new') member = addMember(lobby, { clientId, accountId, name, team: a.team });
     else {
       member = a.member;
+      // The tab this one takes over from is told, so its screen closes.
+      if (a.kind === 'rebind' && member.clientId !== null && member.clientId !== clientId) {
+        this.send(member.clientId, { t: 'error', message: OTHER_TAB });
+      }
       member.clientId = clientId;
       if (a.kind === 'seat') member.team = a.team;
     }
@@ -565,19 +573,17 @@ export class Matchmaker {
   }
 
   // The host of an open lobby removes a member by number (never the host,
-  // never the opener): forgotten from the rows, told if present, and the
-  // code refuses that account from then on.
+  // never the opener): dropped from the lobby, told if present, and only
+  // their account or Guest id is kept, on a bounded list the code refuses
+  // (server/lobby.ts removeFromLobby).
   removeMember(clientId: number, n: unknown, now: number = Date.now()): void {
     if (typeof n !== 'number') return;
     const lobby = this.lobbyHostedBy(clientId, now);
     if (!lobby) return;
-    const target = lobby.members.find((m) => m.n === n && !m.removed);
+    const target = lobby.members.find((m) => m.n === n);
     if (!target || target === lobby.members[0] || target.clientId === clientId) return;
     const socket = target.clientId;
-    target.removed = true;
-    target.clientId = null;
-    target.awayUntil = null;
-    target.returning = false;
+    removeFromLobby(lobby, target);
     if (socket !== null) {
       this.send(socket, { t: 'error', message: 'You were removed from the lobby.' });
     }
@@ -614,7 +620,7 @@ export class Matchmaker {
             ? memberOfAccount(lobby, accountId)
             : undefined;
       }
-      if (!member?.inPlay || member.removed) continue;
+      if (!member?.inPlay) continue;
       if (member.clientId === clientId) member.clientId = null;
       member.inPlay = true;
       member.playClientId = clientId;
@@ -623,12 +629,21 @@ export class Matchmaker {
     }
   }
 
-  // An account walked out of a lobby's match: its seat there is given up,
-  // and it waits for the next one if it is in the lobby.
-  leftMatch(accountId: number, matchId: number, now: number = Date.now()): void {
+  // A socket walked out of a lobby's match: its seat there is given up,
+  // and it waits for the next one if it is in the lobby. The member is
+  // found by the socket that plays, else by the account (a Guest retired
+  // into an account mid-match still plays on a socket under the old id).
+  leftMatch(
+    clientId: number,
+    accountId: number | null,
+    matchId: number,
+    now: number = Date.now(),
+  ): void {
     for (const lobby of this.lobbies.values()) {
       if (lobby.phase !== 'match' || lobby.matchId !== matchId) continue;
-      const member = memberOfAccount(lobby, accountId);
+      const member =
+        lobby.members.find((m) => m.inPlay && m.playClientId === clientId) ??
+        memberOfAccount(lobby, accountId);
       if (!member?.inPlay) continue;
       member.inPlay = false;
       member.playClientId = null;
@@ -641,10 +656,14 @@ export class Matchmaker {
   renameMember(fromAccountId: number, toAccountId: number, now: number = Date.now()): void {
     for (const lobby of this.lobbies.values()) {
       if (!mergeAccounts(lobby, fromAccountId, toAccountId)) continue;
+      // A member whose other id the host removed goes too, told if present.
       const kept = memberOfAccount(lobby, toAccountId);
-      if (kept?.removed && kept.clientId !== null) {
-        this.send(kept.clientId, { t: 'error', message: 'You were removed from the lobby.' });
-        kept.clientId = null;
+      if (kept && kept !== lobby.members[0] && isRemoved(lobby, toAccountId)) {
+        const socket = kept.clientId;
+        removeFromLobby(lobby, kept);
+        if (socket !== null) {
+          this.send(socket, { t: 'error', message: 'You were removed from the lobby.' });
+        }
       }
       notePresence(lobby, now);
       this.broadcastLobby(lobby, now);
@@ -675,12 +694,12 @@ export class Matchmaker {
     };
   }
 
-  // Whether this account is a remembered member of this lobby, not
-  // removed: its way back is never charged nor refused as a wrong code.
+  // Whether this account is a remembered member of this lobby (a removed
+  // one is no longer a member): its way back is never charged nor refused
+  // as a wrong code.
   remembers(code: string, accountId: number | null): boolean {
     const lobby = this.lobbies.get(String(code).toUpperCase());
-    const member = lobby ? memberOfAccount(lobby, accountId) : undefined;
-    return member !== undefined && !member.removed;
+    return lobby !== undefined && memberOfAccount(lobby, accountId) !== undefined;
   }
 
   // Lobbies opened from this connection key whose opener is in them now,

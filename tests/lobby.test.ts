@@ -13,6 +13,7 @@ import {
   LOBBY_IDLE_MS,
   LOBBY_MEMORY,
   LOBBY_PLAY_GUARD_MS,
+  LOBBY_REMOVED,
   LOBBY_TTL_MS,
   type Lobby,
   type LobbyMember,
@@ -20,6 +21,7 @@ import {
   mergeAccounts,
   openLobby,
   RETURN_GRACE_MS,
+  removeFromLobby,
   reopen,
   returningCount,
   seatedCount,
@@ -70,10 +72,9 @@ describe('who is the same person', () => {
 
   it('refuses an account the host removed, whatever socket it comes on', () => {
     const l = lobby();
-    const m = join(l, 2, 102);
-    m.removed = true;
-    m.clientId = null;
+    removeFromLobby(l, join(l, 2, 102));
     expect(admit(l, 7, 102).kind).toBe('refused');
+    expect(admit(l, 8, 103).kind).toBe('new');
   });
 });
 
@@ -217,8 +218,8 @@ describe('what each member is told', () => {
     });
     expect(returningCount(l, 1000)).toBe(1);
     expect(lobbyMessage(l, member(l, 1), 1000 + RETURN_GRACE_MS).players).toHaveLength(1);
-    // A dropped socket within its grace shows as coming back too, and goes
-    // with the grace.
+    // A dropped socket within its grace is not coming back from a match: it
+    // shows as away, and goes with the grace.
     m.inPlay = false;
     m.returning = false;
     m.awayUntil = 5000 + DROP_GRACE_MS;
@@ -226,12 +227,24 @@ describe('what each member is told', () => {
       n: 2,
       name: 'p2',
       team: 1,
-      back: true,
+      away: true,
     });
+    expect(returningCount(l, 5000)).toBe(0);
     expect(lobbyMessage(l, member(l, 1), 5000 + DROP_GRACE_MS).players).toHaveLength(1);
   });
 
-  it('names a host whose socket dropped, on a row coming back, while the role waits for them', () => {
+  it('a reload in a lobby that never played shows as away, never as back from the match', () => {
+    const l = lobby();
+    join(l, 2, 102);
+    const m = member(l, 2);
+    m.clientId = null;
+    m.awayUntil = DROP_GRACE_MS;
+    const row = lobbyMessage(l, member(l, 1), 10).players[1]!;
+    expect(row).toEqual({ n: 2, name: 'p2', team: 1, away: true });
+    expect(row.back).toBeUndefined();
+  });
+
+  it('names a host whose socket dropped, on an away row, while the role waits for them', () => {
     const l = lobby();
     join(l, 2, 102);
     member(l, 1).clientId = null;
@@ -241,15 +254,13 @@ describe('what each member is told', () => {
       name: 'opener',
       team: 0,
       host: true,
-      back: true,
+      away: true,
     });
   });
 
   it('never shows a removed member', () => {
     const l = lobby();
-    const m = join(l, 2, 102);
-    m.removed = true;
-    m.clientId = null;
+    removeFromLobby(l, join(l, 2, 102));
     expect(lobbyMessage(l, member(l, 1), 0).players).toHaveLength(1);
   });
 });
@@ -314,6 +325,36 @@ describe('memory', () => {
     expect(l.members.map((m) => m.n)).not.toContain(4);
   });
 
+  it('a removed member is dropped, and only their id is kept', () => {
+    const l = lobby();
+    const m = join(l, 2, 102, 'friend');
+    removeFromLobby(l, m);
+    expect(l.members.map((x) => x.n)).toEqual([1]);
+    expect(l.removed).toEqual([102]);
+    expect(JSON.stringify(l)).not.toContain('friend');
+    // A member nobody can name leaves no id behind.
+    removeFromLobby(l, join(l, 3, null));
+    expect(l.removed).toEqual([102]);
+  });
+
+  it('keeps at most so many removed ids, the oldest dropped first', () => {
+    const l = lobby();
+    for (let i = 0; i < LOBBY_REMOVED + 2; i++) removeFromLobby(l, join(l, 10 + i, 200 + i));
+    expect(l.removed).toHaveLength(LOBBY_REMOVED);
+    expect(admit(l, 9, 200).kind).toBe('new');
+    expect(admit(l, 9, 202).kind).toBe('refused');
+  });
+
+  it('forgetting old members never washes a removal out', () => {
+    const l = lobby();
+    removeFromLobby(l, join(l, 2, 102));
+    for (let i = 0; i < LOBBY_MEMORY + 5; i++) {
+      addMember(l, { clientId: null, accountId: 300 + i, name: 'x', team: 0 });
+      forgetOldest(l, 0);
+    }
+    expect(admit(l, 9, 102).kind).toBe('refused');
+  });
+
   it('a present member is never forgotten', () => {
     const l = lobby();
     for (let i = 2; i <= LOBBY_MEMORY + 1; i++) {
@@ -364,6 +405,14 @@ describe('mergeAccounts', () => {
     expect(mergeAccounts(l, -5, 77)).toBe(true);
     expect(member(l, 2).accountId).toBe(77);
     expect(mergeAccounts(l, -6, 78)).toBe(false);
+  });
+
+  it('a removed Guest retired into an account stays refused under the new id', () => {
+    const l = lobby();
+    removeFromLobby(l, join(l, 2, -5));
+    expect(mergeAccounts(l, -5, 77)).toBe(true);
+    expect(l.removed).toEqual([77]);
+    expect(admit(l, 9, 77).kind).toBe('refused');
   });
 
   it('two records of one person become the earlier one, play and sockets kept', () => {

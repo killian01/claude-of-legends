@@ -69,8 +69,10 @@ So a private lobby is now anyone's, and it stands from one match to the next und
   match, in the order they joined; then everyone else in join order. A host away within a grace
   stays host, and nobody starts meanwhile; nobody hosts while the lobby's people are queued or
   playing. The lobby says who hosts it and tells everyone else it waits for them
-  (`src/ui/lobby_view.ts`). The host may remove any other member while the lobby is open; that
-  account or Guest is refused by the code from then on.
+  (`src/ui/lobby_view.ts`). The host may remove any other member while the lobby is open: the
+  member leaves the lobby, and the lobby keeps only the id of their account or Guest, which the
+  code refuses. The refusal is per id, and at most twenty ids are kept, the oldest dropped
+  first; a removed Guest can come back as a new Guest.
 - **The link during its match.** Opening it while the lobby's people are in their queue, select
   or match waits in the lobby for the next one, and says so; a member whose seat in it is held is
   offered Rejoin the match. It is never a drop in (ADR 0025 stays the Ranked queue's).

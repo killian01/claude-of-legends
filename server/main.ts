@@ -1229,7 +1229,7 @@ function walkOutOfMatch(
   rejoins.drop(client.accountId);
   // A private lobby's member gives up their seat in its match, and waits
   // in the lobby for the next one if they are in it.
-  matchmaker.leftMatch(client.accountId, matchId, Date.now());
+  matchmaker.leftMatch(client.id, client.accountId, matchId, Date.now());
   // A coach walking out leaves nothing behind: the bot keeps playing, so
   // there is no leaver to punish.
   const coach = entry.match.players.get(client.id)?.coach === true;
@@ -1566,21 +1566,30 @@ const server = http.createServer(async (req, res) => {
       }
       // A budget of name changes per connection (server/code_guess.ts).
       const key = budgetKey(clientAddress(req.headers, req.socket.remoteAddress, EDGE));
-      if (!codeGuard.mayRename(key, now)) {
+      // The rename is charged before the body is read, in one step with
+      // the check, and given back when it does not happen, so renames
+      // begun together cannot overrun the budget.
+      if (!codeGuard.tryRename(key, now)) {
         sendJson(res, 429, { error: NAME_LIMIT_MESSAGE });
         return;
       }
-      const guest = guestForRequest(req, now);
-      const body = await readJsonBody(req);
-      const name = typeof body?.name === 'string' ? body.name.trim() : '';
-      const named = guest
-        ? guests.setName(guest.id, name, now, (fold) => registry.holdsName(fold))
-        : ({ ok: false, error: 'unknown_guest' } as const);
+      let kept = false;
+      let named: ReturnType<typeof guests.setName>;
+      try {
+        const guest = guestForRequest(req, now);
+        const body = await readJsonBody(req);
+        const name = typeof body?.name === 'string' ? body.name.trim() : '';
+        named = guest
+          ? guests.setName(guest.id, name, now, (fold) => registry.holdsName(fold))
+          : { ok: false, error: 'unknown_guest' };
+        kept = named.ok;
+      } finally {
+        if (!kept) codeGuard.refundRename(key, now);
+      }
       if (!named.ok) {
         sendJson(res, 409, { error: guestNameMessage(named.error) });
         return;
       }
-      codeGuard.renamed(key, now);
       // The new name reaches the Guest's open sockets and its private
       // lobbies at once.
       for (const c of clients.values()) {

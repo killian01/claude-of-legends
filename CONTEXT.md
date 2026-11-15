@@ -612,12 +612,12 @@ same adjective as a ranked bot: in rated play.
 _Avoid_: public queue, standard queue, solo queue, normal queue
 
 **Private lobby**:
-A room anyone opens, an account or a Guest (ADR 0036), and others join with its code or invite
+A lobby anyone opens, an account or a Guest (ADR 0036), and others join with its code or invite
 link: played on the roster, never rated, scoring no points. It outlives its match, keeping its
 code, its members and each one's side from one match to the next; whoever opens the link while
 its match runs waits in it for the next one. Its host, whoever opened it while they are in it
 and otherwise the next in line (those who played its last match first), starts the match, sends
-the room into the Ranked queue as one Party, and may remove a member.
+its members into the Ranked queue as one Party, and may remove a member.
 _Avoid_: custom game, room, custom lobby
 
 **Invitation card**:

@@ -33,8 +33,6 @@ export interface LobbyMember {
   awayUntil: number | null;
   // The grace is a way back from the lobby's match (a back row).
   returning: boolean;
-  // Removed by the host: the code refuses this account.
-  removed: boolean;
 }
 
 export interface Lobby {
@@ -58,6 +56,10 @@ export interface Lobby {
   createdBy: string | null;
   // The next member's number.
   nextN: number;
+  // The account or Guest ids the host removed, oldest first, at most
+  // LOBBY_REMOVED: the code refuses them. Nothing else of a removed
+  // member is kept.
+  removed: number[];
 }
 
 // Lobbies held at once (MatchmakerOptions.maxLobbies overrides it).
@@ -76,6 +78,8 @@ export const RETURN_GRACE_MS = 60_000;
 export const DROP_GRACE_MS = 60_000;
 // Members remembered per lobby at most.
 export const LOBBY_MEMORY = 20;
+// Removed ids kept per lobby at most; past it the oldest goes.
+export const LOBBY_REMOVED = 20;
 // Seats in a lobby, and on each side.
 export const LOBBY_SEATS = 10;
 export const LOBBY_SIDE = 5;
@@ -106,6 +110,7 @@ export function openLobby(
     startedAt: null,
     createdBy,
     nextN: 1,
+    removed: [],
   };
   addMember(lobby, { ...opener, team: 0 });
   return lobby;
@@ -124,7 +129,6 @@ export function addMember(lobby: Lobby, who: Joiner & { team: TeamId }): LobbyMe
     veteran: false,
     awayUntil: null,
     returning: false,
-    removed: false,
   };
   lobby.members.push(member);
   return member;
@@ -137,7 +141,7 @@ export function isPresent(m: LobbyMember): boolean {
 
 // Holds one of the lobby's ten seats: present, or in its play.
 export function isSeated(m: LobbyMember): boolean {
-  return !m.removed && (m.clientId !== null || m.inPlay);
+  return m.clientId !== null || m.inPlay;
 }
 
 // Away within a grace (a way back from the match, or a dropped socket).
@@ -147,12 +151,12 @@ export function withinGrace(m: LobbyMember, now: number): boolean {
 
 // Coming back from the lobby's match, not here yet: a back row.
 export function comingBack(m: LobbyMember, now: number): boolean {
-  return !m.removed && !isPresent(m) && m.returning && withinGrace(m, now);
+  return !isPresent(m) && m.returning && withinGrace(m, now);
 }
 
 // Away within a grace of either kind: back from the match, or dropped.
 export function awayInGrace(m: LobbyMember, now: number): boolean {
-  return !m.removed && !isPresent(m) && withinGrace(m, now);
+  return !isPresent(m) && withinGrace(m, now);
 }
 
 // Seats taken, on one side or both.
@@ -193,7 +197,7 @@ export function hostOf(lobby: Lobby, now: number): LobbyMember | null {
     ...rest.filter((m) => !m.veteran),
   ];
   for (const m of order) {
-    if (!m.removed && (isPresent(m) || withinGrace(m, now))) return m;
+    if (isPresent(m) || withinGrace(m, now)) return m;
   }
   return null;
 }
@@ -212,8 +216,8 @@ export type Admission =
 export function admit(lobby: Lobby, clientId: number, accountId: number | null): Admission {
   const here = memberOnSocket(lobby, clientId);
   if (here) return { kind: 'already', member: here };
+  if (isRemoved(lobby, accountId)) return { kind: 'refused' };
   const known = memberOfAccount(lobby, accountId);
-  if (known?.removed) return { kind: 'refused' };
   if (known && isPresent(known)) return { kind: 'rebind', member: known };
   if (known?.inPlay) return { kind: 'seat', member: known, team: known.team, held: true };
   if (seatedCount(lobby) >= LOBBY_SEATS) return { kind: 'refused' };
@@ -225,9 +229,27 @@ export function admit(lobby: Lobby, clientId: number, accountId: number | null):
   return { kind: 'new', team: seatedCount(lobby, 0) <= seatedCount(lobby, 1) ? 0 : 1 };
 }
 
+// Whether the host removed this account or Guest id; null never is.
+export function isRemoved(lobby: Lobby, accountId: number | null): boolean {
+  return accountId !== null && lobby.removed.includes(accountId);
+}
+
+// The host removes a member (never the opener: the caller checks): the
+// member is dropped, and only their id is kept, on a bounded list the code
+// refuses, so forgetting old members never lets them back in.
+export function removeFromLobby(lobby: Lobby, member: LobbyMember): void {
+  const i = lobby.members.indexOf(member);
+  if (i <= 0) return;
+  lobby.members.splice(i, 1);
+  const id = member.accountId;
+  if (id === null || lobby.removed.includes(id)) return;
+  lobby.removed.push(id);
+  while (lobby.removed.length > LOBBY_REMOVED) lobby.removed.shift();
+}
+
 // Keeps at most LOBBY_MEMORY members: the oldest absent one goes first,
-// never the opener, one in play or one within a grace. A removed member
-// counts, so a removed account stays refused unless pushed out.
+// never the opener, one in play or one within a grace. A removal is kept
+// apart (Lobby.removed), so this never forgets one.
 export function forgetOldest(lobby: Lobby, now: number): void {
   while (lobby.members.length > LOBBY_MEMORY) {
     const i = lobby.members.findIndex(
@@ -312,13 +334,18 @@ export function evictable(lobby: Lobby, now: number): boolean {
 }
 
 // A Guest retired into an account (registration, Discord): its record
-// takes the new id. When both ids are members, the earlier record stays,
-// with the sockets and the play of both, and the other goes. True when the
-// lobby changed.
+// takes the new id, and so does a removal of it. When both ids are
+// members, the earlier record stays, with the sockets and the play of
+// both, and the other goes. True when the lobby changed.
 export function mergeAccounts(lobby: Lobby, from: number, to: number): boolean {
   if (from === to) return false;
+  const r = lobby.removed.indexOf(from);
+  if (r !== -1) {
+    if (lobby.removed.includes(to)) lobby.removed.splice(r, 1);
+    else lobby.removed[r] = to;
+  }
   const a = lobby.members.findIndex((m) => m.accountId === from);
-  if (a === -1) return false;
+  if (a === -1) return r !== -1;
   const b = lobby.members.findIndex((m) => m.accountId === to);
   if (b === -1) {
     lobby.members[a]!.accountId = to;
@@ -331,7 +358,6 @@ export function mergeAccounts(lobby: Lobby, from: number, to: number): boolean {
   keep.playClientId ??= gone.playClientId;
   keep.inPlay ||= gone.inPlay;
   keep.veteran ||= gone.veteran;
-  keep.removed ||= gone.removed;
   if (gone.awayUntil !== null && (keep.awayUntil === null || gone.awayUntil > keep.awayUntil)) {
     keep.awayUntil = gone.awayUntil;
     keep.returning ||= gone.returning;
@@ -340,24 +366,26 @@ export function mergeAccounts(lobby: Lobby, from: number, to: number): boolean {
   return true;
 }
 
-// The rows everyone sees: the seated members, then those coming back from
-// the match through their grace as back rows; a removed member never.
+// The rows everyone sees: the seated members, then those not here but
+// expected through their grace: back rows for those coming back from the
+// match, away rows for a socket that dropped.
 export function rowsOf(lobby: Lobby, recipient: LobbyMember | null, now: number): LobbyPlayer[] {
   const host = hostOf(lobby, now);
   const rows: LobbyPlayer[] = [];
   for (const m of lobby.members) {
     const seated = isSeated(m);
-    // Not here but expected: back from the lobby's match, or a socket that
-    // dropped, within its grace. Shown, so whoever waits for them (a host
-    // whose phone slept included) is named.
+    // Shown, so whoever waits for them (a host whose phone slept included)
+    // is named.
     if (!seated && !awayInGrace(m, now)) continue;
+    const back = !seated && comingBack(m, now);
     rows.push({
       n: m.n,
       name: m.name,
       team: m.team,
       ...(m === host ? { host: true as const } : {}),
       ...(m === recipient ? { you: true as const } : {}),
-      ...(!seated ? { back: true as const } : {}),
+      ...(back ? { back: true as const } : {}),
+      ...(!seated && !back ? { away: true as const } : {}),
       ...(m.inPlay ? { playing: true as const } : {}),
     });
   }

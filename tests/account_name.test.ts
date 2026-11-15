@@ -61,4 +61,31 @@ describe('the words in a name', () => {
       expect(nameWordsBlocked(name)).toBe(false);
     }
   });
+
+  it('lets a name through that only holds a slur inside an ordinary word', () => {
+    const names = [
+      'Spicy',
+      'Spica',
+      'Spicer',
+      'SpicyRamen',
+      'Despicable',
+      'Auspicious',
+      'Conspicuous',
+      'Allspice',
+      'Mikiken',
+      'Snigger',
+      'Sniggering',
+      'Chinking',
+      'Chinkapin',
+    ];
+    for (const name of names) expect(nameWordsBlocked(name), name).toBe(false);
+  });
+
+  it('still refuses those slurs as whole words, and one padded inside letters', () => {
+    const names = ['spic', 'SPIC', 'Big_Spic', 'sp1c', 'spics', 'kike', 'K1KE', 'KikeHater'];
+    for (const name of names) expect(nameWordsBlocked(name), name).toBe(true);
+    for (const name of ['xxNiggerxx', 'Snigger-nigger', 'Chinks']) {
+      expect(nameWordsBlocked(name), name).toBe(true);
+    }
+  });
 });
