@@ -28,7 +28,7 @@
 // is exclusive for good (one Discord account, one game account), because
 // it is how that account's owner gets back in.
 
-import { foldName, validateName } from './account_name';
+import { foldName, nameWordsBlocked, validateName } from './account_name';
 import { deriveName } from './discord_name';
 import type { DiscordIdentity } from './discord_oauth';
 import { foldEmail, validateEmail } from './email_address';
@@ -178,11 +178,12 @@ export function selfAccount(a: Account): SelfAccount {
 
 export type RegisterError =
   | 'name_invalid'
+  | 'name_blocked'
   | 'name_taken'
   | 'password_invalid'
   | 'email_invalid'
   | 'email_taken';
-export type RenameError = 'name_invalid' | 'name_taken';
+export type RenameError = 'name_invalid' | 'name_blocked' | 'name_taken';
 export type SetEmailError = 'email_invalid' | 'email_taken' | 'unknown_account';
 export type LinkDiscordError = 'discord_taken' | 'unknown_account';
 export type RecruitError =
@@ -313,6 +314,7 @@ export class AccountRegistry {
   ): Result<Account, RegisterError> {
     const nameErr = validateName(name);
     if (nameErr) return { ok: false, error: 'name_invalid' };
+    if (nameWordsBlocked(name)) return { ok: false, error: 'name_blocked' };
     const passErr = validatePassword(password);
     if (passErr) return { ok: false, error: 'password_invalid' };
     // The address is optional at the door (ADR 0007, amended): none given
@@ -410,6 +412,7 @@ export class AccountRegistry {
     if (!account) return { ok: false, error: 'name_invalid' };
     const nameErr = validateName(name);
     if (nameErr) return { ok: false, error: 'name_invalid' };
+    if (nameWordsBlocked(name)) return { ok: false, error: 'name_blocked' };
     const fold = foldName(name);
     if (!this.nameFree(fold, id)) return { ok: false, error: 'name_taken' };
     account.name = name;

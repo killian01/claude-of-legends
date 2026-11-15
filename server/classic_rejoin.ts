@@ -4,8 +4,10 @@
 // match_start this returns, with the match's own payloads, and tells the
 // team.
 //
-// A held seat whose match is gone is spent and gives nothing back, so the
-// caller goes on to the other modes' rejoins as if no seat were held.
+// A held seat whose match is gone, or already has its winner, is spent and
+// gives nothing back, so the caller goes on to the other modes' rejoins as
+// if no seat were held: a new session (Back to the private lobby, a reload
+// on the end screen) is never pulled back into a match that is over.
 
 import type { TeamId } from '../src/sim/types';
 import type { HeldSeat, RejoinRegistry } from './rejoin';
@@ -13,6 +15,8 @@ import type { HeldSeat, RejoinRegistry } from './rejoin';
 export interface RejoinableEntry {
   match: { restorePlayer(clientId: number, seat: HeldSeat): void };
   abandonedAt: number | null;
+  // When the winner landed; null while the match is on.
+  endedAt: number | null;
 }
 
 export interface ClassicRejoin<E> {
@@ -30,7 +34,7 @@ export function rejoinClassic<E extends RejoinableEntry>(
   const seat = rejoins.claim(accountId);
   if (!seat) return null;
   const entry = matches.get(seat.matchId);
-  if (!entry) return null;
+  if (!entry || entry.endedAt !== null) return null;
   entry.match.restorePlayer(clientId, seat);
   entry.abandonedAt = null;
   return {

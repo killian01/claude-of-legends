@@ -55,6 +55,9 @@ export interface MatchPick {
   // at champion select, a house seat's fill lane. Recorded on the replay
   // pick, which seats it (src/net/replay.ts, buildMatchSim).
   lanes?: LanePreference[];
+  // The code of the private lobby this seat came from (ADR 0036): its own
+  // match, or a party it sent into the queue. Never on the replay.
+  lobby?: string;
 }
 
 interface MatchPlayer {

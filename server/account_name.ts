@@ -1,12 +1,16 @@
 // What an account name may be, and when two of them are the same name
 // (CONTEXT.md). Pure and total: no I/O, no clock, no registry. The
-// registry asks two questions of this module and nothing else, so the
-// rules live in one place and are pinned by their own test.
+// registry asks these questions of this module and nothing else, so the
+// rules live in one place and are pinned by their own test. The word
+// filter on a name is here too, so an account name and a Guest's name on
+// the ladder are refused alike.
 //
 // ASCII only, deliberately. The whole game is written in English (ADR
 // 0004) and a Unicode name space would mean carrying NFKC plus a
 // homoglyph table just to stop one player from dressing up as another;
 // the confusable range is the point, not the alphabet.
+
+import { findBlockedWord } from './word_filter';
 
 export const NAME_MIN = 3;
 export const NAME_MAX = 16;
@@ -31,6 +35,14 @@ export function validateName(raw: string): NameError | null {
   if (!ALLOWED.test(raw)) return 'charset';
   if (raw.length < NAME_MIN || foldName(raw).length < NAME_MIN) return 'too_short';
   return null;
+}
+
+// Whether the word filter (server/word_filter.ts) refuses the name. A
+// handle has no spaces, so its parts are read as words: separators and a
+// capital after a small letter split it.
+export function nameWordsBlocked(raw: string): boolean {
+  const words = raw.replace(/[_-]/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2');
+  return findBlockedWord([words]) !== null;
 }
 
 export function nameErrorMessage(err: NameError): string {

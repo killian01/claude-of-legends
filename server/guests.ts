@@ -17,12 +17,17 @@
 
 import { createHash, randomBytes } from 'node:crypto';
 import type { TeamId } from '../src/sim/types';
-import { foldName, type NameError, nameErrorMessage, validateName } from './account_name';
+import {
+  foldName,
+  type NameError,
+  nameErrorMessage,
+  nameWordsBlocked,
+  validateName,
+} from './account_name';
 import type { GuestClaim } from './accounts';
 import type { MatchPick } from './match';
 import { wholeBest } from './royale_ranking';
 import { loadJson, saveJsonAtomic } from './store';
-import { findBlockedWord } from './word_filter';
 
 export interface Guest {
   // Negative, so it can never be an account's id (those count up from 1)
@@ -130,18 +135,14 @@ export function gentleTeams(
   return ([0, 1] as const).filter((team) => !people.some((p) => p.team === team));
 }
 
-// What a Guest may not ask for on the socket: lobbies, the Forge queue,
-// spectating. Everything else is the public queue, the select, and the
-// match itself.
+// What a Guest may not ask for on the socket: the Forge queue and
+// spectating. Everything else is the public queue, the private lobby
+// (ADR 0036: its own match is never rated, and a party it sends into the
+// queue is a queue match like any other), the select, and the match itself.
 export function guestRefused(msg: { t: string; forge?: unknown }): boolean {
   switch (msg.t) {
     case 'queue':
       return msg.forge === true;
-    case 'create_lobby':
-    case 'join_lobby':
-    case 'lobby_team':
-    case 'queue_party':
-    case 'start_lobby':
     case 'spectate':
       return true;
     default:
@@ -153,14 +154,12 @@ export function guestRefused(msg: { t: string; forge?: unknown }): boolean {
 // (server/account_name.ts), the word filter, or somebody holding it.
 export type GuestNameError = NameError | 'blocked' | 'taken' | 'unknown_guest';
 
-// The name's own faults, before anyone else is asked about it. The word
-// filter reads the name's parts as words, since a handle has no spaces:
-// separators and a capital after a small letter split it.
+// The name's own faults, before anyone else is asked about it: the
+// account name rules and their word filter (server/account_name.ts).
 export function guestNameRefusal(name: string): NameError | 'blocked' | null {
   const shape = validateName(name);
   if (shape) return shape;
-  const words = name.replace(/[_-]/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2');
-  if (findBlockedWord([words]) !== null) return 'blocked';
+  if (nameWordsBlocked(name)) return 'blocked';
   return null;
 }
 

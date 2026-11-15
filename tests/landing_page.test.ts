@@ -4,12 +4,17 @@
 // and the line just above; and the week.
 
 import { describe, expect, it } from 'vitest';
+import { CodeGuard, WRONG_CODES_ALLOWED } from '../server/code_guess';
 import {
   buildLandingPage,
+  guardedLookup,
+  type InviteLookup,
   LANDING_LADDER_ROWS,
   type LandingOwnInput,
+  landingInvite,
 } from '../server/landing_page';
 import { rotationAt, STARTER_COLLECTION, WEEK_MS } from '../server/laurels';
+import { Matchmaker } from '../server/matchmaker';
 import type { PointsEntry } from '../server/points_ladder';
 
 const NOW = 1_760_000_000_000;
@@ -282,5 +287,170 @@ describe('the week', () => {
     const onTurn = buildLandingPage({ entries: [], own: null, now: 3000 * WEEK_MS });
     expect(onTurn.week.turnsAt).toBe(3001 * WEEK_MS);
     expect(onTurn.week.rotation).toEqual(rotationAt(3000 * WEEK_MS));
+  });
+});
+
+// The invitation card's lobby (ADR 0036): a code read from the request's
+// body, never its address, answered with the opener's name and the seats
+// taken, behind the connection's wrong-code budget.
+function lookup(found: Map<string, { host: string; players: number; phase?: 'match' }>) {
+  const asked: string[] = [];
+  const misses: (string | null)[] = [];
+  let limited = false;
+  const l: InviteLookup = {
+    limited: () => limited,
+    find: (code) => {
+      asked.push(code);
+      return found.get(code) ?? null;
+    },
+    miss: (code) => misses.push(code),
+  };
+  return {
+    l,
+    asked,
+    misses,
+    limit: () => {
+      limited = true;
+    },
+  };
+}
+
+describe('the invitation card', () => {
+  it('answers no invite when none was asked, and charges nothing', () => {
+    const { l, asked, misses } = lookup(new Map());
+    expect(landingInvite(undefined, l)).toBeNull();
+    expect(asked).toEqual([]);
+    expect(misses).toEqual([]);
+    const page = buildLandingPage({ entries: [], own: guestOwn({}), now: NOW, invite: null });
+    expect('invite' in page).toBe(false);
+    expect('invite' in buildLandingPage({ entries: [], own: null, now: NOW })).toBe(false);
+  });
+
+  it('reads a join that is not a code as none, charged as one malformed miss', () => {
+    for (const join of [
+      'ABCD',
+      'ABCDEFG',
+      'AB1DEF',
+      '',
+      42,
+      null,
+      { code: 'ABCDEF' },
+      ['ABCDEF'],
+    ]) {
+      const { l, asked, misses } = lookup(new Map());
+      expect(landingInvite(join, l)).toBeNull();
+      expect(asked).toEqual([]);
+      expect(misses).toEqual([null]);
+    }
+  });
+
+  it("names an open lobby's opener and its seats, whatever the case typed", () => {
+    const { l, asked, misses } = lookup(new Map([['QWERTY', { host: 'Mira', players: 3 }]]));
+    expect(landingInvite('qwErty', l)).toEqual({ open: true, host: 'Mira', players: 3, seats: 10 });
+    expect(asked).toEqual(['QWERTY']);
+    expect(misses).toEqual([]);
+  });
+
+  it('says the phase while the lobby plays, and stays open when it is full', () => {
+    const { l } = lookup(
+      new Map([
+        ['PLAYIN', { host: 'Mira', players: 10, phase: 'match' as const }],
+        ['FULLUP', { host: 'Oren', players: 10 }],
+      ]),
+    );
+    expect(landingInvite('PLAYIN', l)).toEqual({
+      open: true,
+      host: 'Mira',
+      players: 10,
+      seats: 10,
+      phase: 'match',
+    });
+    expect(landingInvite('FULLUP', l)).toEqual({
+      open: true,
+      host: 'Oren',
+      players: 10,
+      seats: 10,
+    });
+  });
+
+  it('answers an unknown code closed, and charges it', () => {
+    const { l, misses } = lookup(new Map());
+    expect(landingInvite('ZZZZZZ', l)).toEqual({ open: false });
+    expect(misses).toEqual(['ZZZZZZ']);
+  });
+
+  it('looks nothing up for a connection over its budget', () => {
+    const { l, asked, misses, limit } = lookup(new Map([['QWERTY', { host: 'Mira', players: 3 }]]));
+    limit();
+    expect(landingInvite('QWERTY', l)).toEqual({ open: false, limited: true });
+    expect(asked).toEqual([]);
+    expect(misses).toEqual([]);
+  });
+
+  it('carries the answer on the page, and never the code, a key or an id', () => {
+    const { l } = lookup(new Map([['QWERTY', { host: 'Mira', players: 3 }]]));
+    const invite = landingInvite('QWERTY', l);
+    const page = buildLandingPage({ entries: [], own: guestOwn({}), now: NOW, invite });
+    expect(page.invite).toEqual({ open: true, host: 'Mira', players: 3, seats: 10 });
+    expect(JSON.stringify(page)).not.toMatch(/QWERTY|"(key|id|accountId|code)"/);
+    const closed = buildLandingPage({ entries: [], own: null, now: NOW, invite: { open: false } });
+    expect(closed.invite).toEqual({ open: false });
+  });
+
+  it("names the opener, never another member, and counts the lobby's seats", () => {
+    const mm = new Matchmaker(
+      () => {},
+      () => 1,
+      () => 'QWERTY',
+    );
+    mm.createLobby(1, 'Mira', 0);
+    mm.joinLobby(2, 'Oren', 'QWERTY', 0);
+    mm.joinLobby(3, 'Tal', 'QWERTY', 0);
+    mm.removeEverywhere(1, 0, 'leave');
+    const guard = new CodeGuard();
+    const answer = landingInvite('QWERTY', guardedLookup(guard, mm, 'k', -5, 0));
+    expect(answer).toEqual({ open: true, host: 'Mira', players: 2, seats: 10 });
+  });
+
+  it('charges wrong codes on the connection, and lets a remembered member back over budget', () => {
+    let account = 101;
+    const mm = new Matchmaker(
+      () => {},
+      () => 1,
+      () => 'QWERTY',
+      { resolveAccount: () => account },
+    );
+    mm.createLobby(1, 'Mira', 0);
+    account = 102;
+    mm.joinLobby(2, 'Oren', 'QWERTY', 0);
+    const guard = new CodeGuard();
+    for (let i = 0; i < WRONG_CODES_ALLOWED; i++) {
+      const code = `ZZZZ${String.fromCharCode(65 + Math.floor(i / 23))}${String.fromCharCode(65 + (i % 23))}`;
+      expect(landingInvite(code, guardedLookup(guard, mm, 'k', -9, 10))).toEqual({ open: false });
+    }
+    expect(landingInvite('QWERTY', guardedLookup(guard, mm, 'k', -9, 20))).toEqual({
+      open: false,
+      limited: true,
+    });
+    expect(landingInvite('QWERTY', guardedLookup(guard, mm, 'k', 102, 20))).toMatchObject({
+      open: true,
+      host: 'Mira',
+    });
+    // Another connection has its own budget.
+    expect(landingInvite('QWERTY', guardedLookup(guard, mm, 'other', -9, 20))).toMatchObject({
+      open: true,
+    });
+  });
+
+  it('answers a code this process issued closed without charging it', () => {
+    const mm = new Matchmaker(
+      () => {},
+      () => 1,
+      () => 'QWERTY',
+    );
+    const guard = new CodeGuard();
+    guard.issued('QWERTY', 0);
+    expect(landingInvite('QWERTY', guardedLookup(guard, mm, 'k', -9, 10))).toEqual({ open: false });
+    expect(guard.misses('k', 10)).toBe(0);
   });
 });

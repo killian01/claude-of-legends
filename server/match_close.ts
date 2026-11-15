@@ -2,7 +2,8 @@
 // ran out, its rejoin grace ran out with nobody connected, or its tick kept
 // failing. Every player and every spectator still on it is told the match
 // is over and set free to queue again, the match is gone, and the seats it
-// was holding for dropped players go with it.
+// was holding for dropped players go with it. A private lobby playing it
+// hears that it is over (over), however it closed.
 
 import type { RejoinRegistry } from './rejoin';
 
@@ -18,6 +19,8 @@ export interface CloseDeps<E extends ClosingEntry> {
   rejoins: Pick<RejoinRegistry, 'pruneMatch'>;
   clients: ReadonlyMap<number, { matchId: number | null }>;
   send(clientId: number, msg: { t: 'match_end' }): void;
+  // Called once per match closed: its private lobby reopens.
+  over?(matchId: number): void;
 }
 
 export function closeMatch<E extends ClosingEntry>(deps: CloseDeps<E>, matchId: number): void {
@@ -30,4 +33,5 @@ export function closeMatch<E extends ClosingEntry>(deps: CloseDeps<E>, matchId: 
   }
   deps.matches.delete(matchId);
   deps.rejoins.pruneMatch(matchId);
+  deps.over?.(matchId);
 }

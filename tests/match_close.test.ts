@@ -73,4 +73,16 @@ describe('closing a 5v5', () => {
     closeMatch(deps, 3);
     expect(sent).toHaveLength(2);
   });
+
+  // A private lobby whose match closed without a winner (its grace ran
+  // out, its tick kept failing) reopens through this.
+  it('says the match is over once, and never for a match already closed', () => {
+    const { deps } = watched();
+    const over: number[] = [];
+    const withOver = { ...deps, over: (id: number) => over.push(id) };
+    closeMatch(withOver, 3);
+    closeMatch(withOver, 3);
+    closeMatch(withOver, 8);
+    expect(over).toEqual([3]);
+  });
 });

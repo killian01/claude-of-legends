@@ -125,7 +125,7 @@ describe('guests', () => {
     expect(ratedWithGuests(true, [{ accountId: 3 }, { ownerId: 8 }])).toBe(true);
   });
 
-  it('have the public queue and the match, and no other door', () => {
+  it('have the public queue, the private lobby and the match, and no other door', () => {
     for (const t of [
       'hello',
       'queue',
@@ -137,20 +137,17 @@ describe('guests', () => {
       'leave',
       'chat',
       'ping',
+      'create_lobby',
+      'join_lobby',
+      'lobby_team',
+      'start_lobby',
+      'queue_party',
+      'lobby_remove',
     ]) {
       expect(guestRefused({ t })).toBe(false);
     }
     expect(guestRefused({ t: 'queue', forge: true })).toBe(true);
-    for (const t of [
-      'create_lobby',
-      'join_lobby',
-      'lobby_team',
-      'queue_party',
-      'start_lobby',
-      'spectate',
-    ]) {
-      expect(guestRefused({ t })).toBe(true);
-    }
+    expect(guestRefused({ t: 'spectate' })).toBe(true);
   });
 });
 
