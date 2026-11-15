@@ -5,15 +5,24 @@ import { describe, expect, it } from 'vitest';
 import type { MatchPick } from '../server/match';
 import {
   type BotSeat,
+  DROP_GRACE_MS,
+  LOBBY_IDLE_MS,
+  LOBBY_PLAY_GUARD_MS,
   LOBBY_TTL_MS,
   Matchmaker,
   type MatchmakerOptions,
   type MatchSource,
+  RETURN_GRACE_MS,
 } from '../server/matchmaker';
 import type { SelectClaim, ServerMsg } from '../src/net/protocol';
 import { NEW_BOT_PLAYBOOK } from '../src/sim/content/playbooks/new_bot';
 
-function harness(opts: MatchmakerOptions = {}): {
+// The match a select hands over gets the next id from 1, as main.ts's
+// onMatchReady returns it; ready overrides that (no id, a throw).
+function harness(
+  opts: MatchmakerOptions = {},
+  ready?: (picks: MatchPick[]) => number | undefined,
+): {
   mm: Matchmaker;
   sent: Map<number, ServerMsg[]>;
   matches: MatchPick[][];
@@ -31,6 +40,7 @@ function harness(opts: MatchmakerOptions = {}): {
     (picks, source) => {
       matches.push(picks);
       sources.push(source);
+      return ready ? ready(picks) : matches.length;
     },
     undefined,
     opts,
@@ -92,13 +102,13 @@ describe('matchmaker', () => {
     const lobbyMsg = last(sent.get(1), 'lobby');
     expect(lobbyMsg?.t).toBe('lobby');
     const code = lobbyMsg?.t === 'lobby' ? lobbyMsg.code : '';
-    expect(code).toHaveLength(5);
+    expect(code).toHaveLength(6);
 
     mm.joinLobby(2, 'friend', code);
     const joined = last(sent.get(2), 'lobby');
     expect(joined?.t === 'lobby' && joined.players).toEqual([
-      { n: 1, name: 'host', team: 0 },
-      { n: 2, name: 'friend', team: 1 },
+      { n: 1, name: 'host', team: 0, host: true },
+      { n: 2, name: 'friend', team: 1, you: true },
     ]);
 
     mm.joinLobby(3, 'lost', 'ZZZZZ');
@@ -129,7 +139,7 @@ describe('matchmaker', () => {
     expect(view?.t === 'lobby' && view.team).toBe(0);
     const hostView = last(sent.get(1), 'lobby');
     expect(hostView?.t === 'lobby' && hostView.players).toEqual([
-      { n: 1, name: 'host', team: 0 },
+      { n: 1, name: 'host', team: 0, host: true, you: true },
       { n: 2, name: 'friend', team: 0 },
     ]);
     // Junk team values are ignored.
@@ -171,9 +181,11 @@ describe('matchmaker', () => {
     const code = lobbyMsg?.t === 'lobby' ? lobbyMsg.code : '';
     mm.joinLobby(2, 'friend', code);
     mm.queuePartyFromLobby(1, 0);
-    // The lobby is gone; both members are queued as one group of two.
+    // Both members are queued as one group of two, and the lobby waits for
+    // them: a late friend joins it and waits for the next match.
     mm.joinLobby(3, 'late', code);
-    expect(last(sent.get(3), 'error')).toBeDefined();
+    expect(last(sent.get(3), 'error')).toBeUndefined();
+    expect(last(sent.get(3), 'lobby')).toMatchObject({ phase: 'queue', host: false });
     const status = last(sent.get(2), 'queue_status');
     expect(status?.t === 'queue_status' && status.count).toBe(2);
     // Any member can opt the party into the bot fill.
@@ -225,8 +237,10 @@ describe('matchmaker', () => {
     })();
     for (let i = 2; i <= 6; i++) mm.joinLobby(i, `p${i}`, code);
     mm.queuePartyFromLobby(1, 0);
-    const refusal = last(sent.get(1), 'error');
-    expect(refusal?.t === 'error' && refusal.message).toContain('up to five');
+    // A notice, never an error: the lobby screen stays up.
+    expect(last(sent.get(1), 'error')).toBeUndefined();
+    const refusal = last(sent.get(1), 'lobby');
+    expect(refusal?.t === 'lobby' && refusal.notice).toContain('up to five');
     // The lobby survives the refusal.
     mm.joinLobby(7, 'p7', code);
     expect(last(sent.get(7), 'lobby')?.t).toBe('lobby');
@@ -302,7 +316,7 @@ describe('matchmaker', () => {
     expect(last(sent.get(2), 'select_start')).toBeUndefined();
   });
 
-  it('lobby codes are unpredictable, unique, and 5 uppercase letters', () => {
+  it('lobby codes are unpredictable, unique, and 6 uppercase letters', () => {
     const { mm, sent } = harness();
     const codes = new Set<string>();
     for (let i = 1; i <= 40; i++) {
@@ -311,7 +325,7 @@ describe('matchmaker', () => {
       if (msg?.t === 'lobby') codes.add(msg.code);
     }
     expect(codes.size).toBe(40);
-    for (const code of codes) expect(code).toMatch(/^[A-HJ-NP-Z]{5}$/);
+    for (const code of codes) expect(code).toMatch(/^[A-HJ-NP-Z]{6}$/);
   });
 
   it('retries code collisions and expires stale lobbies', () => {
@@ -332,8 +346,11 @@ describe('matchmaker', () => {
     const bobLobby = last(sent.get(2), 'lobby');
     expect(bobLobby?.t === 'lobby' && bobLobby.code).toBe('BBBBB');
 
-    // Both lobbies expire once the TTL passes; players are told.
-    mm.tickClock(LOBBY_TTL_MS + 1);
+    // Both lobbies expire once nothing happened in them for long enough;
+    // the people in them are told.
+    mm.tickClock(LOBBY_IDLE_MS);
+    expect(last(sent.get(1), 'error')).toBeUndefined();
+    mm.tickClock(LOBBY_IDLE_MS + 1);
     const notice = last(sent.get(1), 'error');
     expect(notice?.t === 'error' && notice.message).toBe('Lobby expired.');
     // The expired code is joinable no more.
@@ -547,5 +564,373 @@ describe('lane claims at select', () => {
     mm.pick(4, 'dain', SIGILS);
     expect(lanesOf(matches[0], 1)).toEqual(['mid']);
     expect(lanesOf(matches[0], 3)).toEqual(['top']);
+  });
+});
+
+// A private lobby outlives its match (ADR 0036): its members are remembered
+// by account, it waits while its select, match or party plays, and it
+// reopens for the next round.
+describe('a lobby that outlives its match', () => {
+  const SIGILS: [string, string] = ['riftstep', 'mend'];
+  type LobbyMsg = Extract<ServerMsg, { t: 'lobby' }>;
+  const view = (msgs: ServerMsg[] | undefined): LobbyMsg | undefined => {
+    const m = last(msgs, 'lobby');
+    return m?.t === 'lobby' ? m : undefined;
+  };
+
+  // Sockets are numbered as the server numbers them; accounts says whose
+  // each one is, as main.ts's resolveAccount answers.
+  function lobbyHarness(
+    opts: MatchmakerOptions = {},
+    ready?: (picks: MatchPick[]) => number | undefined,
+  ) {
+    const accounts = new Map<number, number>();
+    const h = harness({ resolveAccount: (c) => accounts.get(c) ?? null, ...opts }, ready);
+    const open = (clientId: number, account: number, name: string, now = 0): string => {
+      accounts.set(clientId, account);
+      return h.mm.createLobby(clientId, name, now) ?? '';
+    };
+    const join = (clientId: number, account: number, name: string, code: string, now = 0) => {
+      accounts.set(clientId, account);
+      return h.mm.joinLobby(clientId, name, code, now);
+    };
+    return { ...h, accounts, open, join };
+  }
+
+  // Opener 1 (account 101) and friend 2 (account 102) start and play
+  // match 1.
+  function played(opts: MatchmakerOptions = {}) {
+    const h = lobbyHarness(opts);
+    const code = h.open(1, 101, 'host');
+    h.join(2, 102, 'friend', code);
+    h.mm.startLobby(1, 0);
+    h.mm.pick(1, 'fenn', SIGILS);
+    h.mm.pick(2, 'vesk', SIGILS);
+    return { ...h, code };
+  }
+
+  it('answers its code while it plays, and a newcomer waits for the next match', () => {
+    const { mm, sent, matches, sources, code, join } = played();
+    expect(matches).toHaveLength(1);
+    expect(sources).toEqual(['lobby']);
+    // Every seat it sent carries its code.
+    expect(matches[0]!.map((p) => p.lobby)).toEqual([code, code]);
+    expect(mm.lobbyInvite(code)).toEqual({ host: 'host', players: 2, phase: 'match' });
+    expect(join(3, 103, 'late', code)).toBe('joined');
+    expect(last(sent.get(3), 'error')).toBeUndefined();
+    expect(view(sent.get(3))).toEqual({
+      t: 'lobby',
+      code,
+      host: false,
+      team: 0,
+      phase: 'match',
+      players: [
+        { n: 1, name: 'host', team: 0, playing: true },
+        { n: 2, name: 'friend', team: 1, playing: true },
+        { n: 3, name: 'late', team: 0, you: true },
+      ],
+    });
+    // Nobody hosts while it plays.
+    mm.startLobby(3, 0);
+    expect(last(sent.get(3), 'select_start')).toBeUndefined();
+  });
+
+  it('reopens when its match is over: members on new sockets land on their side, the opener hosts', () => {
+    const { mm, sent, code, join } = played();
+    join(3, 103, 'late', code);
+    // The match's sockets close at its end.
+    expect(mm.removeEverywhere(1, 900, 'drop')).toBe(false);
+    expect(mm.removeEverywhere(2, 900, 'drop')).toBe(false);
+    mm.matchOver(1, 1000);
+    // The waiter sees the two coming back; the opener hosts through it.
+    expect(view(sent.get(3))?.players).toEqual([
+      { n: 1, name: 'host', team: 0, host: true, back: true },
+      { n: 2, name: 'friend', team: 1, back: true },
+      { n: 3, name: 'late', team: 0, you: true },
+    ]);
+    expect(view(sent.get(3))?.phase).toBeUndefined();
+    join(12, 102, 'friend', code, 2000);
+    join(11, 101, 'host', code, 2000);
+    expect(view(sent.get(12))).toMatchObject({ team: 1, host: false });
+    expect(view(sent.get(11))).toMatchObject({ team: 0, host: true });
+    expect(view(sent.get(11))?.players.map((p) => p.n)).toEqual([1, 2, 3]);
+    // Another match's end, or this one's again, changes nothing.
+    const before = sent.get(11)!.length;
+    mm.matchOver(1, 3000);
+    mm.matchOver(99, 3000);
+    expect(sent.get(11)!.length).toBe(before);
+    mm.startLobby(11, 3000);
+    for (const id of [11, 12, 3]) expect(last(sent.get(id), 'select_start')).toBeDefined();
+  });
+
+  it('waits for those coming back before a start, until their grace ends', () => {
+    const { mm, sent, code, join } = played();
+    mm.matchOver(1, 1000);
+    join(11, 101, 'host', code, 1000);
+    mm.startLobby(11, 1000);
+    expect(last(sent.get(11), 'select_start')).toBeUndefined();
+    expect(view(sent.get(11))?.notice).toBe('1 player is coming back from the match.');
+    mm.tickClock(1000 + RETURN_GRACE_MS);
+    expect(view(sent.get(11))?.players).toHaveLength(1);
+    expect(view(sent.get(11))?.notice).toBeUndefined();
+    mm.startLobby(11, 1000 + RETURN_GRACE_MS);
+    expect(last(sent.get(11), 'select_start')).toBeDefined();
+  });
+
+  it('passes the host on when the host leaves, and gives it back on return', () => {
+    const { mm, sent, open, join } = lobbyHarness();
+    const code = open(1, 101, 'host');
+    join(2, 102, 'b', code);
+    join(3, 103, 'c', code);
+    expect(mm.removeEverywhere(1, 0, 'leave')).toBe(true);
+    expect(view(sent.get(2))?.host).toBe(true);
+    join(11, 101, 'host', code);
+    expect(view(sent.get(11))?.host).toBe(true);
+    expect(view(sent.get(2))?.host).toBe(false);
+    // A dropped socket (a reload) keeps the host through its grace.
+    mm.removeEverywhere(11, 10, 'drop');
+    expect(view(sent.get(2))?.host).toBe(false);
+    mm.startLobby(2, 10);
+    expect(last(sent.get(2), 'select_start')).toBeUndefined();
+    mm.tickClock(10 + DROP_GRACE_MS);
+    expect(view(sent.get(2))?.host).toBe(true);
+  });
+
+  it('a lobby select that loses everyone reopens the lobby and starts no match', () => {
+    const { mm, matches, sent, open, join } = lobbyHarness();
+    const code = open(1, 101, 'host');
+    join(2, 102, 'friend', code);
+    mm.startLobby(1, 0);
+    mm.removeEverywhere(1, 5, 'drop');
+    mm.removeEverywhere(2, 5, 'drop');
+    expect(matches).toHaveLength(0);
+    expect(mm.lobbyInvite(code)).toEqual({ host: 'host', players: 0 });
+    join(11, 101, 'host', code, 10);
+    expect(view(sent.get(11))).toMatchObject({ host: true, team: 0 });
+  });
+
+  it('a match that could not start sends its lobby back, and a throw is no match', () => {
+    for (const ready of [
+      () => undefined,
+      () => {
+        throw new Error('setup failed');
+      },
+    ]) {
+      const { mm, sent, open, join } = lobbyHarness({}, ready);
+      const code = open(1, 101, 'host');
+      join(2, 102, 'friend', code);
+      mm.startLobby(1, 0);
+      mm.pick(1, 'fenn', SIGILS);
+      expect(() => mm.pick(2, 'vesk', SIGILS)).not.toThrow();
+      for (const id of [1, 2]) {
+        expect(view(sent.get(id))).toMatchObject({
+          notice: 'The match could not start. Try again.',
+          host: id === 1,
+        });
+        expect(view(sent.get(id))).not.toHaveProperty('phase');
+      }
+      expect(mm.lobbyInvite(code)).toEqual({ host: 'host', players: 2 });
+    }
+  });
+
+  it("a member's second socket takes over; the old socket's close leaves them in", () => {
+    const { mm, sent, open, join } = lobbyHarness();
+    const code = open(1, 101, 'host');
+    join(2, 102, 'friend', code);
+    join(22, 102, 'friend', code);
+    expect(view(sent.get(22))?.players).toEqual([
+      { n: 1, name: 'host', team: 0, host: true },
+      { n: 2, name: 'friend', team: 1, you: true },
+    ]);
+    expect(mm.removeEverywhere(2, 0, 'drop')).toBe(false);
+    expect(mm.lobbyInvite(code)?.players).toBe(2);
+    // The same socket joining again is told again, nothing else.
+    join(22, 102, 'friend', code);
+    expect(view(sent.get(22))?.players).toHaveLength(2);
+  });
+
+  it('a playing lobby lives on; an empty one expires; one never played goes when left', () => {
+    const left = lobbyHarness();
+    const a = left.open(1, 101, 'a');
+    left.mm.removeEverywhere(1, 0, 'leave');
+    expect(left.mm.lobbyInvite(a)).toBeNull();
+
+    // A reload of a fresh lobby keeps it through the drop grace.
+    const dropped = lobbyHarness();
+    const b = dropped.open(1, 101, 'b');
+    dropped.mm.removeEverywhere(1, 0, 'drop');
+    dropped.mm.tickClock(DROP_GRACE_MS - 1);
+    expect(dropped.mm.lobbyInvite(b)).not.toBeNull();
+    dropped.mm.tickClock(DROP_GRACE_MS);
+    expect(dropped.mm.lobbyInvite(b)).toBeNull();
+
+    const { mm, code } = played();
+    mm.tickClock(LOBBY_IDLE_MS + LOBBY_TTL_MS);
+    expect(mm.lobbyInvite(code)?.phase).toBe('match');
+    // A match end never reported: the play guard reopens it.
+    const t = LOBBY_PLAY_GUARD_MS + 1;
+    mm.tickClock(t);
+    expect(mm.lobbyInvite(code)).toEqual({ host: 'host', players: 0 });
+    mm.tickClock(t + LOBBY_TTL_MS);
+    expect(mm.lobbyInvite(code)).not.toBeNull();
+    mm.tickClock(t + LOBBY_TTL_MS + 1);
+    expect(mm.lobbyInvite(code)).toBeNull();
+  });
+
+  it('the cap: the lobby empty the longest gives way past its grace, else a refusal', () => {
+    const { mm, sent, open } = lobbyHarness({ maxLobbies: 2 });
+    // Two lobbies whose selects lost everyone: open, played, empty.
+    const a = open(1, 101, 'a', 0);
+    mm.startLobby(1, 0);
+    mm.removeEverywhere(1, 0, 'drop');
+    const b = open(2, 102, 'b', 1000);
+    mm.startLobby(2, 1000);
+    mm.removeEverywhere(2, 1000, 'drop');
+    expect(mm.lobbyCount).toBe(2);
+    expect(open(3, 103, 'c', 100_000)).toBe('');
+    const refusal = last(sent.get(3), 'error');
+    expect(refusal?.t === 'error' && refusal.message).toBe(
+      'Too many private lobbies are open right now. Try again in a bit.',
+    );
+    expect(open(4, 104, 'd', 180_500)).not.toBe('');
+    expect(mm.lobbyInvite(a)).toBeNull();
+    expect(mm.lobbyInvite(b)).not.toBeNull();
+    expect(mm.lobbyCount).toBe(2);
+  });
+
+  it('waiters cannot take seats or sides held by members in play', () => {
+    const { mm, sent, open, join } = lobbyHarness();
+    const code = open(1, 101, 'p1');
+    for (let i = 2; i <= 5; i++) join(i, 100 + i, `p${i}`, code);
+    mm.startLobby(1, 0);
+    // Three of the five in play sit on side 0, two on side 1.
+    for (let i = 6; i <= 10; i++) expect(join(i, 100 + i, `p${i}`, code)).toBe('joined');
+    expect(view(sent.get(6))?.team).toBe(1);
+    expect(join(11, 111, 'p11', code)).toBe('refused');
+    const refusal = last(sent.get(11), 'error');
+    expect(refusal?.t === 'error' && refusal.message).toBe('Lobby not found or full.');
+    mm.setLobbyTeam(6, 0);
+    expect(view(sent.get(6))?.team).toBe(1);
+  });
+
+  it('a party keeps its lobby: it queues, plays and comes back to it', () => {
+    const { mm, sent, matches, sources, open, join } = lobbyHarness();
+    const code = open(1, 101, 'host');
+    join(2, 102, 'friend', code);
+    mm.queuePartyFromLobby(1, 0);
+    expect(mm.lobbyInvite(code)?.phase).toBe('queue');
+    mm.startNow(2, 0);
+    expect(mm.lobbyInvite(code)?.phase).toBe('select');
+    mm.pick(1, 'fenn', SIGILS);
+    mm.pick(2, 'vesk', SIGILS);
+    expect(sources).toEqual(['queue']);
+    expect(matches[0]!.map((p) => p.lobby)).toEqual([code, code]);
+    expect(mm.lobbyInvite(code)?.phase).toBe('match');
+    mm.matchOver(1, 5000);
+    join(11, 101, 'host', code, 5000);
+    expect(view(sent.get(11))).toMatchObject({ host: true, team: 0 });
+    expect(view(sent.get(11))).not.toHaveProperty('phase');
+  });
+
+  it('a party whose queue empties reopens its lobby', () => {
+    const { mm, sent, open, join } = lobbyHarness();
+    const code = open(1, 101, 'host');
+    join(2, 102, 'friend', code);
+    join(3, 103, 'third', code);
+    mm.removeEverywhere(3, 0, 'leave');
+    mm.queuePartyFromLobby(1, 0);
+    join(4, 104, 'waiter', code);
+    expect(view(sent.get(4))?.players.filter((p) => p.playing)).toHaveLength(2);
+    expect(mm.removeEverywhere(2, 0, 'leave')).toBe(true);
+    expect(view(sent.get(4))?.players.filter((p) => p.playing)).toHaveLength(1);
+    expect(mm.lobbyInvite(code)?.phase).toBe('queue');
+    mm.removeEverywhere(1, 0, 'leave');
+    expect(mm.queuedCount).toBe(0);
+    expect(mm.lobbyInvite(code)?.phase).toBeUndefined();
+    // The one waiting hosts now.
+    expect(view(sent.get(4))?.host).toBe(true);
+  });
+
+  it('a party waits for a member still locked out of the queue', () => {
+    const { mm, sent, open, join } = lobbyHarness({
+      queueLockedMs: (accountId) => (accountId === 102 ? 30_500 : 0),
+    });
+    const code = open(1, 101, 'host');
+    join(2, 102, 'friend', code);
+    mm.queuePartyFromLobby(1, 0);
+    expect(view(sent.get(1))?.notice).toBe(
+      'friend left a rated match. The party can queue in 31s.',
+    );
+    expect(view(sent.get(2))?.notice).toBe('You left a rated match. The party can queue in 31s.');
+    expect(mm.queuedCount).toBe(0);
+    expect(last(sent.get(1), 'error')).toBeUndefined();
+  });
+
+  it('the host removes a member, who is told and refused from then on', () => {
+    const { mm, sent, open, join } = lobbyHarness();
+    const code = open(1, 101, 'host');
+    join(2, 102, 'friend', code);
+    join(3, 103, 'third', code);
+    // Nobody else removes anyone, and the host never themselves.
+    mm.removeMember(3, 2);
+    mm.removeMember(1, 1);
+    expect(mm.lobbyInvite(code)?.players).toBe(3);
+    mm.removeMember(1, 2);
+    const told = last(sent.get(2), 'error');
+    expect(told?.t === 'error' && told.message).toBe('You were removed from the lobby.');
+    expect(view(sent.get(1))?.players.map((p) => p.n)).toEqual([1, 3]);
+    expect(join(22, 102, 'friend', code)).toBe('refused');
+    expect(mm.remembers(code, 102)).toBe(false);
+    expect(mm.remembers(code, 103)).toBe(true);
+  });
+
+  it('follows a Guest renamed or retired into an account', () => {
+    const { mm, sent, open, join } = lobbyHarness();
+    const code = open(1, -5, 'Wanderer 0005');
+    join(2, 102, 'friend', code);
+    mm.renameLive(-5, 'Ash');
+    expect(view(sent.get(2))?.players[0]?.name).toBe('Ash');
+    expect(mm.lobbyInvite(code)?.host).toBe('Ash');
+    mm.renameMember(-5, 77);
+    mm.removeEverywhere(1, 0, 'leave');
+    expect(view(sent.get(2))?.host).toBe(true);
+    join(11, 77, 'Ash', code);
+    expect(view(sent.get(11))).toMatchObject({ host: true, team: 0 });
+    expect(view(sent.get(11))?.players).toHaveLength(2);
+  });
+
+  it('says what a join came to, and counts the lobbies a connection holds open', () => {
+    const { mm, open, join } = lobbyHarness();
+    expect(join(9, 109, 'lost', 'ZZZZZZ')).toBe('unknown');
+    const a = open(1, 101, 'a');
+    mm.createLobby(2, 'b', 0, 'k');
+    mm.createLobby(3, 'c', 0, 'k');
+    expect(mm.openLobbiesFrom('k')).toBe(2);
+    expect(mm.openLobbiesFrom('k', 2)).toBe(1);
+    mm.removeEverywhere(3, 0, 'drop');
+    expect(mm.openLobbiesFrom('k')).toBe(1);
+    expect(join(4, 104, 'd', a.toLowerCase())).toBe('joined');
+  });
+
+  it('a held seat goes back into the match, and a walk-out gives it up', () => {
+    const { mm, sent, code, join } = played();
+    join(3, 103, 'late', code);
+    // The friend's match socket drops; a new lobby socket finds the seat held.
+    mm.removeEverywhere(2, 0, 'drop');
+    join(22, 102, 'friend', code);
+    expect(view(sent.get(22))).toMatchObject({ phase: 'match', seat: true });
+    // Its hello takes the seat back: the socket is in the match now.
+    mm.enteredMatch(22, 102, 1);
+    expect(view(sent.get(3))?.players.map((p) => p.playing ?? false)).toEqual([true, true, false]);
+    // The opener walks out for good.
+    mm.leftMatch(101, 1);
+    expect(view(sent.get(3))?.players.map((p) => p.n)).toEqual([2, 3]);
+    mm.matchOver(1, 1000);
+    // The friend who played is waited for, and hosts through the wait as
+    // the veteran; the opener who walked out is not shown.
+    expect(view(sent.get(3))?.players).toEqual([
+      { n: 2, name: 'friend', team: 1, host: true, back: true },
+      { n: 3, name: 'late', team: 0, you: true },
+    ]);
   });
 });
