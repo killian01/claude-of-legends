@@ -421,8 +421,10 @@ export interface SelectClaim {
 // member's number in this lobby (stable for the lobby's life, never an
 // account id, what the host's Remove names); host, who hosts; you, the
 // recipient's own row; back, coming back from the lobby's last match and
-// not here yet; playing, seated in the lobby's running queue, select or
-// match, shown to whoever waits in the lobby for the next one.
+// not here yet; away, a connection that dropped, held for a short grace
+// (a reload, a phone that slept); playing, seated in the lobby's running
+// queue, select or match, shown to whoever waits in the lobby for the next
+// one.
 export interface LobbyPlayer {
   n: number;
   name: string;
@@ -430,6 +432,7 @@ export interface LobbyPlayer {
   host?: true;
   you?: true;
   back?: true;
+  away?: true;
   playing?: true;
 }
 
