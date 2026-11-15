@@ -3,6 +3,8 @@
 > Amended by ADR 0024: a Guest plays the public queue, unranked, without an account.
 > Amended by ADR 0027: every human, Guests included, has a line on the ladder of points, kept by
 > a cookie; the rating ladder stays the accounts' alone.
+> Amended by ADR 0036: a Guest opens and joins a private lobby without an account, and an
+> account's name passes the word filter a Guest's chosen name does.
 
 Identity used to be the browser's session token: the first hello created a player record, and the
 display name was free text refreshed on every hello (`server/players.ts`). That kept the "no

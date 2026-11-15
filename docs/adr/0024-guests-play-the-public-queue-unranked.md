@@ -4,6 +4,9 @@
 > under a hashed token, once it scores or names itself. Its matches are still rated for nobody.
 >
 > Amended by ADR 0033: the Guest is handed out when the landing opens, not when Play is pressed.
+>
+> Amended by ADR 0036: a Guest opens, joins and starts a private lobby, queues it as a party and
+> removes a member as its host; spectating, the Forge queue and bot seats still need an account.
 
 ADR 0006 made an account the price of reaching the server, and named the middle it rejected:
 "Guests keep playing, unranked". Its cost was stated as real and paid by the invited player.
