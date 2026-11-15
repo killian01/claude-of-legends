@@ -21,8 +21,9 @@ export const INVITE_OPEN_OWN = 'Open a lobby';
 
 // The band's state, by the answer: no answer yet (or none came), an open
 // lobby, a full one, a closed one (unknown, expired and closed read alike),
-// or a connection over its wrong codes, whose lobby was not looked up.
-export type InviteState = 'waiting' | 'open' | 'full' | 'closed' | 'limited';
+// a connection over its wrong codes, whose lobby was not looked up, or the
+// reader's own lobby, coming back to it (never full: their place is kept).
+export type InviteState = 'waiting' | 'open' | 'full' | 'closed' | 'limited' | 'member';
 
 export interface InviteWords {
   state: InviteState;
@@ -33,6 +34,7 @@ export interface InviteWords {
 export function inviteState(invite: LandingInvite | null | undefined): InviteState {
   if (!invite) return 'waiting';
   if (!invite.open) return invite.limited ? 'limited' : 'closed';
+  if (invite.member) return 'member';
   return invite.players >= invite.seats ? 'full' : 'open';
 }
 
@@ -53,6 +55,12 @@ export function inviteWords(invite: LandingInvite | null | undefined): InviteWor
     };
   }
   switch (state) {
+    case 'member':
+      return {
+        state,
+        title: 'Back to your private lobby',
+        line: 'Your place is kept. Join to go back in.',
+      };
     case 'full':
       return {
         state,
@@ -79,7 +87,7 @@ export function inviteWords(invite: LandingInvite | null | undefined): InviteWor
 // One gold call breathes at a time: the band while its invitation can be
 // taken, the Play now card once it cannot.
 export function breathes(state: InviteState): boolean {
-  return state === 'waiting' || state === 'open';
+  return state === 'waiting' || state === 'open' || state === 'member';
 }
 
 // Join, as a Guest, by the code; and a lobby of one's own, offered by a
@@ -112,6 +120,13 @@ export type NameStep =
   | { kind: 'keep' }
   | { kind: 'wrong'; error: string }
   | { kind: 'rename'; name: string };
+
+// Whether the band shows the name field: never to an account, which is
+// renamed elsewhere, nor to a member coming back, who keeps the name they
+// had in the lobby.
+export function asksName(state: InviteState, own: LandingOwn | null): boolean {
+  return state !== 'member' && own?.account !== true;
+}
 
 export function nameStep(typed: string, own: LandingOwn | null): NameStep {
   const name = typed.trim();

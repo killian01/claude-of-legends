@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { LandingInvite, LandingOwn } from '../src/net/landing';
 import {
+  asksName,
   breathes,
   CODE_JOIN,
   CODE_PROMPT,
@@ -115,6 +116,26 @@ describe('the invitation, by the answer', () => {
     });
   });
 
+  it('welcomes a member back, never as a stranger and never full', () => {
+    const back = (players: number, phase?: 'queue' | 'select' | 'match'): LandingInvite => ({
+      open: true,
+      host: 'Marrow',
+      players,
+      seats: 10,
+      ...(phase ? { phase } : {}),
+      member: true,
+    });
+    for (const invite of [back(3), back(10), back(12), back(10, 'match'), back(0, 'queue')]) {
+      expect(inviteState(invite)).toBe('member');
+      expect(inviteWords(invite)).toEqual({
+        state: 'member',
+        title: 'Back to your private lobby',
+        line: 'Your place is kept. Join to go back in.',
+      });
+    }
+    expect(breathes('member')).toBe(true);
+  });
+
   it('moves the breathing gold to the band only while the invitation can be taken', () => {
     expect(breathes('waiting')).toBe(true);
     expect(breathes('open')).toBe(true);
@@ -178,6 +199,16 @@ describe('the name a Guest joins under', () => {
     });
   });
 
+  it('asks a Guest for a name, never an account nor a member coming back', () => {
+    expect(asksName('waiting', null)).toBe(true);
+    expect(asksName('open', FRESH)).toBe(true);
+    expect(asksName('limited', FRESH)).toBe(true);
+    expect(asksName('open', { ...FRESH, account: true })).toBe(false);
+    // A member keeps the name they had in the lobby.
+    expect(asksName('member', FRESH)).toBe(false);
+    expect(asksName('member', null)).toBe(false);
+  });
+
   it('renames otherwise, and never an account', () => {
     expect(nameStep('Brindle', FRESH)).toEqual({ kind: 'rename', name: 'Brindle' });
     expect(nameStep(' Brindle ', null)).toEqual({ kind: 'rename', name: 'Brindle' });
@@ -238,6 +269,13 @@ describe('the band on the page', () => {
     expect(card).not.toMatch(/field\.focus\(/);
   });
 
+  it('offers a member Join with the name field put away', () => {
+    const card = read('src/ui/invite_card.ts');
+    expect(card).toMatch(/joinable =[^;]*state === 'member'/);
+    expect(card).toContain('nameBox.hidden = !asksName(state, current);');
+    expect(card).toContain('asksName(state, current) ? nameStep(field.value, current)');
+  });
+
   it('awaits the rename before it joins, after the landing has answered', () => {
     const card = read('src/ui/invite_card.ts');
     const answered = card.indexOf('await pagePromise');
@@ -265,6 +303,7 @@ describe('the band on the page', () => {
       inviteWords(open(10)),
       inviteWords({ open: false }),
       inviteWords({ open: false, limited: true }),
+      inviteWords({ open: true, host: 'Marrow', players: 10, seats: 10, member: true }),
     ].flatMap((w) => [w.title, w.line]);
     for (const s of [...said, CODE_WRONG, CODE_PROMPT, INVITE_FIELD_LABEL]) {
       for (const ch of s) {

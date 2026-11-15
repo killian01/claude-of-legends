@@ -81,9 +81,17 @@ export interface LandingWeek {
 // opener's name, how many hold a seat of its ten and whether it is playing
 // right now; or closed (unknown, expired or closed alike); or limited, the
 // connection over its wrong codes, the lobby not looked up at all. A lobby
-// is full when `players >= seats`.
+// is full when `players >= seats`. member: the reader is one of the
+// lobby's own, coming back to it; their place is kept, full or not.
 export type LandingInvite =
-  | { open: true; host: string; players: number; seats: number; phase?: LobbyPhase }
+  | {
+      open: true;
+      host: string;
+      players: number;
+      seats: number;
+      phase?: LobbyPhase;
+      member?: true;
+    }
   | { open: false; limited?: true };
 
 export type LobbyPhase = 'queue' | 'select' | 'match';
@@ -205,6 +213,7 @@ export function asLandingInvite(v: unknown): LandingInvite | null {
   if (typeof r.host !== 'string' || r.host.length === 0) return null;
   if (!whole(r.players) || !whole(r.seats) || r.seats === 0) return null;
   const open: LandingInvite = { open: true, host: r.host, players: r.players, seats: r.seats };
+  if (r.member === true) open.member = true;
   if (r.phase === undefined) return open;
   const phase = PHASES.find((p) => p === r.phase);
   return phase ? { ...open, phase } : null;

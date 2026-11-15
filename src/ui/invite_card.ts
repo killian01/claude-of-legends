@@ -18,6 +18,7 @@ import type { LandingOwn, LandingPage } from '../net/landing';
 import { tileArtUrl } from './home_tiles';
 import { saveName as postName, type SaveOutcome } from './ladder_box';
 import {
+  asksName,
   breathes,
   INVITE_CALL,
   INVITE_FIELD_LABEL,
@@ -28,11 +29,14 @@ import {
   type InviteState,
   type InviteWords,
   inviteWords,
+  type NameStep,
   nameStep,
 } from './landing_invite';
 import { el } from './menu';
 import { editValue } from './own_panel';
 import { NAME_FIELD_MAX } from './points_text';
+
+const KEEP: NameStep = { kind: 'keep' };
 
 const CSS = `
 .pg-invite { position: relative; box-sizing: border-box; display: flex; flex-direction: column;
@@ -257,12 +261,15 @@ export function mountInviteCard(
     state = said.state;
     title.textContent = said.title;
     line.textContent = said.line;
-    const joinable = state === 'waiting' || state === 'open' || state === 'limited';
+    const joinable =
+      state === 'waiting' || state === 'open' || state === 'limited' || state === 'member';
     form.hidden = !joinable;
     other.hidden = joinable;
     signIn.hidden = !joinable;
     register.hidden = !joinable;
     go.disabled = state === 'limited';
+    // An account, or a member coming back, joins under the name they have.
+    nameBox.hidden = !asksName(state, current);
     const on = !host.hidden && breathes(state);
     host.classList.toggle('glow', on);
     opts.onBreathe(on);
@@ -272,11 +279,7 @@ export function mountInviteCard(
   void pagePromise.then((page) => {
     if (host.hidden) return;
     const who = page?.own ?? null;
-    if (who) {
-      offer(who);
-      // An account joins under its own name: there is nothing to rename.
-      nameBox.hidden = who.account;
-    }
+    if (who) offer(who);
     apply(inviteWords(page?.invite));
   });
 
@@ -288,7 +291,8 @@ export function mountInviteCard(
     status.textContent = '';
     // The rename needs the Guest the landing's answer hands out.
     await pagePromise;
-    const step = nameStep(field.value, current);
+    // A member coming back keeps the name they had: nothing to rename.
+    const step = asksName(state, current) ? nameStep(field.value, current) : KEEP;
     if (step.kind !== 'keep') {
       const out =
         step.kind === 'wrong' ? { ok: false as const, error: step.error } : await save(step.name);
