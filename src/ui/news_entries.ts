@@ -36,6 +36,17 @@ export interface NewsEntry {
 export const NEWS: readonly NewsEntry[] = [
   {
     day: '2026-11-15',
+    title: 'Play with friends, no account needed',
+    body: [
+      'A private lobby no longer needs an account. Press Play with friends on the front page, or the Private lobby tile on your home, and share the invite link or its six-letter code.',
+      'A friend who opens the link sees whose lobby it is and how many are already in. They pick the name they will play under, which is also their name on the ladder, and press Join the lobby. If they would rather sign in or make an account first, the invitation waits for them. A code typed under the ways to play on the front page works too.',
+      'The lobby also stays open after its match. On the end screen, Back to the lobby takes you back to the same lobby with the same code, on the side you played, and the host starts the next one. The link keeps working: a friend who opens it during a match waits in the lobby and plays the next one. A party you queue from the lobby comes back to it after its match too.',
+      'As host, you can remove someone from your lobby, and it will not let them back in. As before, a lobby match is never rated and scores no points on the ladder.',
+    ],
+    link: { label: 'Play with friends', to: 'play' },
+  },
+  {
+    day: '2026-11-15',
     title: 'Gloamglass: a fourth look for every champion',
     body: [
       'All twelve champions now have a fourth skin, Gloamglass: a body of dark glass lit from within, each champion in their own glow. It is the same line across the whole roster, so a crew can match.',

@@ -152,6 +152,12 @@ Three things a Linux machine with a recent Chrome will meet:
 - **A port already answering.** `e2e_academy.mjs` and `e2e_nav.mjs` read `URL` from the
   environment for exactly this; `stack.sh up` takes `PORT` and `CLIENT_PORT`.
 
+Every browser and client of a local stack comes from one address, so the per-connection limits
+on private lobbies (`server/code_guess.ts`, ADR 0036) count them together: ten lobbies opened in
+ten minutes, twenty different wrong codes in ten minutes, five Guest name changes in an hour.
+Past one, the page shows a refusal that says "from this connection", which a script reports as
+a failed check; the counts live in memory, so `stack.sh down` and `up` clears them.
+
 What is NOT a quirk of this machine: a seek check that reports a clock which did not move.
 Those checks used to wait on the absence of the `.replay-time.seeking` class, which the seek
 itself adds and removes, so they answered before the seek began and read the old time. They
@@ -186,12 +192,14 @@ URL=http://localhost:8787 N=9 TOTAL=10 node scripts/load_match.mjs   # nine, a s
 ```
 
 With a seat for a person the script prints the lobby code and starts the match
-when the tenth player is in; join it from the home screen (or `/?join=CODE`).
-`CODE=ABCDE` joins a lobby a person already opened instead, and they press
-Start. Every run registers its own accounts (`load-<run>-<n>`), each with one
-bot, on the server it points at, so pointing it at a public server leaves those
-behind. `DURATION` (seconds of play, 180), `WAIT` (seconds for the lobby to
-fill, 600) and `ORDER_MS` (between a hand's orders, 250) are the knobs.
+when the tenth player is in; join it from the home screen, or open
+`/?join=CODE` in any browser: one with no account joins from the invitation
+card as a Guest (ADR 0036). `CODE=ABCDEF` joins a lobby a person already
+opened instead, and they press Start. Every run registers its own accounts
+(`load-<run>-<n>`), each with one bot, on the server it points at, so pointing
+it at a public server leaves those behind. `DURATION` (seconds of play, 180),
+`WAIT` (seconds for the lobby to fill, 600) and `ORDER_MS` (between a hand's
+orders, 250) are the knobs.
 
 "Held" means every client kept its twenty snapshots a second with no gap over
 300 ms, pings (when on) answered under 150 ms at the 99th percentile, and no

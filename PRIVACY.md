@@ -26,18 +26,21 @@ ADR 0006).
 random token and nothing else, and it exists so the server knows which
 Guest is talking to it: it shows you your name and your line of the ladder
 when the landing opens, gives you your seat back if the page reloads
-mid-match, and keeps your line when you come back. It lasts a year, and is
-set again on each visit and each time you press Play. Until you score a
-point or choose a name for the ladder, the server keeps what it points at,
-a handed-out name like `Wanderer 4821`, in memory only, for a day after you
-last used it, and a restart forgets it. Once you do, the server keeps, on
-disk in `guests.json`: the name, your points, your best in Respawn (the
-most takedowns you scored in one seat), a SHA-256 hash of the token (never
-the token itself, so the file cannot be used to play as you), and when it
-was made and last seen. Nothing else, and for a year after you were last
-seen. Making an account in the same browser moves the points and the best
-onto it and deletes that record (`server/guests.ts`, ADR 0024, ADR 0027,
-ADR 0033).
+mid-match, puts you back on your side of a private lobby after its match,
+and keeps your line when you come back. It lasts a year, and is set again
+on each visit and each time you press Play, or open or join a private
+lobby. Until you score a point or choose a name (on the ladder, on the
+invitation to a lobby or in the lobby: it is one name), the server keeps
+what it points at, a handed-out name like `Wanderer 4821`, in memory only,
+for a day after you last used it, and a restart forgets it. Once you do,
+the server keeps, on disk in `guests.json`: the name, your points, your
+best in Respawn (the most takedowns you scored in one seat), a SHA-256 hash
+of the token (never the token itself, so the file cannot be used to play as
+you), and when it was made and last seen. Nothing else, and for a year
+after you were last seen. Making an account in the same browser moves the
+points and the best onto it, and your place in any lobby you are in, and
+deletes that record (`server/guests.ts`, ADR 0024, ADR 0027, ADR 0033,
+ADR 0036).
 
 `col_visit`, set on your first page here. It holds one random number, 32
 characters, minted on the server and meaning nothing anywhere else. Its
@@ -86,6 +89,42 @@ and `tests/architecture.test.ts` fails if that ever stops being true. The
 ladder of every human, which anyone can read on the landing, shows a name,
 its points and whether it is a Guest's or an account's, and no id
 (`server/points_ladder.ts`).
+
+## What a private lobby holds
+
+A private lobby lives in the server's memory and is never written to disk
+(`server/lobby.ts`, `server/matchmaker.ts`, ADR 0036). It holds its code;
+for each of the people who have been in it, twenty at most, the name they
+joined under, the side they play, whether they played its last match, and
+the id of their account or Guest, which is how it knows them again after a
+match or a reload; who hosts it; and the connection its opener opened it
+from, for the limits below. A member the host removes stays in it as an id
+its code refuses. Whoever has its code or its link reads, before joining,
+the name of the person who opened it, how many are in it, and whether they
+are queued or playing, and never another name (`server/landing_page.ts`);
+everyone in it sees the others' names and sides. It is forgotten at the
+latest thirty minutes after the last person left it or after two hours in
+which nothing happened in it, and by every restart.
+
+To keep codes from being guessed, the server counts, for each connection
+(the address a request comes from, or for IPv6 its first half, which the
+devices of one network share), the different wrong codes asked and the
+lobbies opened in the last ten minutes, and a Guest's name changes in the
+last hour (`server/code_guess.ts`). It also keeps the codes it handed out
+in the last day, with nothing beside them, so an old link reads as a closed
+lobby rather than as a wrong code. All of it is in memory, against the
+address alone: it is never written to a file or to the log, it is dropped
+when it runs out, and a restart forgets it.
+
+Your browser keeps two codes for a lobby, in the tab's own session storage,
+which the browser empties when the tab closes (`src/game/lobby_memory.ts`).
+Under `col.lobby`, the lobby the tab is in, so a reload, the one a deploy
+asks for included, takes it back in rather than to the front page; it is
+removed when you leave the lobby. Under `col.pendingJoin`, while a sign-in
+through Discord takes the page away, the code of the invitation it was
+opened with and when it was put down, read once on the way back and
+ignored past fifteen minutes. Either code is only ever sent back to this
+server, as the code to join.
 
 ## What is counted
 
@@ -239,7 +278,11 @@ method, the path, the status, your address, the browser and referrer
 headers your browser sent, and the routing headers the proxy in front adds
 to them. Assets are not logged, so a page load is one line rather than
 four hundred. Lines roll off at 20 MiB and about a week, whichever comes
-first.
+first. An invite link carries its lobby's code in the address (`/?join=`),
+so the line for the page it opens holds that code for as long as the line
+is kept; the page takes the code off the address at once (`src/main.ts`),
+and from then on it travels only in the body of the landing's request and
+on the socket, neither of which the access log keeps.
 
 Two things are dropped before a line is written. The cookies, all of them,
 because a log that can resume a session is a store of credentials rather
@@ -257,7 +300,8 @@ counter.
 
 Ask. There is one maintainer and a small number of files; the account
 record, or a Guest's line in `guests.json`, is the whole of what is held
-about you. Open an issue, say hello on
+about you, beside what a lobby you were in remembers of you while it
+stands, in memory only (above). Open an issue, say hello on
 [Discord](https://discord.gg/uURYY5qYJE), or write to the address in
 `SECURITY.md` if it is sensitive.
 

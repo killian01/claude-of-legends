@@ -2,6 +2,9 @@
 
 > Amends ADR 0024 (the Guest is handed out when the landing opens, not on Play) and ADR 0027
 > (the line also keeps a Respawn best, and the level reads the line's points).
+>
+> Amended by ADR 0036: given an invite code in its body, the landing's one request also answers
+> who opened that lobby, how many are in it, and whether they are queued or playing.
 
 ADR 0024 handed a visitor a Guest when they pressed Play, and ADR 0027 gave that Guest a line on
 the ladder of every human, a name of its own and a year under its cookie. What the landing showed

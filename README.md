@@ -32,10 +32,14 @@ A smarter bot is a playbook, no engine code at all. Small and self-contained:
 A complete mini MOBA you can play right now: three lanes, eleven champions with
 full kits, jungle camps, three neutral creatures to fight over, fog of war,
 items, skins, a ladder, a Forge where you build a champion of your own, and an
-authoritative server for online play. No install. Online play
-needs a free account; the practice match against bots does not. An account is
-a name and a password, or one click on Continue with Discord: that button
-creates an account from a Discord identity and signs it back in (ADR 0009).
+authoritative server for online play. No install, and no account to play
+online: a visitor plays as a Guest, in the 5v5 queue and the battle royale,
+which score on the ladder of points from the first match, and in a private
+lobby with friends, which scores none (ADR 0024, ADR 0027, ADR 0036). A free
+account keeps the points on every device and adds rated play, bots and the
+Forge. It is a name and a password, or one click on Continue with Discord:
+that button creates an account from a Discord identity and signs it back in
+(ADR 0009).
 
 The whole game was vibe coded with Claude in a 48 hour sprint, then polished
 in the open; the commit history is the real build log, kept intact. It runs
@@ -106,7 +110,10 @@ pnpm dev           # client; /ws is proxied to the server
 ```
 
 Then "Play online" to queue (empty seats fill with bots on request), or
-"Create private lobby" and share the 5-letter code with friends.
+"Open a lobby" ("Play with friends" on the landing, no account needed) and
+share its invite link or its six-letter code: a friend without an account
+joins from the invitation card as a Guest, and the lobby keeps its code from
+one match to the next.
 
 Every match is played on the **Star Orchard**, the authored Blender map:
 practice, ranked, lobbies and the bots' Arena alike. See

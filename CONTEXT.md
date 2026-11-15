@@ -419,7 +419,7 @@ two is a double kill, five a pentakill, and there is nothing above five (the cha
 restarts, so the next fight can climb again). The leash is not one number, it widens as
 the chain climbs, and it is counted in sim seconds so every client reads the same fight
 the same way (`src/ui/multikill.ts`). Dying ends your own chain. The lower rungs are
-called to the killer alone; from the quadrakill up the whole lobby is told. Purely
+called to the killer alone; from the quadrakill up the whole match is told. Purely
 cosmetic: it pays nothing, changes no rating, and appears in no record.
 _Avoid_: killing spree, streak (that is `killStreak`, the unbroken run since your last
 death, which sets the shutdown bounty), combo
@@ -441,21 +441,24 @@ _Avoid_: building, objective (the Warden is an objective and is not a structure)
 The persistent identity a person plays under: one name, unique across the server and owned by
 whoever registered it, an email address if its owner adds one, plus the rating and match history
 earned with it.
-Everything on the server but the public queue requires one (ADR 0024: a Guest plays that
-queue without one); the offline practice match does not either, and the landing's own panel
-offers a Guest the account: what it adds, their points on every device (ADR 0027). The name is the whole public identity, so nothing is appended to it to tell two people apart, and the address is
-never part of it: only the account itself ever sees its own.
+Everything on the server but the Ranked queue, the battle royale, a Thornfray and a private
+lobby requires one (ADR 0024, ADR 0036: a Guest plays those without one, never rated); the
+offline practice match does not either, and the landing's own panel offers a Guest the account:
+what it adds, their points on every device (ADR 0027). The name is the whole public identity, so
+nothing is appended to it to tell two people apart, and the address is never part of it: only
+the account itself ever sees its own.
 _Avoid_: profile (that is the screen that shows an account), user, login, player (ambiguous, see Participant)
 
 **Guest**:
 A visitor playing without an account (ADR 0024), handed out when the landing opens (ADR 0033):
 a name the server hands out (`Wanderer 4821`, a space no account name may hold), or one it chose
-for its line of the ladder under the account name rules, under a cookie that lasts a year. It
-holds its points, its Respawn best and its chosen name. Held in the server's memory for a day,
-and kept on disk once it has points or a chosen name, for a year after it was last seen
-(ADR 0027). A match with a Guest in it is never rated, and a Guest holds no rating, record,
-collection beyond the starter one, lobby, bot or Forge champion. An account made in its browser
-takes all three, and the Guest is retired.
+under the account name rules, the same on its line of the ladder, on an Invitation card and in a
+private lobby, under a cookie that lasts a year. It holds its points, its Respawn best and its
+chosen name. Held in the server's memory for a day, and kept on disk once it has points or a
+chosen name, for a year after it was last seen (ADR 0027). A match with a Guest in it is never
+rated, and a Guest holds no rating, record, collection beyond the starter one, bot or Forge
+champion; it opens and joins private lobbies as an account does (ADR 0036). An account made in
+its browser takes all three, and the Guest is retired.
 _Avoid_: anonymous player, visitor account
 
 **Drop in**:
@@ -603,14 +606,33 @@ _Avoid_: custom champion, user-generated champion
 
 **Ranked queue**:
 The public matchmaking queue, roster champions only, filled with house bots for any seat
-nobody takes. A match from it is rated when a human sits on each side. Ranked here is the
+nobody takes. A match from it is rated when each side holds a seat an account owns, by hand or
+by its bot, and no Guest plays in it (ADR 0024), a Party's match included. Ranked here is the
 same adjective as a ranked bot: in rated play.
 _Avoid_: public queue, standard queue, solo queue, normal queue
 
 **Private lobby**:
-A room one account opens and others join with its code or invite link, played on the
-roster and never rated. Its host may send the whole room into the Ranked queue as one party.
+A room anyone opens, an account or a Guest (ADR 0036), and others join with its code or invite
+link: played on the roster, never rated, scoring no points. It outlives its match, keeping its
+code, its members and each one's side from one match to the next; whoever opens the link while
+its match runs waits in it for the next one. Its host, whoever opened it while they are in it
+and otherwise the next in line (those who played its last match first), starts the match, sends
+the room into the Ranked queue as one Party, and may remove a member.
 _Avoid_: custom game, room, custom lobby
+
+**Invitation card**:
+What an invite link shows a visitor with no account, a band at the top of the landing rather
+than a layer (ADR 0036): who opened the lobby, how many are in it, whether its match is under
+way, the name they will join under, and Join the lobby, with signing in and creating an account
+offered beside it. A lobby that is full or has closed says so and offers to open one.
+_Avoid_: invite screen, invite modal, welcome page, join page
+
+**Party**:
+Up to five people of a private lobby that its host sent into the Ranked queue together: seated
+whole on one side, its match the queue's like any other, points included, and rated for nobody
+when a Guest plays in it (ADR 0024). The lobby stands behind it, and the party comes back to it
+after its match (ADR 0036).
+_Avoid_: group, premade, squad, crew (that is the battle royale's team)
 
 **Feedback box**:
 The box at the end of a match and in the pause menu that asks what to improve, saying that
