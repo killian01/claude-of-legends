@@ -3269,7 +3269,7 @@ export class Hud {
       );
       const look = call ? multikillLook(call.tier) : null;
       // A rung you can hear: your own at any height, or one loud enough
-      // that the whole lobby is told.
+      // that the whole match is told.
       const shout = look && (call?.killerId === this.selfId || look.everyone) ? look : null;
 
       if (k.unitId === this.selfId) {

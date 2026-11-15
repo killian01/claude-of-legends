@@ -632,7 +632,8 @@ Up to five people of a private lobby that its host sent into the Ranked queue to
 whole on one side, its match the queue's like any other, points included, and rated for nobody
 when a Guest plays in it (ADR 0024). The lobby stands behind it, and the party comes back to it
 after its match (ADR 0036).
-_Avoid_: group, premade, squad, crew (that is the battle royale's team)
+_Avoid_: group, premade, squad, crew (that is the battle royale's team). Not the bots gathered on a
+body in a Rally, which the playbook also calls its party.
 
 **Feedback box**:
 The box at the end of a match and in the pause menu that asks what to improve, saying that
