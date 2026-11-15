@@ -82,6 +82,17 @@ describe('registration', () => {
     });
   });
 
+  it('refuses a name the word filter blocks, as a Guest name is refused', () => {
+    const r = reg();
+    for (const name of ['BigShit', 'shit_head']) {
+      expect(r.register(name, 'a good password', anEmail(), 0)).toEqual({
+        ok: false,
+        error: 'name_blocked',
+      });
+    }
+    expect(r.register('Scunthorpe', 'a good password', anEmail(), 0).ok).toBe(true);
+  });
+
   it('refuses a name already taken, however it is dressed', () => {
     const r = reg();
     unwrap(r.register('bob', 'a good password', anEmail(), 0));
@@ -168,6 +179,13 @@ describe('renaming', () => {
     unwrap(r.register('carl', 'another password', anEmail(), 0));
     expect(r.rename(bob.id, 'Carl', 10)).toEqual({ ok: false, error: 'name_taken' });
     expect(r.rename(bob.id, 'x', 10)).toEqual({ ok: false, error: 'name_invalid' });
+  });
+
+  it('refuses a rename onto a name the word filter blocks', () => {
+    const r = reg();
+    const bob = unwrap(r.register('bob', 'a good password', anEmail(), 0));
+    expect(r.rename(bob.id, 'BigShit', 10)).toEqual({ ok: false, error: 'name_blocked' });
+    expect(r.findById(bob.id)?.name).toBe('bob');
   });
 });
 

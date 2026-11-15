@@ -751,6 +751,7 @@ const nightCoachDeps: NightCoachDeps = {
 // one line and cannot be dropped by accident.
 const REGISTER_ERRORS: Record<RegisterError, string> = {
   name_invalid: nameErrorMessage('charset'),
+  name_blocked: 'That name is not allowed. Pick another one.',
   name_taken: 'That name is taken.',
   password_invalid: passwordErrorMessage('too_short'),
   email_invalid: emailErrorMessage('shape'),

@@ -2,7 +2,7 @@
 // that decides when two names are the same name (CONTEXT.md).
 
 import { describe, expect, it } from 'vitest';
-import { foldName, NAME_MAX, validateName } from '../server/account_name';
+import { foldName, NAME_MAX, nameWordsBlocked, validateName } from '../server/account_name';
 
 describe('account names', () => {
   it('accepts a plain name and keeps the case the owner typed', () => {
@@ -44,5 +44,21 @@ describe('account names', () => {
   it('keeps genuinely different names apart', () => {
     expect(foldName('bob')).not.toBe(foldName('rob'));
     expect(foldName('bob1')).not.toBe(foldName('bob'));
+  });
+});
+
+// The word filter reads a handle's parts as words: separators and a
+// capital after a small letter split it (server/word_filter.ts).
+describe('the words in a name', () => {
+  it('blocks a word the filter refuses, however the handle joins it', () => {
+    for (const name of ['shit_head', 'BigShit', 'big-shit', 'SHIT']) {
+      expect(nameWordsBlocked(name)).toBe(true);
+    }
+  });
+
+  it('lets an ordinary name through, a word inside another included', () => {
+    for (const name of ['Bob', 'Scunthorpe', 'Wanderer4821', 'shitake']) {
+      expect(nameWordsBlocked(name)).toBe(false);
+    }
   });
 });

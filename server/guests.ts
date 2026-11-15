@@ -17,12 +17,17 @@
 
 import { createHash, randomBytes } from 'node:crypto';
 import type { TeamId } from '../src/sim/types';
-import { foldName, type NameError, nameErrorMessage, validateName } from './account_name';
+import {
+  foldName,
+  type NameError,
+  nameErrorMessage,
+  nameWordsBlocked,
+  validateName,
+} from './account_name';
 import type { GuestClaim } from './accounts';
 import type { MatchPick } from './match';
 import { wholeBest } from './royale_ranking';
 import { loadJson, saveJsonAtomic } from './store';
-import { findBlockedWord } from './word_filter';
 
 export interface Guest {
   // Negative, so it can never be an account's id (those count up from 1)
@@ -149,14 +154,12 @@ export function guestRefused(msg: { t: string; forge?: unknown }): boolean {
 // (server/account_name.ts), the word filter, or somebody holding it.
 export type GuestNameError = NameError | 'blocked' | 'taken' | 'unknown_guest';
 
-// The name's own faults, before anyone else is asked about it. The word
-// filter reads the name's parts as words, since a handle has no spaces:
-// separators and a capital after a small letter split it.
+// The name's own faults, before anyone else is asked about it: the
+// account name rules and their word filter (server/account_name.ts).
 export function guestNameRefusal(name: string): NameError | 'blocked' | null {
   const shape = validateName(name);
   if (shape) return shape;
-  const words = name.replace(/[_-]/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2');
-  if (findBlockedWord([words]) !== null) return 'blocked';
+  if (nameWordsBlocked(name)) return 'blocked';
   return null;
 }
 

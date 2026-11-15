@@ -344,6 +344,14 @@ describe('the name a Discord signup is given', () => {
     expect(deriveName('__--__', anyFree)).toBe(FALLBACK_NAME);
   });
 
+  it('never lands on a name the word filter blocks', () => {
+    expect(deriveName('BigShit', anyFree)).toBe(FALLBACK_NAME);
+    expect(deriveName('shit_head!!', anyFree)).toBe(FALLBACK_NAME);
+    const taken = new Set([FALLBACK_NAME.toLowerCase()]);
+    const free = (candidate: string) => !taken.has(candidate.toLowerCase());
+    expect(deriveName('BigShit', free)).toBe(`${FALLBACK_NAME}2`);
+  });
+
   it('counts up past the names already taken', () => {
     const taken = new Set(['caym', 'caym2', 'caym3']);
     const free = (candidate: string) => !taken.has(candidate.toLowerCase());
