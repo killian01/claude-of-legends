@@ -915,6 +915,30 @@ describe('a lobby that outlives its match', () => {
     expect(mm.remembers(code, 103)).toBe(true);
   });
 
+  it('a removed id stays refused however many others join and leave', () => {
+    const { mm, open, join } = lobbyHarness();
+    const code = open(1, 101, 'host');
+    join(2, 102, 'friend', code);
+    mm.removeMember(1, 2);
+    for (let i = 0; i < 25; i++) {
+      expect(join(100 + i, 1000 + i, `p${i}`, code)).toBe('joined');
+      mm.removeEverywhere(100 + i, 0, 'leave');
+    }
+    expect(join(22, 102, 'friend', code)).toBe('refused');
+  });
+
+  it("a removed member's name is no longer held by the lobby", () => {
+    const { mm, sent, open, join } = lobbyHarness();
+    const code = open(1, 101, 'host');
+    join(2, 102, 'friend', code);
+    mm.removeMember(1, 2);
+    // Renaming the removed account reaches no lobby: nothing of theirs is kept.
+    const before = sent.get(1)?.length;
+    mm.renameLive(102, 'Ash');
+    expect(sent.get(1)?.length).toBe(before);
+    expect(mm.lobbyInvite(code)?.players).toBe(1);
+  });
+
   it('follows a Guest renamed or retired into an account', () => {
     const { mm, sent, open, join } = lobbyHarness();
     const code = open(1, -5, 'Wanderer 0005');
