@@ -8,6 +8,7 @@ import {
   canStart,
   GUEST_NO_ANSWER,
   handedOutName,
+  LOBBY_AWAY_TAG,
   LOBBY_BACK_TO,
   LOBBY_DISCONNECTED,
   LOBBY_GONE_ERROR,
@@ -67,11 +68,24 @@ describe('the lobby rows', () => {
     expect(lobbyRows(msg(), false).some((r) => r.change)).toBe(false);
   });
 
+  it('tags a member whose connection dropped as reconnecting, never as coming back', () => {
+    const rows = lobbyRows(
+      msg({ players: [ME, { n: 2, name: 'Bram', team: 1, away: true }] }),
+      false,
+    );
+    expect(rows.map((r) => [r.n, r.tags])).toEqual([
+      [1, ['host', '(you)']],
+      [2, ['reconnecting']],
+    ]);
+    expect(LOBBY_AWAY_TAG).toBe('reconnecting');
+  });
+
   it('counts a side by who holds a seat, not who is coming back', () => {
     const players: LobbyPlayer[] = [
       { n: 1, name: 'a', team: 1 },
       { n: 2, name: 'b', team: 1, playing: true },
       { n: 3, name: 'c', team: 1, back: true },
+      { n: 4, name: 'd', team: 1, away: true },
     ];
     expect(seatedOn(players, 1)).toBe(2);
     expect(seatedOn(players, 0)).toBe(0);
@@ -81,6 +95,7 @@ describe('the lobby rows', () => {
     const five = [1, 2, 3, 4, 5].map((n) => ({ n, name: `p${n}`, team: 0 as const }));
     expect(partyFits(five)).toBe(true);
     expect(partyFits([...five, { n: 6, name: 'p6', team: 1, back: true }])).toBe(true);
+    expect(partyFits([...five, { n: 6, name: 'p6', team: 1, away: true }])).toBe(true);
     expect(partyFits([...five, { n: 6, name: 'p6', team: 1 }])).toBe(false);
   });
 });
@@ -118,6 +133,29 @@ describe('the lobby status line', () => {
     expect(lobbyStatus(waiting).line).toBe(
       'Waiting for Ilsa to start. 2 coming back from the match.',
     );
+  });
+
+  it('never counts a dropped connection as coming back from the match', () => {
+    const players = [
+      ME,
+      { n: 2, name: 'b', team: 1, away: true },
+      { n: 3, name: 'c', team: 1, back: true },
+    ] satisfies LobbyPlayer[];
+    expect(lobbyStatus(msg({ players })).line).toBe('1 coming back from the match.');
+    const onlyAway = [ME, { n: 2, name: 'b', team: 1, away: true }] satisfies LobbyPlayer[];
+    expect(lobbyStatus(msg({ players: onlyAway })).line).toBe('');
+  });
+
+  it('still names a host whose connection dropped, held through the grace', () => {
+    const view = msg({
+      host: false,
+      players: [
+        { n: 1, name: 'Ilsa', team: 0, host: true, away: true },
+        { ...FRIEND, you: true },
+      ],
+    });
+    expect(lobbyStatus(view).line).toBe('Waiting for Ilsa to start.');
+    expect(lobbyRows(view, false)[0]!.tags).toEqual(['host', 'reconnecting']);
   });
 
   it('tells a waiter what the lobby is doing', () => {

@@ -15,6 +15,9 @@ export const LOBBY_HOST_TAG = 'host';
 export const LOBBY_YOU_TAG = '(you)';
 export const LOBBY_PLAYING_TAG = 'in the match';
 export const LOBBY_BACK_TAG = 'coming back';
+// A member whose connection dropped, held for a short grace: a reload, a
+// phone that slept. Never counted as coming back from the match.
+export const LOBBY_AWAY_TAG = 'reconnecting';
 export const LOBBY_REMOVE = 'Remove';
 export const LOBBY_CHANGE = 'Change';
 export const LOBBY_REJOIN = 'Rejoin the match';
@@ -51,6 +54,7 @@ export function lobbyRows(msg: LobbyMsg, guest: boolean): LobbyRow[] {
     if (p.you) tags.push(LOBBY_YOU_TAG);
     if (p.playing) tags.push(LOBBY_PLAYING_TAG);
     if (p.back) tags.push(LOBBY_BACK_TAG);
+    if (p.away) tags.push(LOBBY_AWAY_TAG);
     return {
       n: p.n,
       name: p.name,
@@ -62,15 +66,20 @@ export function lobbyRows(msg: LobbyMsg, guest: boolean): LobbyRow[] {
   });
 }
 
-// The members holding a seat on a side: a row coming back holds none yet.
+// A row holding a seat: one coming back, or reconnecting, holds none yet.
+function holdsSeat(p: LobbyPlayer): boolean {
+  return p.back !== true && p.away !== true;
+}
+
+// The members holding a seat on a side.
 export function seatedOn(players: readonly LobbyPlayer[], team: TeamId): number {
-  return players.filter((p) => p.team === team && p.back !== true).length;
+  return players.filter((p) => p.team === team && holdsSeat(p)).length;
 }
 
 // A party of up to five present members can queue together; a full lobby
 // starts its own match.
 export function partyFits(players: readonly LobbyPlayer[]): boolean {
-  return players.filter((p) => p.back !== true).length <= 5;
+  return players.filter(holdsSeat).length <= 5;
 }
 
 // Start match and Queue as a party: the host of an open lobby.
@@ -94,6 +103,8 @@ export function lobbyStatus(msg: LobbyMsg): { line: string; rejoin: boolean } {
   if (msg.phase === 'queue') {
     return { line: 'Your lobby is queued for a match. You will play the next one.', rejoin: false };
   }
+  // The host is named even while reconnecting: the server holds the host's
+  // place through the grace. Only a return from the match is counted.
   const parts: string[] = [];
   if (!msg.host) {
     const host = msg.players.find((p) => p.host);
