@@ -1,7 +1,9 @@
 // The landing's one request on the client (src/net/landing.ts, ADR 0033):
 // a POST with the cookie riding it and no body, read field by field, and
 // null whenever there is no answer to trust, so the landing stands as it
-// did without the ladder and the own panel.
+// did without the ladder and the own panel. With an invite code (ADR 0036)
+// the code rides in a JSON body, never in the address, and the answer's
+// invitation is read field by field too.
 
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -65,6 +67,24 @@ describe("the landing's one request", () => {
     expect(init?.credentials).toBe('same-origin');
     expect(init?.body).toBeUndefined();
     expect(page).toEqual(GOOD);
+  });
+
+  it('with an invite code, posts { join } as JSON, never in the address', async () => {
+    let asked = '';
+    let init: RequestInit | undefined;
+    const invite = { open: true, host: 'Marrow', players: 3, seats: 10 };
+    const post = (async (input: RequestInfo | URL, given?: RequestInit) => {
+      asked = String(input);
+      init = given;
+      return new Response(JSON.stringify({ ...GOOD, invite }), { status: 200 });
+    }) as typeof fetch;
+    const page = await loadLanding(post, 'KMNPQR');
+    expect(asked).toBe(LANDING_ROUTE);
+    expect(init?.method).toBe('POST');
+    expect(init?.credentials).toBe('same-origin');
+    expect(new Headers(init?.headers).get('content-type')).toBe('application/json');
+    expect(JSON.parse(String(init?.body))).toEqual({ join: 'KMNPQR' });
+    expect(page).toEqual({ ...GOOD, invite });
   });
 
   it('answers null on a refusal, a throw or junk', async () => {
@@ -147,6 +167,59 @@ describe('reading the answer', () => {
       ...WEEK,
       rotation: [],
     });
+  });
+});
+
+describe('reading the invitation', () => {
+  const invited = (invite: unknown) => asLandingPage({ ...GOOD, invite });
+
+  it('is no field at all when the answer has none', () => {
+    const page = asLandingPage(GOOD);
+    expect(page).not.toBeNull();
+    expect(page && 'invite' in page).toBe(false);
+  });
+
+  it('reads an open lobby: its host, how many are in, its seats and its phase', () => {
+    const open = { open: true, host: 'Marrow', players: 3, seats: 10 };
+    expect(invited(open)?.invite).toEqual(open);
+    expect(invited({ ...open, players: 0 })?.invite).toEqual({ ...open, players: 0 });
+    for (const phase of ['queue', 'select', 'match']) {
+      expect(invited({ ...open, phase })?.invite).toEqual({ ...open, phase });
+    }
+    // Nothing the shape does not name is carried.
+    expect(invited({ ...open, code: 'KMNPQR', id: 7 })?.invite).toEqual(open);
+  });
+
+  it('reads a closed lobby, and a connection over its wrong codes', () => {
+    expect(invited({ open: false })?.invite).toEqual({ open: false });
+    expect(invited({ open: false, limited: true })?.invite).toEqual({
+      open: false,
+      limited: true,
+    });
+    expect(invited({ open: false, limited: 'yes' })?.invite).toEqual({ open: false });
+  });
+
+  it('reads a malformed invitation as no answer, and keeps the ladder', () => {
+    const open = { open: true, host: 'Marrow', players: 3, seats: 10 };
+    for (const junk of [
+      null,
+      'open',
+      [],
+      {},
+      { open: 'yes' },
+      { ...open, host: '' },
+      { ...open, host: 7 },
+      { ...open, players: -1 },
+      { ...open, players: 1.5 },
+      { ...open, seats: 0 },
+      { ...open, seats: '10' },
+      { ...open, phase: 'lunch' },
+    ]) {
+      const page = invited(junk);
+      expect(page?.invite).toBeNull();
+      expect(page?.ladder).toEqual(LADDER);
+      expect(page?.own).toEqual(OWN);
+    }
   });
 });
 
