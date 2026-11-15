@@ -95,4 +95,16 @@ describe("a Guest's way in", () => {
       "await showNotice(container, 'Server unreachable', GUEST_NO_ANSWER, 'Back');",
     );
   });
+
+  it("makes Back in a party's queue do what its Back to the lobby does", () => {
+    const main = readFileSync(path.join(ROOT, 'src/main.ts'), 'utf8');
+    // The session layer's close and the party queue's button share one rule.
+    expect(main).toContain(
+      "const layer = appNav().push('session', () => finish(sessionBackAction(partyQueue, lobbyCode)));",
+    );
+    expect(main).toContain('() => finish(sessionBackAction(partyQueue, lobbyCode)),');
+    const at = main.indexOf('const clearMenus = (): void => {');
+    expect(at).toBeGreaterThan(0);
+    expect(main.slice(at, main.indexOf('};', at))).toContain('partyQueue = false;');
+  });
 });

@@ -82,6 +82,13 @@ export function partyFits(players: readonly LobbyPlayer[]): boolean {
   return players.filter(holdsSeat).length <= 5;
 }
 
+// What browser Back does in a lobby session (src/main.ts runOnline): in
+// the party queue a lobby opened, what its Back to the lobby does ('again'
+// with the code); anywhere else, what Leave does.
+export function sessionBackAction(partyQueue: boolean, lobbyCode: string | null): 'again' | 'menu' {
+  return partyQueue && lobbyCode !== null ? 'again' : 'menu';
+}
+
 // Start match and Queue as a party: the host of an open lobby.
 export function canStart(msg: LobbyMsg): boolean {
   return msg.host && msg.phase === undefined;

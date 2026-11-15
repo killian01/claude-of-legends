@@ -21,6 +21,7 @@ import {
   lobbyStatus,
   partyFits,
   seatedOn,
+  sessionBackAction,
 } from '../src/ui/lobby_view';
 
 const ME: LobbyPlayer = { n: 1, name: 'Ilsa', team: 0, host: true, you: true };
@@ -224,5 +225,14 @@ describe('the words around a lobby session', () => {
       'Disconnected from the lobby. Open your invite link again to come back.',
     );
     expect(GUEST_NO_ANSWER).toBe('The server did not answer. Try again in a moment.');
+  });
+
+  // Browser Back follows the screen showing: in the party queue a lobby
+  // opened, it is that queue's Back to the lobby; anywhere else, Leave.
+  it('sends Back in a party queue back to the lobby, and leaves from anywhere else', () => {
+    expect(sessionBackAction(true, 'KMNPQR')).toBe('again');
+    expect(sessionBackAction(true, null)).toBe('menu');
+    expect(sessionBackAction(false, 'KMNPQR')).toBe('menu');
+    expect(sessionBackAction(false, null)).toBe('menu');
   });
 });

@@ -122,6 +122,7 @@ import {
   LOBBY_DISCONNECTED,
   LOBBY_GONE_ERROR,
   lobbyClosedWords,
+  sessionBackAction,
 } from './ui/lobby_view';
 import {
   type BotPick,
@@ -927,6 +928,9 @@ async function runOnline(choice: HomeChoice, guest = false, returning = false): 
     );
 
     let queueUi: QueueController | null = null;
+    // The queue up is the party queue a lobby opened: Back goes back to the
+    // lobby, as its button does (sessionBackAction).
+    let partyQueue = false;
     let lobbyUi: LobbyController | null = null;
     let selectUi: SelectController | null = null;
     // The latest select_update, for a select that opens after it arrived.
@@ -963,6 +967,7 @@ async function runOnline(choice: HomeChoice, guest = false, returning = false): 
     const clearMenus = (): void => {
       queueUi?.remove();
       queueUi = null;
+      partyQueue = false;
       lobbyUi?.remove();
       lobbyUi = null;
     };
@@ -995,12 +1000,13 @@ async function runOnline(choice: HomeChoice, guest = false, returning = false): 
       resolve({ action, lobby: lobbyCode });
     };
     // The whole session is one layer (src/game/nav.ts). In the queue or
-    // the lobby, Back is the Cancel or Leave button. From champion select
-    // on it is guarded: the team's clock is running and a seat is held, so
-    // Back does nothing in select, opens the pause menu in the match, and
-    // closing the tab asks first. The end screen lifts the guard: Back is
-    // then Return to menu.
-    const layer = appNav().push('session', () => finish('menu'));
+    // the lobby, Back is the Cancel or Leave button, and in a lobby's party
+    // queue its Back to the lobby. From champion select on it is guarded:
+    // the team's clock is running and a seat is held, so Back does nothing
+    // in select, opens the pause menu in the match, and closing the tab
+    // asks first. The end screen lifts the guard: Back is then Return to
+    // menu.
+    const layer = appNav().push('session', () => finish(sessionBackAction(partyQueue, lobbyCode)));
 
     // The presentation opens once the terrain is parsed and the champion
     // models are in: at once when they are on hand, behind the loading
@@ -1180,10 +1186,11 @@ async function runOnline(choice: HomeChoice, guest = false, returning = false): 
           if (lobbyUi && !queueUi) {
             lobbyUi.remove();
             lobbyUi = null;
+            partyQueue = true;
             queueUi = showQueue(
               container,
               () => ws.send(JSON.stringify({ t: 'start_now' })),
-              () => finish(lobbyCode !== null ? 'again' : 'menu'),
+              () => finish(sessionBackAction(partyQueue, lobbyCode)),
               lobbyCode !== null ? LOBBY_BACK_TO : 'Cancel',
             );
           }
@@ -1198,6 +1205,7 @@ async function runOnline(choice: HomeChoice, guest = false, returning = false): 
           if (!lobbyUi) {
             queueUi?.remove();
             queueUi = null;
+            partyQueue = false;
             selectUi?.remove();
             selectUi = null;
             lastSelectUpdate = null;
