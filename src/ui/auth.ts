@@ -142,9 +142,12 @@ export async function requestReset(email: string): Promise<string | null> {
 // What the page around the form may ask of it once it is built, filled in
 // by buildAuthForm when given. register(name) opens the register tab with the
 // name in its field and the password field focused: the landing's own panel
-// offers a Guest's name to keep that way (ui/own_panel_view.ts).
+// offers a Guest's name to keep that way (ui/own_panel_view.ts). signIn()
+// opens the sign-in tab with the name field focused: the invitation's quiet
+// Sign in (ui/invite_card.ts). Neither scrolls: the page does.
 export interface AuthFormControl {
   register(name: string): void;
+  signIn(): void;
 }
 
 // Just the credential panel: the tabs, the fields, the error line and the
@@ -160,12 +163,14 @@ export interface AuthFormControl {
 // what was linked, if anything, is the server's business. `initialMode`
 // is the tab the form opens on: register when the visitor arrives having
 // taken the account offer at the end of a practice match, sign in
-// otherwise.
+// otherwise. `onDeparture` is told right before the Discord door leaves the
+// page, so the page can put down what it holds (an invitation's code).
 export function buildAuthForm(
   onSignedIn: (account: AuthedAccount) => void,
   discordResult: DiscordResult | null = null,
   initialMode: 'login' | 'register' = 'login',
   control?: AuthFormControl,
+  onDeparture?: () => void,
 ): HTMLElement {
   ensureCss();
   const root = el('div', 'auth-form');
@@ -205,7 +210,7 @@ export function buildAuthForm(
   // Discord application, and the 'forgot' mode hides it here: a password
   // reset is about the password, and the door would only distract.
   const discordBox = el('div', 'auth-discord');
-  discordBox.appendChild(buildDiscordEntry(discordResult));
+  discordBox.appendChild(buildDiscordEntry(discordResult, onDeparture));
 
   root.append(tabs, name, email, password, error, go, alt, note, discordBox);
 
@@ -314,6 +319,11 @@ export function buildAuthForm(
       name.value = offered;
       // No scroll of its own: the page scrolls the card into view.
       password.focus({ preventScroll: true });
+    };
+    control.signIn = (): void => {
+      go.disabled = false;
+      setMode('login', false);
+      name.focus({ preventScroll: true });
     };
   }
   return root;
