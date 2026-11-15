@@ -10,8 +10,11 @@
 // 0024, ADR 0027), and the account, which keeps those points on every
 // device and opens the rest. The ladder of every human stands between
 // them, where a visitor reads whose names are there before pressing Play.
+// A page an invite link opened carries the invitation to that private
+// lobby in a band under the bar (ui/invite_card.ts, ADR 0036).
 // The chrome it shares with the signed-in home lives in ui/page.ts.
 
+import { rememberPendingJoin, tabStore } from '../game/lobby_memory';
 import { appNav } from '../game/nav';
 import { updateSettings } from '../game/settings';
 import { loadLanding, untilLanded } from '../net/landing';
@@ -19,12 +22,13 @@ import { type AuthedAccount, type AuthFormControl, buildAuthForm } from './auth'
 import { setPortrait } from './champion_art';
 import type { DiscordResult } from './discord_entry';
 import { startBackdrop } from './home_backdrop';
+import { type InviteCard, mountInviteCard } from './invite_card';
 import { CONTRIBUTE_LEAD, CONTRIBUTE_TITLE, CONTRIBUTE_WAYS } from './landing_contribute';
 import { mountEmbers } from './landing_embers';
+import { CODE_JOIN, CODE_PROMPT, CODE_WRONG, codePlay } from './landing_invite';
 import { markOwnRow, mountLandingLadder } from './landing_ladder';
 import {
   accountCardWords,
-  CLASSIC_ART,
   HERO_RANKED_LINE,
   LANDING_MODES,
   LANDING_WAYS,
@@ -45,7 +49,7 @@ import { allNews, countdownText, dayText, isPinned, newestOf } from './news';
 import { newsImageUrl } from './news_images';
 import { openNews } from './news_section';
 import { kept, weekLine } from './own_panel';
-import { mountOwnPanel } from './own_panel_view';
+import { mountOwnPanel, type OwnPanel } from './own_panel_view';
 import { buildPage, ensurePageCss, mountLiveStats, navLink } from './page';
 import { planetEmblem } from './planet_emblem';
 import { buildRepoLink } from './repo_link';
@@ -92,9 +96,9 @@ const CSS = `
 .pg-opens-form { display: flex; flex-direction: column; justify-content: center;
   padding: 16px; border-radius: 12px; border: 1px solid rgba(140, 168, 208, 0.28);
   background: rgba(6, 10, 20, 0.72); }
-/* The other way in, and its four ways to play (ui/landing_modes.ts
-   LANDING_WAYS): the battle royale's two rule sets, the Thornfray and the
-   5v5, a row each, each a door. A row is an emblem, the kind of match in
+/* The other way in, and its five ways to play (ui/landing_modes.ts
+   LANDING_WAYS): the battle royale's two rule sets, the Thornfray, the 5v5
+   and a private lobby, a row each, each a door. A row is an emblem, the kind of match in
    small gold letters, the name, and the line that says the rules. Respawn's row
    carries the gold edge, because the gold button under the rows plays it.
    The rows take whatever height the account card leaves over, which is
@@ -146,6 +150,19 @@ const CSS = `
   letter-spacing: 1.2px; text-transform: uppercase; color: #f0dca0; line-height: 1.15; }
 .pg-way-words span { font-size: 12px; line-height: 1.4; color: #b9cbe4; }
 .pg-way-go { flex: none; font-size: 20px; line-height: 1; color: #c9a84a; }
+/* Under the rows, a lobby's code typed by hand (ADR 0036): not inside a row,
+   since a row is a button. The field is 16 px, so a phone does not zoom the
+   page when it takes the focus. */
+.pg-code { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px;
+  margin: 4px 0 0 2px; }
+.pg-code-label { font-size: 12.5px; font-weight: 700; color: #b9cbe4; }
+.pg .pg-code .menu-input.pg-code-field { flex: 0 1 140px; width: auto; min-width: 0; margin: 0;
+  height: 36px; padding: 0 10px; font-size: 16px; letter-spacing: 2px; text-transform: uppercase; }
+.pg.land .pg-card .pg-code .menu-btn.pg-code-go { flex: none; width: auto; margin: 0;
+  min-height: 36px; padding: 0 16px; font-size: 13px; }
+.pg.land .pg-card p.pg-code-said { flex-basis: 100%; margin: 0; font-size: 11.5px;
+  line-height: 1.35; color: #f5a3a3; }
+.pg.land .pg-card p.pg-code-said:empty { display: none; }
 /* The 5v5's week under its rules: the three champions' faces, overlapping,
    and the line naming them. */
 .pg-way-words .pg-way-week { display: flex; align-items: center; gap: 7px; min-width: 0;
@@ -594,7 +611,8 @@ export function showLanding(
   // The landing's one request (src/net/landing.ts), asked once as the page
   // opens: it hands the visitor its Guest and answers the ladder, the own
   // panel and the week, and each part reads the same answer.
-  const pagePromise = loadLanding();
+  // An invite link's code rides it, for the invitation's answer (ADR 0036).
+  const pagePromise = loadLanding(undefined, invite);
   return new Promise((resolve) => {
     const { root, inner, bar, hero } = buildPage('land', true);
     const stopBackdrop = startBackdrop(root);
@@ -639,13 +657,15 @@ export function showLanding(
       const row = el('button', `pg-way${way.door === PLAY_NOW ? ' lead' : ''}`);
       row.type = 'button';
       row.dataset.way = way.id;
+      // A planet row wears the Wanderseed's emblem, a Star Orchard row its
+      // painting (ui/landing_modes.ts LandingWay art).
       const art =
-        way.id === 'classic'
-          ? el('span', 'pg-way-art painting')
-          : planetEmblem(way.id, 'pg-way-art');
-      if (way.id === 'classic') {
+        way.art === undefined
+          ? planetEmblem(way.id, 'pg-way-art')
+          : el('span', 'pg-way-art painting');
+      if (way.art !== undefined) {
         const img = el('img', '');
-        img.src = CLASSIC_ART;
+        img.src = way.art;
         // The name beside it says which match this is.
         img.alt = '';
         img.loading = 'lazy';
@@ -770,13 +790,23 @@ export function showLanding(
     const formPanel = el('div', 'pg-opens-form');
     // Filled by the form: the own panel's Keep it on every device opens its
     // register tab with the Guest's name in it.
-    const authControl: AuthFormControl = { register: () => {} };
+    const authControl: AuthFormControl = { register: () => {}, signIn: () => {} };
+    // The invitation's code a sign-in still owes (ui/invite_card.ts): the
+    // account goes into that lobby on the other side. Discord's round trip
+    // leaves the page, so the code is put down first and picked up at boot.
+    let card: InviteCard | null = null;
+    const pendingJoin = (): string | null => card?.pending() ?? null;
+    const onDeparture = (): void => {
+      const code = pendingJoin();
+      if (code) rememberPendingJoin(tabStore(), code, Date.now());
+    };
     formPanel.appendChild(
       buildAuthForm(
-        (account) => finish({ kind: 'account', account, join: invite }),
+        (account) => finish({ kind: 'account', account, join: pendingJoin() }),
         discordResult,
         'login',
         authControl,
+        onDeparture,
       ),
     );
     const openRow = el('div', 'pg-open-row');
@@ -786,9 +816,10 @@ export function showLanding(
     // The other way in, and the one that needs nothing: a match as a Guest
     // (ADR 0024), scored on the ladder from the first match (ADR 0027).
     // Its gold button plays the battle royale's Respawn (ADR 0031) under the
-    // banner that announces it, and the rows under it are the four ways to
+    // banner that announces it, and the rows under it are the five ways to
     // play, each a door of its own: the two rule sets of the battle royale,
-    // the Thornfray (ADR 0035) and the 5v5 on the Star Orchard.
+    // the Thornfray (ADR 0035), the 5v5 on the Star Orchard and a private
+    // lobby (ADR 0036), with a line for a lobby's code under them.
     // The offline match that stood one quiet line under it left the
     // landing: visitors play online now, and the page falls back to
     // practice by itself when no Guest can be opened (src/main.ts).
@@ -800,13 +831,38 @@ export function showLanding(
     presence.append(el('i', ''), el('span', ''));
     mountPresence(presence, thornfrayLive);
     // The ways in, under the gold button: the battle royale's two rule
-    // sets, the Thornfray and the 5v5 (ui/landing_modes.ts). The button
-    // stands over them so it holds the first screen of a laptop, where it
-    // always stood; the gold edge on Respawn's row, right under it, says
-    // which it plays.
+    // sets, the Thornfray, the 5v5 and a private lobby (ui/landing_modes.ts).
+    // The button stands over them so it holds the first screen of a laptop,
+    // where it always stood; the gold edge on Respawn's row, right under it,
+    // says which it plays.
     const wayList = el('div', 'pg-ways');
     wayList.appendChild(el('div', 'pg-ways-label', WAYS_LABEL));
     for (const way of LANDING_WAYS) wayList.appendChild(wayRow(way));
+    // A code typed by hand joins its lobby as a Guest.
+    const codeLine = el('form', 'pg-code');
+    codeLine.noValidate = true;
+    const codeField = el('input', 'menu-input pg-code-field');
+    codeField.id = 'pg-code-field';
+    codeField.type = 'text';
+    codeField.maxLength = 6;
+    codeField.autocomplete = 'off';
+    codeField.setAttribute('autocapitalize', 'characters');
+    codeField.spellcheck = false;
+    codeField.enterKeyHint = 'go';
+    const codeLabel = el('label', 'pg-code-label', CODE_PROMPT);
+    codeLabel.htmlFor = codeField.id;
+    const codeGo = el('button', 'menu-btn pg-code-go', CODE_JOIN);
+    codeGo.type = 'submit';
+    const codeSaid = el('p', 'pg-code-said');
+    codeSaid.setAttribute('role', 'status');
+    codeLine.append(codeLabel, codeField, codeGo, codeSaid);
+    codeLine.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const play = codePlay(codeField.value);
+      codeSaid.textContent = play ? '' : CODE_WRONG;
+      if (play) finish({ kind: 'guest', play });
+    });
+    wayList.appendChild(codeLine);
     // The battle royale's arrival heads the card (ui/landing_modes.ts):
     // where the heading Play now and its line stood, the planet, the word
     // New and what one does there, right over the gold button that plays
@@ -891,6 +947,33 @@ export function showLanding(
     mountLandingLadder(ladder, pagePromise, () =>
       finish({ kind: PLAY_NOW.kind, play: PLAY_NOW.play }),
     );
+    // The invitation (ui/invite_card.ts, ADR 0036): a band under the bar,
+    // before the hero, the first thing read on a page an invite link
+    // opened. While it can be taken it breathes the gold the Play now card
+    // wears otherwise.
+    let panel: OwnPanel | null = null;
+    if (invite) {
+      const band = el('section', 'pg-invite');
+      inner.insertBefore(band, hero);
+      card = mountInviteCard(band, invite, pagePromise, {
+        onJoin: (code) => finish({ kind: 'guest', play: { to: 'lobby', code } }),
+        onOpenOwn: () => finish({ kind: 'guest', play: { to: 'lobby' } }),
+        onSignIn: () => {
+          online.scrollIntoView({ block: 'start', behavior: 'smooth' });
+          authControl.signIn();
+        },
+        onRegister: (name) => {
+          online.scrollIntoView({ block: 'start', behavior: 'smooth' });
+          authControl.register(name);
+        },
+        onRenamed: (name) => {
+          panel?.renamed(name);
+          markOwnRow(ladder, name);
+          if (panel) sayAccount(accountCardWords(panel.own()));
+        },
+        onBreathe: (on) => playCard.classList.toggle('glow', !on),
+      });
+    }
     void pagePromise.then((page) => {
       const week = page?.week ?? null;
       const said = week ? weekLine(week, Date.now()) : '';
@@ -917,7 +1000,7 @@ export function showLanding(
       // climbs from (ui/royale_goal.ts).
       updateSettings({ royaleGoal: own.points });
       sayAccount(accountCardWords(own));
-      const panel = mountOwnPanel(ownHost, own, {
+      const mounted = mountOwnPanel(ownHost, own, {
         // Offered, never demanded: the account card, on its register tab,
         // with the name the Guest stands under.
         onKeep: (name) => {
@@ -926,11 +1009,13 @@ export function showLanding(
         },
         onRenamed: (name) => {
           markOwnRow(ladder, name);
-          sayAccount(accountCardWords(panel.own()));
+          sayAccount(accountCardWords(mounted.own()));
+          card?.renamed(name);
         },
         // The session is there: the boot finds it and opens the home.
         onHome: () => window.location.reload(),
       });
+      panel = mounted;
       ownHost.classList.remove('own-wait');
       root.classList.add('own-on');
       if (own.account || kept(own)) root.classList.add('own-back');

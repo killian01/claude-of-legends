@@ -19,15 +19,29 @@
 // the cookie loc_guest=seed-home-guest reads Thornwick with 340 points,
 // Level 4 and a best of 9.
 //
-// On every state the four ways to play under the gold button are measured
+// On every state the five ways to play under the gold button are measured
 // too (ui/landing_modes.ts LANDING_WAYS): Respawn, One life, the Thornfray
-// with its own emblem, and the 5v5, each row whole inside the card, none
-// over another, its words at a readable size; with PRESENCE=1 the
-// Thornfray's row says its gathering on one line.
+// with its own emblem, the 5v5 and a private lobby, each row whole inside
+// the card, none over another, its words at a readable size, and the code
+// line under them; with PRESENCE=1 the Thornfray's row says its gathering
+// on one line.
+//
+// In fixture mode an invite link (/?join=KMNPQR, ADR 0036) is opened on four
+// more states, the landing's answer read off the request's JSON body:
+// 'invited' (Marrow's lobby, 3 of 10), 'closed', 'full' and 'limited'. The
+// band under the bar is measured: the code rode the body and never the
+// address, the title, the name field and Join inside the first screen of a
+// phone either way up, Join inside the first screen everywhere, the band at
+// most 175 px on a short screen, the field over Join at 560 px wide and
+// under, the gold halo on the band while it can be taken and back on the
+// Play now card when it cannot. On 'invited' a taken name is refused in the
+// server's words with no join, a good one is saved before the Guest is
+// asked for (POST /api/ladder/name before POST /api/guest), and Not now puts
+// the band away.
 //
 // CHROME and E2E_URL from the environment, SHOT_DIR for the PNGs, SIZES to
-// pick among desktop,landscape,portrait, PRESENCE=1 for someone on (fixture
-// mode). One browser.
+// pick among desktop,laptop,wide,landscape,portrait, PRESENCE=1 for someone
+// on (fixture mode). One browser.
 import { mkdirSync } from 'node:fs';
 import puppeteer from 'puppeteer-core';
 
@@ -49,6 +63,18 @@ const SIZES = [
     viewport: { width: 1280, height: 720 },
     nameTop: 300,
     playBottom: 640,
+  },
+  {
+    id: 'laptop',
+    viewport: { width: 1280, height: 800 },
+    nameTop: 300,
+    playBottom: 760,
+  },
+  {
+    id: 'wide',
+    viewport: { width: 1920, height: 1080 },
+    nameTop: 360,
+    playBottom: 1000,
   },
   {
     id: 'landscape',
@@ -211,6 +237,15 @@ const STATES = {
   },
 };
 
+// What the landing answers of the invite code, by state (server/landing_page.ts).
+const CODE = 'KMNPQR';
+const INVITES = {
+  invited: { open: true, host: 'Marrow', players: 3, seats: 10 },
+  closed: { open: false },
+  full: { open: true, host: 'Marrow', players: 10, seats: 10 },
+  limited: { open: false, limited: true },
+};
+
 const TAKEN = 'Somebody already plays under that name. Pick another one.';
 const BLOCKED = 'That name is not allowed on the ladder. Pick another one.';
 
@@ -225,13 +260,18 @@ async function intercept(page, fixture) {
       req.respond({ status, contentType: 'application/json', body: JSON.stringify(body) });
     if (path === '/api/public/landing' && req.method() === 'POST') {
       const own = STATES[fixture.state];
-      json(200, { ladder: ladderAround(own), own, week: WEEK });
+      const join = JSON.parse(req.postData() || '{}').join ?? null;
+      fixture.joins.push({ join, address: req.url() });
+      const answer = { ladder: ladderAround(own), own, week: WEEK };
+      if (join !== null && fixture.invite) answer.invite = INVITES[fixture.invite];
+      json(200, answer);
       return;
     }
     if (path === '/api/ladder/name' && req.method() === 'POST') {
       const name = JSON.parse(req.postData() ?? '{}').name;
       fixture.renames.push(name);
-      if (name === 'Thornwick2') json(200, { name });
+      fixture.log.push('name');
+      if (name === 'Thornwick2' || name === 'Brindle2') json(200, { name });
       else if (name === 'Quillon') json(409, { error: TAKEN });
       else json(400, { error: BLOCKED });
       return;
@@ -252,6 +292,13 @@ async function intercept(page, fixture) {
     }
     if (path === '/api/me') {
       json(401, { error: 'not signed in' });
+      return;
+    }
+    // The Guest a Join asks for: counted, and refused, so the page goes no
+    // further than the order of the two requests.
+    if (path === '/api/guest' && req.method() === 'POST') {
+      fixture.log.push('guest');
+      json(503, { error: 'not in this script' });
       return;
     }
     req.continue();
@@ -308,7 +355,9 @@ async function measure(page) {
       name: box(name),
       nameText: name?.textContent ?? '',
       change: box(change),
-      play: box(document.querySelector('.menu-btn.pg-play')),
+      // The Play now card's own gold button: the invitation's Join is gold too.
+      play: box(document.querySelector('.pg-card.plain .menu-btn.pg-play')),
+      playGlow: document.querySelector('.pg-card.plain')?.classList.contains('glow') ?? false,
       own: box(own),
       card: box(card),
       overlap: worst,
@@ -352,16 +401,48 @@ async function measure(page) {
         };
       }),
       waysLabel: text('.pg-ways-label'),
+      code: (() => {
+        const line = document.querySelector('.pg-code');
+        const field = document.querySelector('.pg-code-field');
+        const go = document.querySelector('.pg-code-go');
+        return {
+          line: box(line),
+          field: box(field),
+          go: box(go),
+          label: text('.pg-code-label'),
+          fieldSize: field ? Number.parseFloat(getComputedStyle(field).fontSize) : 0,
+          inRow: line?.closest('.pg-way') !== null,
+        };
+      })(),
     };
   });
 }
 
-// The four ways under the gold button, on every state.
+// The five ways under the gold button, and the code line under them, on
+// every state.
 function checkWays(m, size, label) {
   const at = `${size.id} ${label}`;
   const ids = m.ways.map((w) => w.id).join(',');
-  check(ids === 'respawn,one_life,thornfray,classic', `${at}: four ways in (${ids})`);
-  check(m.waysLabel === 'Four ways to play', `${at}: ${m.waysLabel}`);
+  check(ids === 'respawn,one_life,thornfray,classic,lobby', `${at}: five ways in (${ids})`);
+  check(m.waysLabel === 'Five ways to play', `${at}: ${m.waysLabel}`);
+  const lobby = m.ways.find((w) => w.id === 'lobby');
+  check(lobby?.title === 'Private lobby', `${at}: the lobby row reads ${lobby?.title}`);
+  const code = m.code;
+  check(code.line !== null && code.label === 'Have a code?', `${at}: the code line is drawn`);
+  check(!code.inRow, `${at}: the code line stands outside every row`);
+  check(
+    code.line.left >= m.card.left - 0.5 && code.line.right <= m.card.right + 0.5,
+    `${at}: the code line stays inside the card`,
+  );
+  const last = m.ways[m.ways.length - 1].box;
+  check(code.line.top >= last.bottom - 0.5, `${at}: the code line stands under the rows`);
+  check(code.fieldSize >= 16, `${at}: the code field at ${code.fieldSize} px`);
+  if (size.viewport.hasTouch) {
+    check(
+      code.field.h >= 32 && code.go.h >= 32,
+      `${at}: the code field and Join are ${Math.round(code.field.h)} and ${Math.round(code.go.h)} px tall`,
+    );
+  }
   let worst = 0;
   for (let i = 0; i < m.ways.length; i++) {
     const w = m.ways[i];
@@ -426,6 +507,7 @@ function checkLayout(m, size, label) {
     `${at}: no horizontal scroll (${m.docScroll}/${m.pgScroll} in ${m.width})`,
   );
   check(m.overlap < 1, `${at}: nothing in the panel overlaps (${m.overlap.toFixed(1)})`);
+  check(m.playGlow, `${at}: the Play now card breathes the gold halo`);
   check(m.own.right <= m.card.right + 0.5, `${at}: the panel stays inside the card`);
   if (size.viewport.hasTouch && m.change) {
     check(m.change.h >= 32, `${at}: Change is ${Math.round(m.change.h)} px tall`);
@@ -449,7 +531,7 @@ async function fixtureRun(browser, size) {
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.setViewport(size.viewport);
   await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
-  const fixture = { state: 'fresh', renames: [] };
+  const fixture = { state: 'fresh', invite: null, renames: [], joins: [], log: [] };
   await intercept(page, fixture);
 
   for (const state of Object.keys(STATES)) {
@@ -636,11 +718,197 @@ async function fixtureRun(browser, size) {
   check(reg.cardTop < reg.height, `${size.id}: the account card is on screen`);
   await shot(page, `own-${size.id}-keep`);
 
+  await inviteRun(page, fixture, size);
+
   check(
     errors.length === 0,
     `${size.id}: no page errors${errors.length ? `: ${errors.join(' | ')}` : ''}`,
   );
   await ctx.close();
+}
+
+// --- the invitation (ui/invite_card.ts), in fixture mode ---
+
+async function openInvited(page, fixture, invite) {
+  fixture.state = 'fresh';
+  fixture.invite = invite;
+  fixture.joins.length = 0;
+  fixture.log.length = 0;
+  fixture.renames.length = 0;
+  await page.goto(`${URL}/?join=${CODE}`, { waitUntil: 'domcontentloaded' });
+  await waitFor(
+    page,
+    () => document.querySelector('.pg.land.own-on .own:not(.own-wait) .own-name') !== null,
+    'the own panel',
+  );
+  await waitFor(page, () => document.querySelector('.pg-invite') !== null, 'the invitation');
+  await page.evaluate(() => document.fonts.ready);
+  await sleep(300);
+}
+
+async function measureInvite(page) {
+  return page.evaluate(() => {
+    const box = (e) => {
+      if (!e || e.offsetParent === null) return null;
+      const r = e.getBoundingClientRect();
+      return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, h: r.height };
+    };
+    const band = document.querySelector('.pg-invite');
+    const field = document.querySelector('.pg-invite-field');
+    const go = document.querySelector('.pg-invite-go');
+    const hero = document.querySelector('.pg-hero');
+    const text = (sel) => document.querySelector(sel)?.textContent ?? '';
+    const following = Node.DOCUMENT_POSITION_FOLLOWING;
+    return {
+      band: box(band),
+      bandGlow: band?.classList.contains('glow') ?? false,
+      beforeHero: band && hero ? (band.compareDocumentPosition(hero) & following) > 0 : false,
+      title: box(document.querySelector('.pg-invite-title')),
+      titleText: text('.pg-invite-title'),
+      lineText: text('.pg-invite-line'),
+      field: box(field),
+      fieldValue: field?.value ?? '',
+      fieldSize: field ? Number.parseFloat(getComputedStyle(field).fontSize) : 0,
+      fieldFocused: document.activeElement === field,
+      label: text('.pg-invite-label'),
+      go: box(go),
+      goText: go?.textContent ?? '',
+      goDisabled: go?.disabled ?? true,
+      own: box(document.querySelector('.pg-invite-own')),
+      links: [...document.querySelectorAll('.pg-invite-links button')]
+        .filter((b) => b.offsetParent !== null)
+        .map((b) => b.textContent),
+      status: text('.pg-invite-status'),
+      play: box(document.querySelector('.pg-card.plain .menu-btn.pg-play')),
+      playGlow: document.querySelector('.pg-card.plain')?.classList.contains('glow') ?? false,
+      search: window.location.search,
+      docScroll: document.documentElement.scrollWidth,
+      width: window.innerWidth,
+      height: window.innerHeight,
+    };
+  });
+}
+
+async function inviteRun(page, fixture, size) {
+  const phone = size.viewport.hasTouch;
+  const short = size.viewport.height <= 560;
+  const narrow = size.viewport.width <= 560;
+  for (const invite of Object.keys(INVITES)) {
+    const at = `${size.id} ${invite}`;
+    await openInvited(page, fixture, invite);
+    const m = await measureInvite(page);
+    await shot(page, `invite-${size.id}-${invite}`);
+    const asked = fixture.joins[fixture.joins.length - 1];
+    check(asked?.join === CODE, `${at}: the landing's request carried the code in its body`);
+    check(!asked.address.includes(CODE), `${at}: and never in its address`);
+    check(!m.search.includes(CODE), `${at}: the address bar no longer holds the code`);
+    check(m.band !== null && m.beforeHero, `${at}: the band stands before the hero`);
+    check(m.docScroll <= m.width, `${at}: no horizontal scroll (${m.docScroll} in ${m.width})`);
+    check(m.play !== null, `${at}: the Play now card's gold button is still there`);
+    if (invite === 'invited' || invite === 'limited') {
+      check(
+        m.label === 'Your name (also your name on the ladder)',
+        `${at}: the name field is labelled`,
+      );
+      check(m.fieldValue === 'Wanderer0421', `${at}: the field offers ${m.fieldValue}`);
+      check(m.fieldSize >= 16, `${at}: the field at ${m.fieldSize} px`);
+      check(!m.fieldFocused, `${at}: the field does not take the focus by itself`);
+      check(m.goText === 'Join the lobby', `${at}: Join reads ${m.goText}`);
+      check(
+        m.go.top >= 0 && m.go.bottom <= m.height,
+        `${at}: Join inside the first screen (${Math.round(m.go.bottom)} of ${m.height})`,
+      );
+      if (phone) {
+        check(
+          m.title.bottom <= m.height && m.field.bottom <= m.height,
+          `${at}: the title and the field inside the first screen`,
+        );
+        check(
+          m.field.h >= 32 && m.go.h >= 32,
+          `${at}: the field and Join are ${Math.round(m.field.h)} and ${Math.round(m.go.h)} px`,
+        );
+      }
+      if (narrow) check(m.go.top >= m.field.bottom - 1, `${at}: Join stands under the field`);
+      else check(m.go.top < m.field.bottom, `${at}: the field and Join share a row`);
+      check(
+        m.links.join(',') === 'Sign in,Create an account,Not now',
+        `${at}: the quiet links (${m.links.join(', ')})`,
+      );
+    }
+    if (short) check(m.band.h <= 175, `${at}: the band is ${Math.round(m.band.h)} px tall`);
+    if (invite === 'invited') {
+      check(m.titleText === 'Marrow invited you to a private lobby', `${at}: ${m.titleText}`);
+      check(
+        m.lineText === '3 of 10 in the lobby. A 5v5 among friends, never rated.',
+        `${at}: ${m.lineText}`,
+      );
+      check(!m.goDisabled, `${at}: Join is enabled`);
+      check(m.bandGlow && !m.playGlow, `${at}: the band breathes the gold, Play now does not`);
+    }
+    if (invite === 'limited') {
+      check(m.titleText === 'You are invited to a private lobby', `${at}: ${m.titleText}`);
+      check(
+        m.lineText ===
+          'Too many wrong lobby codes from this connection. Try again in a few minutes.',
+        `${at}: ${m.lineText}`,
+      );
+      check(m.goDisabled, `${at}: Join is disabled`);
+      check(!m.bandGlow && m.playGlow, `${at}: the gold halo is back on Play now`);
+    }
+    if (invite === 'closed' || invite === 'full') {
+      const title = invite === 'closed' ? 'This lobby has closed' : 'This lobby is full';
+      check(m.titleText === title, `${at}: ${m.titleText}`);
+      check(m.field === null && m.go === null, `${at}: no field and no Join`);
+      check(m.own !== null, `${at}: Open a lobby is offered`);
+      check(m.links.join(',') === 'Not now', `${at}: Not now alone (${m.links.join(', ')})`);
+      check(!m.bandGlow && m.playGlow, `${at}: the gold halo is back on Play now`);
+    }
+  }
+
+  // A taken name is refused in the server's words, and nothing joins.
+  await openInvited(page, fixture, 'invited');
+  const type = async (name) => {
+    await page.evaluate(() => {
+      const field = document.querySelector('.pg-invite-field');
+      field.focus();
+      field.select();
+    });
+    await page.keyboard.type(name);
+  };
+  await type('Quillon');
+  await page.click('.pg-invite-go');
+  await waitFor(
+    page,
+    (t) => document.querySelector('.pg-invite-status')?.textContent === t,
+    'the refusal',
+    5000,
+    TAKEN,
+  );
+  check(
+    fixture.renames.join(',') === 'Quillon' && !fixture.log.includes('guest'),
+    `${size.id} invited: a taken name is refused and nothing joins`,
+  );
+  // A good one is saved before the Guest is asked for.
+  await type('Brindle2');
+  await page.click('.pg-invite-go');
+  await waitFor(page, () => document.querySelector('.pg-invite') === null, 'the landing left');
+  await sleep(500);
+  const named = fixture.log.indexOf('name');
+  check(
+    named >= 0 && named < fixture.log.indexOf('guest'),
+    `${size.id} invited: the rename before the Guest (${fixture.log.join(', ')})`,
+  );
+
+  // Not now puts the band away and gives the gold back.
+  await openInvited(page, fixture, 'invited');
+  await page.evaluate(() => {
+    const links = [...document.querySelectorAll('.pg-invite-links button')];
+    links.find((b) => b.textContent === 'Not now')?.click();
+  });
+  await sleep(200);
+  const gone = await measureInvite(page);
+  check(gone.band === null && gone.playGlow, `${size.id} invited: Not now puts the band away`);
+  fixture.invite = null;
 }
 
 async function realRun(browser, size) {

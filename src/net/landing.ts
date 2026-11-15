@@ -9,6 +9,10 @@
 // is read field by field: a malformed ladder is no page at all, while a
 // malformed own panel or week is that part left out, so the ladder still
 // stands.
+//
+// An invite link's code (ADR 0036) rides in the request's JSON body, never
+// in its address: the answer then says whether that private lobby can be
+// joined, and nothing else about it.
 
 export const LANDING_ROUTE = '/api/public/landing';
 
@@ -73,10 +77,24 @@ export interface LandingWeek {
   turnsAt: number;
 }
 
+// What the landing's answer says of an invite code: an open lobby, its
+// opener's name, how many hold a seat of its ten and whether it is playing
+// right now; or closed (unknown, expired or closed alike); or limited, the
+// connection over its wrong codes, the lobby not looked up at all. A lobby
+// is full when `players >= seats`.
+export type LandingInvite =
+  | { open: true; host: string; players: number; seats: number; phase?: LobbyPhase }
+  | { open: false; limited?: true };
+
+export type LobbyPhase = 'queue' | 'select' | 'match';
+
 export interface LandingPage {
   ladder: LandingLadder;
   own: LandingOwn | null;
   week: LandingWeek | null;
+  // Only when the request carried a code: null when the answer's is not
+  // well formed, which the landing reads as no answer.
+  invite?: LandingInvite | null;
 }
 
 type Raw = Record<string, unknown>;
@@ -176,24 +194,50 @@ export function asLandingWeek(v: unknown): LandingWeek | null {
   return { rotation: [...r.rotation], starters: [...r.starters], turnsAt: r.turnsAt };
 }
 
+const PHASES: readonly LobbyPhase[] = ['queue', 'select', 'match'];
+
+export function asLandingInvite(v: unknown): LandingInvite | null {
+  const r = record(v);
+  if (!r) return null;
+  if (r.open === false)
+    return r.limited === true ? { open: false, limited: true } : { open: false };
+  if (r.open !== true) return null;
+  if (typeof r.host !== 'string' || r.host.length === 0) return null;
+  if (!whole(r.players) || !whole(r.seats) || r.seats === 0) return null;
+  const open: LandingInvite = { open: true, host: r.host, players: r.players, seats: r.seats };
+  if (r.phase === undefined) return open;
+  const phase = PHASES.find((p) => p === r.phase);
+  return phase ? { ...open, phase } : null;
+}
+
 // The answer read, or null when the ladder in it is not one: the landing
-// then leaves the ladder and the own panel out and stands as it did.
+// then leaves the ladder and the own panel out and stands as it did. The
+// invitation is read only when the answer has one.
 export function asLandingPage(raw: unknown): LandingPage | null {
   const r = record(raw);
   if (!r) return null;
   const ladder = asLadder(r.ladder);
   if (!ladder) return null;
-  return { ladder, own: asLandingOwn(r.own), week: asLandingWeek(r.week) };
+  const page: LandingPage = { ladder, own: asLandingOwn(r.own), week: asLandingWeek(r.week) };
+  if ('invite' in r) page.invite = asLandingInvite(r.invite);
+  return page;
 }
 
 // Asks once, with the Guest cookie riding the request and the answer
 // (httpOnly, so this module never sees it). Null on a refusal, a throw or
-// junk.
+// junk. `join`: an invite link's code, sent in the body; with none the
+// request has no body at all.
 export async function loadLanding(
   post: typeof fetch = (input, init) => fetch(input, init),
+  join: string | null = null,
 ): Promise<LandingPage | null> {
+  const init: RequestInit = { method: 'POST', credentials: 'same-origin' };
+  if (join !== null) {
+    init.headers = { 'content-type': 'application/json' };
+    init.body = JSON.stringify({ join });
+  }
   try {
-    const res = await post(LANDING_ROUTE, { method: 'POST', credentials: 'same-origin' });
+    const res = await post(LANDING_ROUTE, init);
     if (!res.ok) return null;
     return asLandingPage(await res.json());
   } catch {

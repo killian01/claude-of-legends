@@ -172,6 +172,9 @@ export interface OwnPanelOpts {
 export interface OwnPanel {
   // The panel's answer as it stands now, a rename included.
   own(): LandingOwn;
+  // A rename made elsewhere on the page (the invitation's name field,
+  // ui/invite_card.ts): the panel reads the new name.
+  renamed(name: string): void;
 }
 
 // A pointer that is a finger: the keyboard rises over the lower half.
@@ -360,5 +363,11 @@ export function mountOwnPanel(host: HTMLElement, first: LandingOwn, opts: OwnPan
     else opts.onKeep(editValue(own));
   });
 
-  return { own: () => own };
+  return {
+    own: () => own,
+    renamed: (renamedTo: string): void => {
+      own = { ...own, name: renamedTo, named: true };
+      draw();
+    },
+  };
 }

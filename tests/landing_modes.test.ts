@@ -103,16 +103,24 @@ describe("the landing's ways to play", () => {
     });
   });
 
-  it('offers the two rule sets of the battle royale, the Thornfray and the 5v5, a row each', () => {
+  it('offers the two rule sets of the battle royale, the Thornfray, the 5v5 and a private lobby, a row each', () => {
     // The Thornfray (ADR 0035) stands beside the battle royale's two, on
-    // the same planet, and the 5v5 keeps the last row.
-    expect(WAYS_LABEL).toBe('Four ways to play');
-    expect(LANDING_WAYS.map((w) => w.id)).toEqual(['respawn', 'one_life', 'thornfray', 'classic']);
+    // the same planet, then the 5v5, then a private lobby of one's own
+    // (ADR 0036), the last row.
+    expect(WAYS_LABEL).toBe('Five ways to play');
+    expect(LANDING_WAYS.map((w) => w.id)).toEqual([
+      'respawn',
+      'one_life',
+      'thornfray',
+      'classic',
+      'lobby',
+    ]);
     expect(LANDING_WAYS.map((w) => w.title)).toEqual([
       'Respawn',
       'One life',
       'Thornfray',
       CLASSIC_TITLE,
+      'Private lobby',
     ]);
     expect(CLASSIC_TITLE).toBe('Classic 5v5');
     // Respawn's row is the gold button's own door, so the two cannot differ.
@@ -122,9 +130,46 @@ describe("the landing's ways to play", () => {
       { to: 'royale', variant: 'one_life' },
       { to: 'thornfray' },
       { to: 'classic' },
+      { to: 'lobby' },
     ]);
     for (const way of LANDING_WAYS) expect(way.door.kind).toBe('guest');
     expect(new Set(LANDING_WAYS.map((w) => w.door.call)).size).toBe(LANDING_WAYS.length);
+  });
+
+  it("opens a private lobby with the home's painting and its own words", () => {
+    // The glossary's noun for the title, a call that names who it is for,
+    // and the home's lobby tile painting, so the door and the room look alike.
+    const tile = PLAY_TILES.find((t) => t.id === 'lobby');
+    expect(tile).toBeDefined();
+    expect(LANDING_WAYS.find((w) => w.id === 'lobby')).toEqual({
+      id: 'lobby',
+      kicker: 'Star Orchard',
+      title: 'Private lobby',
+      line: 'Your friends and one shared link. A 5v5 that is never rated.',
+      art: tileArtUrl(tile?.art ?? ''),
+      door: { call: 'Play with friends', kind: 'guest', play: { to: 'lobby' } },
+    });
+  });
+
+  it('paints the rows by their own art, and the planet rows with their emblem', () => {
+    // The 5v5 wears the ranked painting and the lobby the lobby's; the
+    // battle royale's two and the Thornfray wear the planet.
+    expect(LANDING_WAYS.map((w) => w.art ?? null)).toEqual([
+      null,
+      null,
+      null,
+      CLASSIC_ART,
+      tileArtUrl('lobby'),
+    ]);
+    const landing = readFileSync(path.join(ROOT, 'src/ui/landing.ts'), 'utf8');
+    expect(landing).toContain('way.art === undefined');
+  });
+
+  it('keeps the code line under the rows, out of any row', () => {
+    // A row is a button, and a field inside a button is no field.
+    const landing = readFileSync(path.join(ROOT, 'src/ui/landing.ts'), 'utf8');
+    expect(landing).toContain('wayList.appendChild(codeLine)');
+    expect(landing).toMatch(/\.pg-code-field[^}]*font-size: 16px/);
   });
 
   it("names the Thornfray's way in with the words its quick pick and its tile use", () => {
@@ -169,6 +214,7 @@ describe("the landing's ways to play", () => {
     expect(LANDING_WAYS[1]?.line).toBe(ONE_LIFE_LINE);
     expect(LANDING_WAYS[2]?.line).toBe(THORNFRAY_LINE);
     expect(LANDING_WAYS[3]?.line).toBe(CLASSIC_LINE);
+    expect(LANDING_WAYS[4]?.line).toMatch(/never rated/);
     expect(CLASSIC_LINE).toMatch(/Star Orchard/);
   });
 

@@ -118,19 +118,23 @@ export const PLAY_NOW: LandingDoor = {
 
 // The Play now card's ways in, one row each, in the order they stand: the
 // two rule sets of the battle royale, Respawn first since the gold button
-// over them plays it, the Thornfray beside them on the same planet, and
-// the 5v5. Each row is a door of its own.
-export interface LandingWay {
-  id: RoyaleVariant | 'thornfray' | 'classic';
+// over them plays it, the Thornfray beside them on the same planet, the
+// 5v5, and a private lobby of one's own (ADR 0036). Each row is a door of
+// its own. A row on the planet wears the Wanderseed's emblem; a row on the
+// Star Orchard wears a painting, its `art`.
+interface LandingWayBase {
   // The small word over the name: what kind of match it is.
   kicker: string;
   title: string;
   line: string;
   door: LandingDoor;
 }
+export type LandingWay =
+  | (LandingWayBase & { id: RoyaleVariant | 'thornfray'; art?: undefined })
+  | (LandingWayBase & { id: 'classic' | 'lobby'; art: string });
 
 // The small heading over the rows.
-export const WAYS_LABEL = 'Four ways to play';
+export const WAYS_LABEL = 'Five ways to play';
 
 // The battle royale's arrival, said at the top of the Play now card
 // (ADR 0031): the word New, the planet's name, and what one does there,
@@ -177,7 +181,17 @@ export const LANDING_WAYS: readonly LandingWay[] = [
     kicker: 'Star Orchard',
     title: CLASSIC_TITLE,
     line: CLASSIC_LINE,
+    art: CLASSIC_ART,
     door: { call: 'Play the 5v5', kind: 'guest', play: { to: 'classic' } },
+  },
+  {
+    id: 'lobby',
+    kicker: 'Star Orchard',
+    title: 'Private lobby',
+    line: 'Your friends and one shared link. A 5v5 that is never rated.',
+    // The home's lobby tile wears it: the door and the room look alike.
+    art: tileArtUrl('lobby'),
+    door: { call: 'Play with friends', kind: 'guest', play: { to: 'lobby' } },
   },
 ];
 

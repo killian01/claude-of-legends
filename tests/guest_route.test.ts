@@ -19,6 +19,7 @@ describe("a Guest's way in", () => {
       ['one_life', { loop: 'royale', variant: 'one_life', solo: false }],
       ['thornfray', { loop: 'thornfray' }],
       ['classic', { loop: 'queue' }],
+      ['lobby', { loop: 'lobby', code: null }],
     ]);
   });
 

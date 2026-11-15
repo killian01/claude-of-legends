@@ -72,8 +72,13 @@ export async function fetchDiscordConfigured(): Promise<boolean> {
 // it can do this at all, so a deployment without a Discord application
 // never advertises a button that cannot work. The button carries no
 // explanation: everyone has met a "Continue with" button, and the one
-// thing worth saying is that a round trip just failed.
-export function buildDiscordEntry(result: DiscordResult | null): HTMLElement {
+// thing worth saying is that a round trip just failed. `onDeparture` runs
+// right before the page leaves for Discord: the landing puts down an
+// invitation's code there (game/lobby_memory.ts), to pick it up on return.
+export function buildDiscordEntry(
+  result: DiscordResult | null,
+  onDeparture?: () => void,
+): HTMLElement {
   ensureCss();
   const row = el('div', 'dsc-row');
   row.hidden = true;
@@ -87,6 +92,7 @@ export function buildDiscordEntry(result: DiscordResult | null): HTMLElement {
   go.addEventListener('click', () => {
     go.disabled = true;
     go.textContent = 'Off to Discord...';
+    onDeparture?.();
     window.location.assign('/api/discord/start');
   });
   void fetchDiscordConfigured().then((configured) => {
