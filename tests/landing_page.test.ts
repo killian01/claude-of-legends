@@ -297,12 +297,14 @@ function lookup(found: Map<string, { host: string; players: number; phase?: 'mat
   const asked: string[] = [];
   const misses: (string | null)[] = [];
   let limited = false;
+  let member = false;
   const l: InviteLookup = {
     limited: () => limited,
     find: (code) => {
       asked.push(code);
       return found.get(code) ?? null;
     },
+    member: () => member,
     miss: (code) => misses.push(code),
   };
   return {
@@ -311,6 +313,9 @@ function lookup(found: Map<string, { host: string; players: number; phase?: 'mat
     misses,
     limit: () => {
       limited = true;
+    },
+    remember: () => {
+      member = true;
     },
   };
 }
@@ -371,6 +376,24 @@ describe('the invitation card', () => {
       players: 10,
       seats: 10,
     });
+  });
+
+  it('says when the reader is a member of the lobby, and carries it on the page', () => {
+    const { l, remember } = lookup(
+      new Map([['FULLUP', { host: 'Oren', players: 10, phase: 'match' as const }]]),
+    );
+    remember();
+    const invite = landingInvite('FULLUP', l);
+    expect(invite).toEqual({
+      open: true,
+      host: 'Oren',
+      players: 10,
+      seats: 10,
+      phase: 'match',
+      member: true,
+    });
+    const page = buildLandingPage({ entries: [], own: guestOwn({}), now: NOW, invite });
+    expect(page.invite).toMatchObject({ open: true, member: true });
   });
 
   it('answers an unknown code closed, and charges it', () => {
@@ -440,6 +463,33 @@ describe('the invitation card', () => {
     expect(landingInvite('QWERTY', guardedLookup(guard, mm, 'other', -9, 20))).toMatchObject({
       open: true,
     });
+  });
+
+  it('knows a member coming back to a full lobby, never a stranger or a removed member', () => {
+    let account = 0;
+    const mm = new Matchmaker(
+      () => {},
+      () => 1,
+      () => 'QWERTY',
+      { resolveAccount: () => account },
+    );
+    account = -1;
+    mm.createLobby(1, 'Mira', 0);
+    for (let i = 2; i <= 10; i++) {
+      account = -i;
+      mm.joinLobby(i, `p${i}`, 'QWERTY', 0);
+    }
+    const guard = new CodeGuard();
+    const as = (reader: number) =>
+      landingInvite('QWERTY', guardedLookup(guard, mm, 'k', reader, 0));
+    // A member whose tab died opens the link again: the lobby is full, and
+    // it is theirs.
+    expect(as(-4)).toEqual({ open: true, host: 'Mira', players: 10, seats: 10, member: true });
+    expect(as(-1)).toMatchObject({ member: true });
+    expect(as(-50)).toEqual({ open: true, host: 'Mira', players: 10, seats: 10 });
+    // Removed by the host: no longer a member.
+    mm.removeMember(1, 5);
+    expect(as(-5)).toEqual({ open: true, host: 'Mira', players: 9, seats: 10 });
   });
 
   it('answers a code this process issued closed without charging it', () => {
