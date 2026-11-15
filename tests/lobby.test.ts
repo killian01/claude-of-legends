@@ -217,8 +217,8 @@ describe('what each member is told', () => {
     });
     expect(returningCount(l, 1000)).toBe(1);
     expect(lobbyMessage(l, member(l, 1), 1000 + RETURN_GRACE_MS).players).toHaveLength(1);
-    // A dropped socket within its grace shows as coming back too, and goes
-    // with the grace.
+    // A dropped socket within its grace is not coming back from a match: it
+    // shows as away, and goes with the grace.
     m.inPlay = false;
     m.returning = false;
     m.awayUntil = 5000 + DROP_GRACE_MS;
@@ -226,12 +226,24 @@ describe('what each member is told', () => {
       n: 2,
       name: 'p2',
       team: 1,
-      back: true,
+      away: true,
     });
+    expect(returningCount(l, 5000)).toBe(0);
     expect(lobbyMessage(l, member(l, 1), 5000 + DROP_GRACE_MS).players).toHaveLength(1);
   });
 
-  it('names a host whose socket dropped, on a row coming back, while the role waits for them', () => {
+  it('a reload in a lobby that never played shows as away, never as back from the match', () => {
+    const l = lobby();
+    join(l, 2, 102);
+    const m = member(l, 2);
+    m.clientId = null;
+    m.awayUntil = DROP_GRACE_MS;
+    const row = lobbyMessage(l, member(l, 1), 10).players[1]!;
+    expect(row).toEqual({ n: 2, name: 'p2', team: 1, away: true });
+    expect(row.back).toBeUndefined();
+  });
+
+  it('names a host whose socket dropped, on an away row, while the role waits for them', () => {
     const l = lobby();
     join(l, 2, 102);
     member(l, 1).clientId = null;
@@ -241,7 +253,7 @@ describe('what each member is told', () => {
       name: 'opener',
       team: 0,
       host: true,
-      back: true,
+      away: true,
     });
   });
 

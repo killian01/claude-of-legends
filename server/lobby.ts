@@ -340,24 +340,26 @@ export function mergeAccounts(lobby: Lobby, from: number, to: number): boolean {
   return true;
 }
 
-// The rows everyone sees: the seated members, then those coming back from
-// the match through their grace as back rows; a removed member never.
+// The rows everyone sees: the seated members, then those not here but
+// expected through their grace: back rows for those coming back from the
+// match, away rows for a socket that dropped; a removed member never.
 export function rowsOf(lobby: Lobby, recipient: LobbyMember | null, now: number): LobbyPlayer[] {
   const host = hostOf(lobby, now);
   const rows: LobbyPlayer[] = [];
   for (const m of lobby.members) {
     const seated = isSeated(m);
-    // Not here but expected: back from the lobby's match, or a socket that
-    // dropped, within its grace. Shown, so whoever waits for them (a host
-    // whose phone slept included) is named.
+    // Shown, so whoever waits for them (a host whose phone slept included)
+    // is named.
     if (!seated && !awayInGrace(m, now)) continue;
+    const back = !seated && comingBack(m, now);
     rows.push({
       n: m.n,
       name: m.name,
       team: m.team,
       ...(m === host ? { host: true as const } : {}),
       ...(m === recipient ? { you: true as const } : {}),
-      ...(!seated ? { back: true as const } : {}),
+      ...(back ? { back: true as const } : {}),
+      ...(!seated && !back ? { away: true as const } : {}),
       ...(m.inPlay ? { playing: true as const } : {}),
     });
   }
