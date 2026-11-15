@@ -980,6 +980,26 @@ describe('a lobby that outlives its match', () => {
     expect(view(sent.get(3))?.players.map((p) => p.n)).toEqual([3]);
   });
 
+  it('a reload takes a held seat back by account, from a socket that never joined the lobby', () => {
+    const { mm, sent, code, join } = played();
+    join(3, 103, 'late', code);
+    // The friend's match socket drops; the reloaded tab's hello comes
+    // before its join_lobby, so socket 22 is not in the lobby yet.
+    mm.removeEverywhere(2, 0, 'drop');
+    mm.enteredMatch(22, 102, 1);
+    expect(view(sent.get(3))?.players.find((p) => p.n === 2)).toMatchObject({ playing: true });
+    // Socket 22 plays the seat now: its leave gives the seat up.
+    mm.removeEverywhere(22, 0, 'leave');
+    expect(view(sent.get(3))?.players.map((p) => p.n)).toEqual([1, 3]);
+    // Another match's id never finds the member by account.
+    const other = played();
+    other.join(3, 103, 'late', other.code);
+    other.mm.removeEverywhere(2, 0, 'drop');
+    other.mm.enteredMatch(22, 102, 99);
+    other.mm.removeEverywhere(22, 0, 'leave');
+    expect(view(other.sent.get(3))?.players.map((p) => p.n)).toEqual([1, 2, 3]);
+  });
+
   it('a held seat goes back into the match, and a walk-out gives it up', () => {
     const { mm, sent, code, join } = played();
     join(3, 103, 'late', code);
