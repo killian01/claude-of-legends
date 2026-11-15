@@ -122,6 +122,8 @@ import {
   LOBBY_DISCONNECTED,
   LOBBY_GONE_ERROR,
   lobbyClosedWords,
+  lobbyVerdict,
+  sessionBackAction,
 } from './ui/lobby_view';
 import {
   type BotPick,
@@ -927,6 +929,9 @@ async function runOnline(choice: HomeChoice, guest = false, returning = false): 
     );
 
     let queueUi: QueueController | null = null;
+    // The queue up is the party queue a lobby opened: Back goes back to the
+    // lobby, as its button does (sessionBackAction).
+    let partyQueue = false;
     let lobbyUi: LobbyController | null = null;
     let selectUi: SelectController | null = null;
     // The latest select_update, for a select that opens after it arrived.
@@ -963,6 +968,7 @@ async function runOnline(choice: HomeChoice, guest = false, returning = false): 
     const clearMenus = (): void => {
       queueUi?.remove();
       queueUi = null;
+      partyQueue = false;
       lobbyUi?.remove();
       lobbyUi = null;
     };
@@ -995,12 +1001,13 @@ async function runOnline(choice: HomeChoice, guest = false, returning = false): 
       resolve({ action, lobby: lobbyCode });
     };
     // The whole session is one layer (src/game/nav.ts). In the queue or
-    // the lobby, Back is the Cancel or Leave button. From champion select
-    // on it is guarded: the team's clock is running and a seat is held, so
-    // Back does nothing in select, opens the pause menu in the match, and
-    // closing the tab asks first. The end screen lifts the guard: Back is
-    // then Return to menu.
-    const layer = appNav().push('session', () => finish('menu'));
+    // the lobby, Back is the Cancel or Leave button, and in a lobby's party
+    // queue its Back to the lobby. From champion select on it is guarded:
+    // the team's clock is running and a seat is held, so Back does nothing
+    // in select, opens the pause menu in the match, and closing the tab
+    // asks first. The end screen lifts the guard: Back is then Return to
+    // menu.
+    const layer = appNav().push('session', () => finish(sessionBackAction(partyQueue, lobbyCode)));
 
     // The presentation opens once the terrain is parsed and the champion
     // models are in: at once when they are on hand, behind the loading
@@ -1180,10 +1187,11 @@ async function runOnline(choice: HomeChoice, guest = false, returning = false): 
           if (lobbyUi && !queueUi) {
             lobbyUi.remove();
             lobbyUi = null;
+            partyQueue = true;
             queueUi = showQueue(
               container,
               () => ws.send(JSON.stringify({ t: 'start_now' })),
-              () => finish(lobbyCode !== null ? 'again' : 'menu'),
+              () => finish(sessionBackAction(partyQueue, lobbyCode)),
               lobbyCode !== null ? LOBBY_BACK_TO : 'Cancel',
             );
           }
@@ -1198,6 +1206,7 @@ async function runOnline(choice: HomeChoice, guest = false, returning = false): 
           if (!lobbyUi) {
             queueUi?.remove();
             queueUi = null;
+            partyQueue = false;
             selectUi?.remove();
             selectUi = null;
             lastSelectUpdate = null;
@@ -1403,10 +1412,16 @@ async function runOnline(choice: HomeChoice, guest = false, returning = false): 
             clearMenus();
             selectUi?.remove();
             selectUi = null;
-            void showNotice(container, 'Notice', message).then(() => finish('menu'));
+            // Removed or expired: the tab forgets the lobby before the
+            // notice, so a reload while it is up goes home.
+            if (lobbyVerdict(message)) forgetLobby(tabStore());
+            // A Guest's way out lands on the landing.
+            void showNotice(container, 'Notice', message, guest ? 'Back' : undefined).then(() =>
+              finish('menu'),
+            );
           } else {
             finish('menu');
-            void showNotice(container, 'Notice', message);
+            void showNotice(container, 'Notice', message, guest ? 'Back' : undefined);
           }
           break;
         }
@@ -1429,6 +1444,7 @@ async function runOnline(choice: HomeChoice, guest = false, returning = false): 
           'Server unreachable',
           'Could not reach the game server. Start it in another terminal with "pnpm server" ' +
             '(keep it running), restart "pnpm dev" if it predates vite.config.ts, then try again.',
+          guest ? 'Back' : undefined,
         ).then(() => finish('menu'));
       } else if (lobbySession || lobbyCode !== null) {
         // The invite link goes back in, to the lobby or the held seat.

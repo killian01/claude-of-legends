@@ -95,4 +95,38 @@ describe("a Guest's way in", () => {
       "await showNotice(container, 'Server unreachable', GUEST_NO_ANSWER, 'Back');",
     );
   });
+
+  it("makes Back in a party's queue do what its Back to the lobby does", () => {
+    const main = readFileSync(path.join(ROOT, 'src/main.ts'), 'utf8');
+    // The session layer's close and the party queue's button share one rule.
+    expect(main).toContain(
+      "const layer = appNav().push('session', () => finish(sessionBackAction(partyQueue, lobbyCode)));",
+    );
+    expect(main).toContain('() => finish(sessionBackAction(partyQueue, lobbyCode)),');
+    const at = main.indexOf('const clearMenus = (): void => {');
+    expect(at).toBeGreaterThan(0);
+    expect(main.slice(at, main.indexOf('};', at))).toContain('partyQueue = false;');
+  });
+
+  it("gives every notice of a Guest's lobby session the button Back", () => {
+    const main = readFileSync(path.join(ROOT, 'src/main.ts'), 'utf8');
+    const at = main.indexOf('async function runOnline(');
+    expect(at).toBeGreaterThan(0);
+    const body = main.slice(at, main.indexOf('\n}\n', at));
+    // No notice falls back to Back to menu for a Guest, who lands on the
+    // landing.
+    expect(body).not.toContain("showNotice(container, 'Notice', message)");
+    expect(
+      body.match(/showNotice\(container, 'Notice', message, guest \? 'Back' : undefined\)/g),
+    ).toHaveLength(2);
+    const unreachable = body.indexOf("'Server unreachable',");
+    expect(unreachable).toBeGreaterThan(0);
+    expect(body.slice(unreachable, body.indexOf(').then(', unreachable))).toContain(
+      "guest ? 'Back' : undefined",
+    );
+    // A verdict that ends the place in the lobby forgets its code first.
+    const verdict = body.indexOf('if (lobbyVerdict(message)) forgetLobby(tabStore());');
+    expect(verdict).toBeGreaterThan(0);
+    expect(verdict).toBeLessThan(body.indexOf("showNotice(container, 'Notice', message, guest"));
+  });
 });

@@ -2,24 +2,30 @@
 // their tags, who sees Remove and Change, the status line in every phase,
 // the hint for a handed-out name, and the words for a lobby that closed.
 
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { LobbyPlayer } from '../src/net/protocol';
 import {
   canStart,
   GUEST_NO_ANSWER,
   handedOutName,
+  LOBBY_AWAY_TAG,
   LOBBY_BACK_TO,
   LOBBY_DISCONNECTED,
+  LOBBY_EXPIRED_ERROR,
   LOBBY_GONE_ERROR,
   LOBBY_NOTICE_MS,
+  LOBBY_REMOVED_ERROR,
   type LobbyMsg,
   lobbyClosedWords,
   lobbyHint,
   lobbyNameValue,
   lobbyRows,
   lobbyStatus,
+  lobbyVerdict,
   partyFits,
   seatedOn,
+  sessionBackAction,
 } from '../src/ui/lobby_view';
 
 const ME: LobbyPlayer = { n: 1, name: 'Ilsa', team: 0, host: true, you: true };
@@ -67,11 +73,24 @@ describe('the lobby rows', () => {
     expect(lobbyRows(msg(), false).some((r) => r.change)).toBe(false);
   });
 
+  it('tags a member whose connection dropped as reconnecting, never as coming back', () => {
+    const rows = lobbyRows(
+      msg({ players: [ME, { n: 2, name: 'Bram', team: 1, away: true }] }),
+      false,
+    );
+    expect(rows.map((r) => [r.n, r.tags])).toEqual([
+      [1, ['host', '(you)']],
+      [2, ['reconnecting']],
+    ]);
+    expect(LOBBY_AWAY_TAG).toBe('reconnecting');
+  });
+
   it('counts a side by who holds a seat, not who is coming back', () => {
     const players: LobbyPlayer[] = [
       { n: 1, name: 'a', team: 1 },
       { n: 2, name: 'b', team: 1, playing: true },
       { n: 3, name: 'c', team: 1, back: true },
+      { n: 4, name: 'd', team: 1, away: true },
     ];
     expect(seatedOn(players, 1)).toBe(2);
     expect(seatedOn(players, 0)).toBe(0);
@@ -81,6 +100,7 @@ describe('the lobby rows', () => {
     const five = [1, 2, 3, 4, 5].map((n) => ({ n, name: `p${n}`, team: 0 as const }));
     expect(partyFits(five)).toBe(true);
     expect(partyFits([...five, { n: 6, name: 'p6', team: 1, back: true }])).toBe(true);
+    expect(partyFits([...five, { n: 6, name: 'p6', team: 1, away: true }])).toBe(true);
     expect(partyFits([...five, { n: 6, name: 'p6', team: 1 }])).toBe(false);
   });
 });
@@ -118,6 +138,29 @@ describe('the lobby status line', () => {
     expect(lobbyStatus(waiting).line).toBe(
       'Waiting for Ilsa to start. 2 coming back from the match.',
     );
+  });
+
+  it('never counts a dropped connection as coming back from the match', () => {
+    const players = [
+      ME,
+      { n: 2, name: 'b', team: 1, away: true },
+      { n: 3, name: 'c', team: 1, back: true },
+    ] satisfies LobbyPlayer[];
+    expect(lobbyStatus(msg({ players })).line).toBe('1 coming back from the match.');
+    const onlyAway = [ME, { n: 2, name: 'b', team: 1, away: true }] satisfies LobbyPlayer[];
+    expect(lobbyStatus(msg({ players: onlyAway })).line).toBe('');
+  });
+
+  it('still names a host whose connection dropped, held through the grace', () => {
+    const view = msg({
+      host: false,
+      players: [
+        { n: 1, name: 'Ilsa', team: 0, host: true, away: true },
+        { ...FRIEND, you: true },
+      ],
+    });
+    expect(lobbyStatus(view).line).toBe('Waiting for Ilsa to start.');
+    expect(lobbyRows(view, false)[0]!.tags).toEqual(['host', 'reconnecting']);
   });
 
   it('tells a waiter what the lobby is doing', () => {
@@ -186,5 +229,28 @@ describe('the words around a lobby session', () => {
       'Disconnected from the lobby. Open your invite link again to come back.',
     );
     expect(GUEST_NO_ANSWER).toBe('The server did not answer. Try again in a moment.');
+  });
+
+  // Browser Back follows the screen showing: in the party queue a lobby
+  // opened, it is that queue's Back to the lobby; anywhere else, Leave.
+  it('sends Back in a party queue back to the lobby, and leaves from anywhere else', () => {
+    expect(sessionBackAction(true, 'KMNPQR')).toBe('again');
+    expect(sessionBackAction(true, null)).toBe('menu');
+    expect(sessionBackAction(false, 'KMNPQR')).toBe('menu');
+    expect(sessionBackAction(false, null)).toBe('menu');
+  });
+
+  // The server's verdicts that end the reader's place in the lobby: the tab
+  // forgets the code before the notice, so a reload goes home.
+  it("knows the verdicts that end a place in the lobby, in the server's own words", () => {
+    expect(LOBBY_REMOVED_ERROR).toBe('You were removed from the lobby.');
+    expect(LOBBY_EXPIRED_ERROR).toBe('Lobby expired.');
+    expect(lobbyVerdict(LOBBY_REMOVED_ERROR)).toBe(true);
+    expect(lobbyVerdict(LOBBY_EXPIRED_ERROR)).toBe(true);
+    expect(lobbyVerdict(LOBBY_GONE_ERROR)).toBe(false);
+    expect(lobbyVerdict('Too many private lobbies opened from this connection.')).toBe(false);
+    const server = readFileSync(new URL('../server/matchmaker.ts', import.meta.url), 'utf8');
+    expect(server).toContain(`message: '${LOBBY_REMOVED_ERROR}'`);
+    expect(server).toContain(`message: '${LOBBY_EXPIRED_ERROR}'`);
   });
 });

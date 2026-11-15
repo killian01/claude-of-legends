@@ -190,6 +190,20 @@ describe('reading the invitation', () => {
     expect(invited({ ...open, code: 'KMNPQR', id: 7 })?.invite).toEqual(open);
   });
 
+  it('reads that the reader is a member of the lobby, coming back to it', () => {
+    const open = { open: true, host: 'Marrow', players: 10, seats: 10 };
+    expect(invited({ ...open, member: true })?.invite).toEqual({ ...open, member: true });
+    expect(invited({ ...open, phase: 'match', member: true })?.invite).toEqual({
+      ...open,
+      phase: 'match',
+      member: true,
+    });
+    // Only true is a member; anything else is no word at all.
+    expect(invited({ ...open, member: 'yes' })?.invite).toEqual(open);
+    expect(invited({ ...open, member: false })?.invite).toEqual(open);
+    expect(invited({ open: false, member: true })?.invite).toEqual({ open: false });
+  });
+
   it('reads a closed lobby, and a connection over its wrong codes', () => {
     expect(invited({ open: false })?.invite).toEqual({ open: false });
     expect(invited({ open: false, limited: true })?.invite).toEqual({
