@@ -22,7 +22,8 @@ CHROME=$(command -v google-chrome || command -v chromium || command -v chromium-
 - `SHOT_DIR`, where a script honours it (`e2e_academy`, `e2e_ladder`, `e2e_wave`, `e2e_landing`), receives PNGs at each step; the scripts print
   page errors and console messages and exit non-zero on a failed check.
 - Each script registers a fresh account with a generated name (`scripts/e2e_signin.mjs`),
-  so the task-local `DATA_DIR` keeps them out of the ordinary state.
+  so the task-local `DATA_DIR` keeps them out of the ordinary state; a Guest step uses a
+  fresh browser context, whose landing hands it a Guest (ADR 0033).
 
 | Script | What it walks |
 |---|---|
@@ -34,6 +35,12 @@ CHROME=$(command -v google-chrome || command -v chromium || command -v chromium-
 | `e2e_profile.mjs`, `e2e_ladder.mjs`, `e2e_lifecycle.mjs` | Profile, ladders, the no-reload match lifecycle |
 | `e2e_landing.mjs` | The landing's own panel at 1280x720, 844x390 and 390x844 (touch): the name and the gold button in the first screen, the rename in place, Keep it on every device. `FIXTURE=1` answers the landing and the rename from the page and needs the Vite client alone (`PRESENCE=1` adds the presence line); without it, the real stack seeded with `node scripts/seed_home.mjs` (a fresh Guest, and the seeded Thornwick through `loc_guest=seed-home-guest`) |
 | `smoke_browser.mjs [url] [shot.png]` | Load one page, report console errors, save a screenshot |
+
+`e2e_lobby.mjs` and `e2e_party.mjs` sign both people in. A Guest in a private lobby
+(ADR 0036) is walked by hand: open the host's invite link in a fresh browser context for the
+invitation card, and press Join the lobby. Nothing ends a 5v5 fast enough for a script to reach
+Back to the lobby; with everyone walked out of the match, the lobby opens again on its old link
+once the rejoin grace, a minute, has passed.
 
 ## Reading a failed run
 
@@ -49,6 +56,9 @@ CHROME=$(command -v google-chrome || command -v chromium || command -v chromium-
   ends at `the coach did not answer: the coach is not configured on this server yet`,
   and everything before that step has passed.
 - The pre-sign-in `401` on `/api/session` is expected and printed as a console error.
+- A refusal that says "from this connection" is one of the limits on private lobbies, which
+  every browser of a local stack shares (`docs/dev-local.md`, Browser scripts): restart the
+  stack rather than the script.
 
 ## Screenshots for a PR
 

@@ -451,7 +451,10 @@ docker compose up -d --build
 The game container is replaced, which ends every live match. There is no drain
 and no rolling restart: deploy when nobody is playing, or accept that players
 are dropped back to the home screen. The data volume survives, so accounts,
-sessions, the match log and the ladder do not reset.
+sessions, the match log and the ladder do not reset. Private lobbies live in
+memory only (ADR 0036), so a deploy closes every one: a tab that was in one
+reloads onto words saying the lobby has closed, a link shared before it reads
+closed too, and its host opens a new one and sends the new link.
 
 Every open tab reloads onto the new build within a minute, a practice match
 against bots included: the server names the bundle it serves on
@@ -529,7 +532,11 @@ allowance on the plan before advertising the server, and remember that each
 new player also pulls the client once: 24 MB cold, then cached.
 
 Memory: one Sim plus its snapshot state per match, and the whole match log
-stays in memory for profile queries. Kilobytes per match.
+stays in memory for profile queries. Kilobytes per match. A private lobby is a
+few kilobytes at most (twenty members), and at most `MAX_LOBBIES` (200,
+`server/lobby.ts`) stand at once, playing or not; the codes handed out in the
+last day and the per-connection counts that guard them (`server/code_guess.ts`)
+are bounded too.
 
 ## Troubleshooting
 
@@ -540,7 +547,10 @@ it first.
 **Players are refused with "too many connections".** `TRUST_PROXY` is not
 reaching the game container, or Caddy stopped setting the forwarding headers,
 so every socket looks like Caddy's address. Check the startup line described in
-Verify, then the two `header_up` lines in the proxy contract above.
+Verify, then the two `header_up` lines in the proxy contract above. The same
+cause shows as "Too many wrong lobby codes from this connection" or "Too many
+private lobbies opened from this connection" for everyone at once: those limits
+count per address too (`server/code_guess.ts`).
 
 **A browser cannot open a socket but curl can.** The origin check refused the
 upgrade; the server logs `refused upgrade from origin ...`. The page was served
