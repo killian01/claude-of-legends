@@ -77,7 +77,12 @@ import {
 import { buildId, buildInfo, deployStamp, readBuildId } from './build_info';
 import { withBuildTag } from './build_tag';
 import { rejoinClassic } from './classic_rejoin';
-import { classicDoorRefused, classicPlaying, leaveClassicDoors } from './classic_seat';
+import {
+  classicDoorRefused,
+  classicPlaying,
+  classicSeatHeld,
+  leaveClassicDoors,
+} from './classic_seat';
 import { budgetKey, CodeGuard, NAME_LIMIT_MESSAGE } from './code_guess';
 import { ConnectionLimiter } from './conn_limit';
 import { clearCookie, crossSiteRequest, parseCookies, serializeCookie } from './cookies';
@@ -3093,13 +3098,35 @@ wss.on('connection', (ws, req) => {
     if (thornfray.handle(client, msg)) return;
     // The battle royale's own messages, and every message of a seat in one.
     if (royale.handle(client, msg)) return;
-    // One mode per line: a royale or a Thornfray this account plays from
-    // another tab keeps every door into a 5v5 shut until that tab leaves.
+    // A seat this account's dropped tab left in a running 5v5 is its way
+    // back: a reload hands it back, so no other tab takes a second seat.
+    if (
+      !inMatch &&
+      classicDoorRefused(msg.t, () =>
+        classicSeatHeld(rejoins.held(client.accountId), (matchId) => {
+          const entry = matches.get(matchId);
+          return entry !== undefined && entry.endedAt === null;
+        }),
+      )
+    ) {
+      send(id, {
+        t: 'error',
+        message: 'Your seat in a match is waiting for you. Reload to return to it.',
+      });
+      return;
+    }
+    // One mode per line: a royale, a Thornfray or a 5v5 this account plays
+    // from another tab keeps every door into a 5v5 shut until that tab
+    // leaves (else a second tab could drop into a live 5v5, even the same
+    // match on the other side).
     if (
       !inMatch &&
       classicDoorRefused(
         msg.t,
-        () => royale.playing(client.accountId) || thornfray.holds(client.accountId),
+        () =>
+          royale.playing(client.accountId) ||
+          thornfray.holds(client.accountId) ||
+          playsClassic(client.accountId),
       )
     ) {
       send(id, { t: 'error', message: 'You are already in another match.' });

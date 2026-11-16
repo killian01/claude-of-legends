@@ -2,7 +2,7 @@
 // account plays a seat in a 5v5 still running from any of its tabs (the
 // battle royale and Thornfray ask this before seating it), and which of the
 // socket's messages open a way into a 5v5, refused while the account plays
-// a royale or a Thornfray from another tab, and the way out of every door
+// a royale, a Thornfray or a 5v5 from another tab, and the way out of every door
 // for all the account's tabs when one of them enters either.
 
 export interface ClassicSocket {
@@ -53,4 +53,15 @@ export function leaveClassicDoors(
     if (s.accountId !== entering.accountId) continue;
     if (remove(s.id) && s.id !== entering.id) tell(s.id);
   }
+}
+
+// A seat a dropped connection left to its bot, in a 5v5 still running:
+// the account's way back is that seat (a reload hands it back), never a
+// second seat. The 5v5's own doors stay shut while it waits; the royale
+// and Thornfray do not ask this, as its owner may play elsewhere meanwhile.
+export function classicSeatHeld(
+  held: { matchId: number } | undefined,
+  running: (matchId: number) => boolean,
+): boolean {
+  return held !== undefined && running(held.matchId);
 }
