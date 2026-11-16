@@ -3,11 +3,14 @@
 // Thornfray, a tab in either keeps the 5v5's doors shut, and entering either
 // takes every tab of the account out of the 5v5's queue and lobbies.
 
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   type ClassicSocket,
   classicDoorRefused,
   classicPlaying,
+  classicSeatHeld,
   leaveClassicDoors,
 } from '../server/classic_seat';
 import { Matchmaker } from '../server/matchmaker';
@@ -119,5 +122,39 @@ describe('leaveClassicDoors', () => {
     leave();
     leave();
     expect(told).toEqual([5, 6]);
+  });
+});
+
+describe('classicSeatHeld', () => {
+  const running = (matchId: number): boolean => matchId === 7;
+
+  it('counts a seat held for the account in a running 5v5', () => {
+    expect(classicSeatHeld({ matchId: 7 }, running)).toBe(true);
+  });
+
+  it('does not count no hold, or a hold whose match has ended or is gone', () => {
+    expect(classicSeatHeld(undefined, running)).toBe(false);
+    expect(classicSeatHeld({ matchId: 8 }, running)).toBe(false);
+  });
+});
+
+// The wiring in server/main.ts: the 5v5's doors ask about a 5v5 seat the
+// account plays from another tab, not only a royale or a Thornfray. Without
+// it a second tab could queue, or drop into a live 5v5 (even the same
+// match, on the other side), while the first tab plays.
+describe('the 5v5 door guard in main.ts', () => {
+  const mainTs = readFileSync(fileURLToPath(new URL('../server/main.ts', import.meta.url)), 'utf8');
+
+  it('shuts the doors while another tab of the account plays a 5v5', () => {
+    const guard = /classicDoorRefused\(\s*msg\.t,\s*\(\) =>([^;]*?)\)\s*\)\s*\{/.exec(mainTs);
+    expect(guard).not.toBeNull();
+    const asks = guard![1]!;
+    expect(asks).toContain('royale.playing(client.accountId)');
+    expect(asks).toContain('thornfray.holds(client.accountId)');
+    expect(asks).toContain('playsClassic(client.accountId)');
+  });
+
+  it('shuts them while the account has a seat held in a running 5v5', () => {
+    expect(mainTs).toMatch(/classicSeatHeld\(\s*rejoins\.held\(client\.accountId\)/);
   });
 });
