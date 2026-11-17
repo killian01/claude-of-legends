@@ -138,6 +138,39 @@ describe('classicSeatHeld', () => {
   });
 });
 
+// One game socket per account: a new tab closes the old one. The old one
+// leaves the queues at once, not when its close handshake ends, so a Start
+// from the new tab in between never seats the account twice.
+describe('a tab taking over from another', () => {
+  const mainTs = readFileSync(fileURLToPath(new URL('../server/main.ts', import.meta.url)), 'utf8');
+
+  it('takes the closed socket out of every matchmaker on the spot', () => {
+    const takeover = /other\.ws\.close\(4409[^;]*;([^}]*)\}/.exec(mainTs);
+    expect(takeover).not.toBeNull();
+    expect(takeover![1]).toMatch(
+      /for \(const mm of matchmakers\) mm\.removeEverywhere\(other\.id, now, 'drop'\)/,
+    );
+  });
+
+  it('then seats only the new tab when Start takes the queue', () => {
+    const selects: number[] = [];
+    const mm = new Matchmaker(
+      (to, msg) => {
+        if (msg.t === 'select_start') selects.push(to);
+      },
+      () => 1,
+      () => 'ABCD',
+    );
+    // Tab 1 of an account waits; tab 5 of it connects and takes over.
+    mm.addToQueue(1, 'ash', 0);
+    mm.addToQueue(2, 'birch', 0);
+    expect(mm.removeEverywhere(1, 0, 'drop')).toBe(true);
+    mm.addToQueue(5, 'ash', 0);
+    mm.startNow(5, 0);
+    expect(selects.sort()).toEqual([2, 5]);
+  });
+});
+
 // The wiring in server/main.ts: the 5v5's doors ask about a 5v5 seat the
 // account plays from another tab, not only a royale or a Thornfray. Without
 // it a second tab could queue, or drop into a live 5v5 (even the same
