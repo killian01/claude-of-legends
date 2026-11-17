@@ -31,7 +31,9 @@ import path from 'node:path';
 // cannot be read (a failing disk at boot) throws, so the server stops
 // instead of starting empty. One that reads but does not parse is set
 // aside under `<file>.corrupt-<ms>`, kept for a hand, before the fallback.
-export function loadJson<T>(file: string, fallback: T): T {
+// So is one that parses but fails `isShape` (a `null`, an object where a
+// list belongs), which would otherwise throw in its store at every boot.
+export function loadJson<T>(file: string, fallback: T, isShape?: (v: unknown) => boolean): T {
   let text: string;
   try {
     text = readFileSync(file, 'utf8');
@@ -39,14 +41,31 @@ export function loadJson<T>(file: string, fallback: T): T {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') return fallback;
     throw err;
   }
+  let value: unknown;
   try {
-    return JSON.parse(text) as T;
+    value = JSON.parse(text);
   } catch {
-    const aside = `${file}.corrupt-${Date.now()}`;
-    renameSync(file, aside);
-    console.error(`unreadable json set aside: ${file} -> ${aside}`);
-    return fallback;
+    return setAside(file, 'unreadable', fallback);
   }
+  if (isShape && !isShape(value)) return setAside(file, 'misshapen', fallback);
+  return value as T;
+}
+
+function setAside<T>(file: string, why: string, fallback: T): T {
+  const aside = `${file}.corrupt-${Date.now()}`;
+  renameSync(file, aside);
+  console.error(`${why} json set aside: ${file} -> ${aside}`);
+  return fallback;
+}
+
+// A plain object: not null, not a list. The shape checks' building block.
+export function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+// A list of plain objects, the shape of every list-of-records file.
+export function isRecordList(v: unknown): boolean {
+  return Array.isArray(v) && v.every(isRecord);
 }
 
 // A write that fails partway (a full disk) removes its torn tmp before the

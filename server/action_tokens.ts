@@ -12,7 +12,7 @@
 
 import { randomBytes } from 'node:crypto';
 import { CLAIM_TTL_MS } from './email_claim';
-import { loadJson, saveJsonAtomic } from './store';
+import { isRecordList, loadJson, saveJsonAtomic } from './store';
 
 export type TokenKind = 'confirm' | 'reset';
 
@@ -52,7 +52,7 @@ export class TokenStore {
     private readonly file: string,
     private readonly gen: () => string = randomToken,
   ) {
-    for (const t of loadJson<ActionToken[]>(file, [])) this.byToken.set(t.token, t);
+    for (const t of loadJson<ActionToken[]>(file, [], isRecordList)) this.byToken.set(t.token, t);
   }
 
   private persist(): void {
