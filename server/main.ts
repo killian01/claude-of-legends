@@ -2982,9 +2982,14 @@ wss.on('connection', (ws, req) => {
   // into both sides of the same match, which would make its Elo
   // self-referential. The upside is the reason to prefer it to a refusal:
   // when a laptop dies mid-match, the phone takes the seat back.
+  // The closed socket leaves the queues, lobbies and select at once, as its
+  // close handler would: that handler only runs once the old tab answers
+  // the close (or a dead one times out), and meanwhile a Start from the new
+  // tab would seat the account twice.
   for (const other of clients.values()) {
     if (other.accountId === who.accountId) {
       other.ws.close(4409, 'this account connected somewhere else');
+      for (const mm of matchmakers) mm.removeEverywhere(other.id, now, 'drop');
     }
   }
 
