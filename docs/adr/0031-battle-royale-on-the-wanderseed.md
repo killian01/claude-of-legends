@@ -25,7 +25,7 @@ code rests on.
   five phases to a point drawn each match, a fifth of a champion's speed; outside it the Dusk
   burns from 1 to 12 percent of maximum health a second. The next cap is always drawn.
 - **The drop.** Ten seconds over the globe to pick where to land; bots pick too; no pick lands
-  somewhere quiet.
+  a step from a plain cache, away from every other landing (rules 23; before, somewhere quiet).
 - **Loot is the build.** No shop, no gold, no recall. A cache (about 150 drawn among 250 spots,
   golden ones in the Sanctuary and at every region's heart, opened by standing 1.5 s beside it),
   a camp and a takedown each give the next piece of the champion's house build

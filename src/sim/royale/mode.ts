@@ -590,6 +590,12 @@ export class RoyaleMode {
     if (this.bout) startBout(this, sim);
   }
 
+  // Where a seat with no landing pick comes down beside (drop.ts
+  // cacheSideSpot): the plain caches standing, in id order.
+  private plainCaches(): Vec3[] {
+    return this.state.caches.filter((c) => c.kind === 'plain' && c.present).map((c) => c.pos);
+  }
+
   // A bout lands everyone inside its Thornyard, the Dusk's first cap, and
   // deals no escorts: eight seats in a cap that small find each other.
   private soloDrop(sim: Sim, seats: readonly number[]): Map<number, Vec3> {
@@ -597,7 +603,15 @@ export class RoyaleMode {
       const within = this.schedule.caps[0]!;
       return resolveLandings(seats, this.state.drops, sim.rng, this.layout, this.ground, within);
     }
-    const at = resolveLandings(seats, this.state.drops, sim.rng, this.layout, this.ground);
+    const at = resolveLandings(
+      seats,
+      this.state.drops,
+      sim.rng,
+      this.layout,
+      this.ground,
+      null,
+      this.plainCaches(),
+    );
     const people = seats.filter((id) => !sim.policies.has(id));
     const bots = seats.filter((id) => sim.policies.has(id));
     const groups = dealEscorts(people, bots, ESCORTS[this.variant], (person) => {
@@ -610,7 +624,7 @@ export class RoyaleMode {
   }
 
   // The crews' landing (crews.ts): each crew's leader lands as a seat does
-  // alone, its pick or a quiet spot, the rest of the crew beside it; then a
+  // alone, its pick or beside a cache (drop.ts cacheSideSpot), the rest of the crew beside it; then a
   // crew of house bots comes down near each crew with a person in it, the
   // softest crew first for a crew with a newcomer, else the lowest.
   private crewDrop(sim: Sim, seats: readonly number[]): Map<number, Vec3> {
@@ -621,7 +635,15 @@ export class RoyaleMode {
     }));
     const leaders = crewLeaders(crewSeats, this.state.drops);
     const leaderIds = [...leaders.values()].sort((a, b) => a - b);
-    const at = resolveLandings(leaderIds, this.state.drops, sim.rng, this.layout, this.ground);
+    const at = resolveLandings(
+      leaderIds,
+      this.state.drops,
+      sim.rng,
+      this.layout,
+      this.ground,
+      null,
+      this.plainCaches(),
+    );
     crewLandings(crewSeats, leaders, at, sim.rng, this.layout, this.ground);
     const withPeople = new Set(crewSeats.filter((c) => c.person).map((c) => c.team));
     const newcomerCrews = new Set(

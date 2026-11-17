@@ -1,10 +1,11 @@
 // The drop (CONTEXT.md: Drop; ADR 0031): DROP_S seconds over the globe to
 // pick a landing point, a person through Sim.pickDrop, a bot through its
 // policy. When the drop ends every champion lands: at its pick, snapped to
-// the nearest walkable ground, or, with no pick, somewhere quiet: the
-// walkable point farthest from every pick and every landing already
-// placed, among a sample drawn from the match's stream. Then a house bot
-// or two comes down beside each person (escortLandings).
+// the nearest walkable ground, or, with no pick, beside a plain cache
+// (cacheSideSpot), the one farthest from every landing already placed
+// among a sample drawn from the match's stream, else somewhere quiet: the
+// walkable point farthest from them. Then a house bot or two comes down
+// beside each person (escortLandings).
 //
 // A bout (ADR 0035) lands everyone inside its first cap, the Thornyard: a
 // pick outside it is brought in toward its center (landingIn), and a seat
@@ -259,10 +260,48 @@ export function fairFoeSpot(
   return null;
 }
 
+// A seat that picked no point lands LANDING_CACHE_M from a plain cache, a
+// step from opening it: of LANDING_CACHE_SAMPLE caches drawn from the
+// match's stream, each with a side drawn too, the walkable side farthest
+// from every landing placed before it. A golden cache, a heart's, is left
+// to be fought over (the caller passes the plain ones). Null with no cache
+// or no walkable side among those drawn.
+export const LANDING_CACHE_M = 2.5;
+export const LANDING_CACHE_SAMPLE = 48;
+
+export function cacheSideSpot(
+  rng: Rng,
+  layout: RoyaleLayout,
+  ground: RoyaleGround,
+  taken: readonly Vec3[],
+  caches: readonly Vec3[],
+  sample = LANDING_CACHE_SAMPLE,
+): Vec3 | null {
+  if (caches.length === 0) return null;
+  const R = layout.radius;
+  // A snap that walks the side off past a step from its cache is no side.
+  const near2 = (LANDING_CACHE_M + 1) * (LANDING_CACHE_M + 1);
+  let best: Vec3 | null = null;
+  let bestD = -1;
+  for (let i = 0; i < sample; i++) {
+    const c = caches[rng.int(caches.length)]!;
+    const p = snapLanding(along(c, randomHeading(rng, c), LANDING_CACHE_M, R), layout, ground);
+    if (!p || nearPole(p, R) || dist2(p, c) > near2) continue;
+    const d = taken.length === 0 ? 0 : nearestTo(p, taken);
+    if (d > bestD) {
+      best = p;
+      bestD = d;
+    }
+    if (taken.length === 0) break;
+  }
+  return best;
+}
+
 // Every seat's landing, in the order given (the sim passes unit ids
-// ascending): the picks first, each snapped, then the quiet spots for the
-// seats that picked nothing, each away from everything placed before it.
-// In a bout every one inside its first cap (`within`).
+// ascending): the picks first, each snapped, then the seats that picked
+// nothing, each beside a cache of `caches` (cacheSideSpot) or, with none
+// that fits, at a quiet spot, each away from everything placed before it.
+// In a bout every one inside its first cap (`within`), at a quiet spot.
 export function resolveLandings(
   seats: readonly number[],
   picks: ReadonlyMap<number, Vec3>,
@@ -270,6 +309,7 @@ export function resolveLandings(
   layout: RoyaleLayout,
   ground: RoyaleGround,
   within: DuskCap | null = null,
+  caches: readonly Vec3[] = [],
 ): Map<number, Vec3> {
   const out = new Map<number, Vec3>();
   const taken: Vec3[] = [];
@@ -289,7 +329,8 @@ export function resolveLandings(
   for (const id of unpicked) {
     const at = within
       ? quietSpotIn(rng, within, layout, ground, taken)
-      : quietSpot(rng, layout, ground, taken);
+      : (cacheSideSpot(rng, layout, ground, taken, caches) ??
+        quietSpot(rng, layout, ground, taken));
     out.set(id, at);
     taken.push(at);
   }

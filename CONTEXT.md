@@ -150,7 +150,8 @@ _Avoid_: the zone, the storm, the circle, the ring (a Ring is the 5v5's stone ci
 
 **Drop**:
 The battle royale's first ten seconds, over the globe: every seat picks where its champion
-lands, and everyone lands together.
+lands, and everyone lands together. A seat that picks nothing comes down a step from a plain
+cache, away from the others.
 _Avoid_: spawn pick, deploy
 
 **Cache**:

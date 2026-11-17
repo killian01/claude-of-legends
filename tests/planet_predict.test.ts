@@ -417,7 +417,8 @@ describe('the own champion on the planet, drawn where it is going', () => {
   });
 
   it('walks round a wall standing across the way as the server does, without a jump', () => {
-    const h = served();
+    // A seed whose landing has a cache spot a straight walk away.
+    const h = served(1, ONE_WAY_MS, 13);
     const goal = straightFrom(h.champ.pos, 15, 30);
     const way = dirTo(h.champ.pos, goal)!;
     h.meddle((u) => wallAcross(h, u.pos, way, 4, 8, 20));
@@ -438,7 +439,8 @@ describe('the own champion on the planet, drawn where it is going', () => {
   });
 
   it('stops at a wall raised across its walk where the server stops, never through it', () => {
-    const h = served();
+    // A seed whose landing has a cache spot a straight walk away.
+    const h = served(1, ONE_WAY_MS, 13);
     const goal = straightFrom(h.champ.pos, 20, 40);
     h.order(goal);
     h.run(1500);
