@@ -16,7 +16,7 @@ on 2026-10-02; this file keeps them in one place and tracks the build.
 | Planet | The Wanderseed: a true sphere, radius 80 m, walked round in every direction; about 1,100 m2 a champion; equator 500 m. |
 | Regions | Six, like the faces of a die: Sanctuary (+Y), Open ground (-Y), Ruins (+X), Cypress groves (-X), Lakes (+Z), Cliffs (-Z). The 8 cube corners are crossroads with a launch pad and a beacon. |
 | Dusk | The lit cap shrinks toward a point drawn each match at a fifth of a champion's speed; outside, 1 to 12 percent of maximum health a second by phase; the next cap always drawn, on the ground and the globe. |
-| Drop | 10 s over the globe to pick a landing point; others' picks show; bots pick; no pick lands somewhere quiet. |
+| Drop | 10 s over the globe to pick a landing point; others' picks show; bots pick; no pick lands a step from a plain cache, away from the others. |
 | Start | Level 3, Q, W and E learned, ultimate at 6, ranks applied automatically, the two sigils. |
 | Loot | The next piece of the champion's house build (`nextKitStep`), equipped at once. No shop, no gold, no recall. |
 | Caches | About 150 drawn among about 250 spots, golden ones (2 pieces) in the Sanctuary and at region hearts; opened by standing 1.5 s beside one, broken by damage. One life: never back. Respawn: back after 90 s. |

@@ -35,6 +35,15 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
+    day: '2026-11-17',
+    title: 'No landing point? You come down beside a cache',
+    body: [
+      'On the Wanderseed, a champion who picks no landing point during the drop now comes down a step from a cache instead of in an empty field. Take one step, stand still for a second and a half, and the first piece of your build is yours.',
+      'Your company lands close by as always, so you may have to win that cache first. Pick a point on the globe and you land exactly where you chose, as before.',
+    ],
+    link: { label: 'Play', to: 'play' },
+  },
+  {
     day: '2026-11-15',
     title: 'Play with friends, no account needed',
     body: [

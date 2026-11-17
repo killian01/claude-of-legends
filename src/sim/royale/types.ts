@@ -123,7 +123,9 @@ export const CLAMOR_S = 3;
 // tuning and build.
 // 22: Respawn's Pyrefang and Voidmaul first rise at 1:40, not 3:00
 // (content/royale_events.ts RING_RISE_AT_S).
-export const ROYALE_RULES_VERSION = 22;
+// 23: a seat that picked no landing point comes down beside a plain cache
+// (drop.ts cacheSideSpot), no longer at a quiet spot.
+export const ROYALE_RULES_VERSION = 23;
 
 // One of the Dusk's caps: a circle on the sphere, its radius a chord.
 export interface DuskCap {

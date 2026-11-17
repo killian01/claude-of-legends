@@ -7,7 +7,14 @@
 import { describe, expect, it } from 'vitest';
 import { dirTo, dist, type Vec3 } from '../src/sim/geo';
 import { Rng } from '../src/sim/rng';
-import { normalizePick, quietSpot, resolveLandings, snapLanding } from '../src/sim/royale/drop';
+import {
+  cacheSideSpot,
+  LANDING_CACHE_M,
+  normalizePick,
+  quietSpot,
+  resolveLandings,
+  snapLanding,
+} from '../src/sim/royale/drop';
 import { drawDusk, duskAt, insideCap } from '../src/sim/royale/dusk';
 import { along, nearPole, randomWalkable } from '../src/sim/royale/layout';
 import {
@@ -118,6 +125,40 @@ describe('the drop', () => {
       taken.push(out.get(id)!);
     }
     expect(resolveLandings(seats, picks, new Rng(9), layout, fakeGround)).toEqual(out);
+  });
+
+  it('lands the unpicked beside a cache when caches are given, apart', () => {
+    const caches = layout.cacheSpots.filter((c) => !c.golden).map((c) => c.pos);
+    const picks = new Map<number, Vec3>([[1, sph(1, 0, 0)]]);
+    const seats = [1, 2, 3, 4];
+    const out = resolveLandings(seats, picks, new Rng(5), layout, fakeGround, null, caches);
+    expect(out.get(1)).toEqual(picks.get(1));
+    const beside = (p: Vec3) => Math.min(...caches.map((c) => dist(c, p)));
+    for (const id of [2, 3, 4]) {
+      const p = out.get(id)!;
+      expect(fakeGround.walkable(p)).toBe(true);
+      expect(nearPole(p, R)).toBe(false);
+      expect(beside(p)).toBeLessThanOrEqual(LANDING_CACHE_M + 1);
+    }
+    // Each one beside its own cache, far from the landings before it.
+    for (const [a, b] of [
+      [2, 3],
+      [2, 4],
+      [3, 4],
+    ] as const) {
+      expect(dist(out.get(a)!, out.get(b)!)).toBeGreaterThan(4 * (LANDING_CACHE_M + 1));
+    }
+    expect(resolveLandings(seats, picks, new Rng(5), layout, fakeGround, null, caches)).toEqual(
+      out,
+    );
+  });
+
+  it('falls back to the quiet spot with no cache to land by', () => {
+    expect(cacheSideSpot(new Rng(1), layout, fakeGround, [], [])).toBeNull();
+    const picks = new Map<number, Vec3>([[1, sph(1, 0, 0)]]);
+    expect(resolveLandings([1, 2], picks, new Rng(4), layout, fakeGround, null, [])).toEqual(
+      resolveLandings([1, 2], picks, new Rng(4), layout, fakeGround),
+    );
   });
 
   it('finds a quiet spot even with nothing taken', () => {

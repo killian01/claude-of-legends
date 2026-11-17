@@ -24,7 +24,7 @@ code rests on (CONTEXT.md: Crew).
   assist, the Wrath's and a favor's team) read it as they read the 5v5's teams. The
   free-for-all's isolation rule (`combat/effects.ts` targetIsolated) holds in Solo only.
 - **The landing.** Each crew lands around its leader's pick (its first person who picked, else
-  its first seat that picked, else a quiet spot), its other champions 3 to 6 m from it. Solo's
+  its first seat that picked, else beside a plain cache as a seat alone does), its other champions 3 to 6 m from it. Solo's
   escorts become a whole crew of house bots coming down 18 to 24 m from each crew with a person
   in it, the softest crew first for a crew with a newcomer. The others' picks show on the globe
   as before, the crewmates' apart in the ally's blue.

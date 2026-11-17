@@ -19,7 +19,7 @@ import {
   type ReplayPick,
 } from '../src/net/replay';
 import { dist } from '../src/sim/geo';
-import { dealEscorts, ESCORT_MAX_M, ESCORTS } from '../src/sim/royale/drop';
+import { dealEscorts, ESCORT_MAX_M, ESCORTS, LANDING_CACHE_M } from '../src/sim/royale/drop';
 import { ESCORT_ORDER, escortOrder, NEWCOMER_ESCORT_ORDER } from '../src/sim/royale/mode';
 import { DROP_S, ROYALE_RULES_VERSION, type RoyaleVariant } from '../src/sim/royale/types';
 import type { Sim } from '../src/sim/sim';
@@ -151,5 +151,22 @@ describe('the newcomers', () => {
     const again = RoyaleVeterans.atFile(file);
     expect(isRoyaleNewcomer(again, -3)).toBe(false);
     expect(isRoyaleNewcomer(RoyaleVeterans.atFile(`${file}.missing`), 7)).toBe(true);
+  });
+});
+
+describe('a seat that picks no landing point', () => {
+  it('comes down a step from a plain cache it can open, in both variants', () => {
+    for (const variant of ['one_life', 'respawn'] as const) {
+      for (const seed of [3, 11]) {
+        const { sim, unitIds } = escortsOf(variant, false, seed);
+        const me = sim.units.get(unitIds[PERSON]!)!;
+        const near = sim
+          .royaleMode!.state.caches.filter((c) => c.present)
+          .map((c) => ({ kind: c.kind, d: dist(c.pos, me.pos) }))
+          .sort((a, b) => a.d - b.d)[0]!;
+        expect(near.kind).toBe('plain');
+        expect(near.d).toBeLessThanOrEqual(LANDING_CACHE_M + 1);
+      }
+    }
   });
 });
