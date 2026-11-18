@@ -125,7 +125,9 @@ export const CLAMOR_S = 3;
 // (content/royale_events.ts RING_RISE_AT_S).
 // 23: a seat that picked no landing point comes down beside a plain cache
 // (drop.ts cacheSideSpot), no longer at a quiet spot.
-export const ROYALE_RULES_VERSION = 23;
+// 24: a Respawn return with no pick comes back beside a plain cache in the
+// light, clear of every enemy (return_pick.ts cacheReturn), before the edge.
+export const ROYALE_RULES_VERSION = 24;
 
 // One of the Dusk's caps: a circle on the sphere, its radius a chord.
 export interface DuskCap {

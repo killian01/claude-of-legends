@@ -505,8 +505,9 @@ export function followLastSeen(sense: Sense): Action | null {
 
 // A dead Respawn seat is asked once where it comes back (the 'drop' while
 // dead, royale/return_pick.ts, the pick a person makes on the globe), and
-// the house brain picks nothing: it comes back at the edge of the light,
-// where a person who taps nothing comes back. Measured over seeds 1 to 24
+// the house brain picks nothing: it comes back beside a cache or at the
+// edge of the light (mode.ts respawnPoint), where a person who taps nothing
+// comes back. Measured over seeds 1 to 24
 // (scripts/royale_report.mjs, the drop-ins at 60, 180, 300 and 420 s), a
 // pick beside a Seedfall landing within 20 s of the return took the
 // stand-in's median life from 17.9 s to 15.0 s and the steals from 37 to

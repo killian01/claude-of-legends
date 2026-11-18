@@ -35,6 +35,15 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
+    day: '2026-11-19',
+    title: 'Back from a fall, beside a cache',
+    body: [
+      'In Respawn, a champion who falls and picks no point on the globe now comes back a step from a cache, at least ten meters from every enemy, instead of at the edge of the light. Stand still for a second and a half and your next piece is on its way while you get your bearings.',
+      'The house bots come back the same way. Tap the globe during the wait and you return exactly where you chose, as before; with no cache standing in the light, you return at its edge.',
+    ],
+    link: { label: 'Play', to: 'play' },
+  },
+  {
     day: '2026-11-17',
     title: 'No landing point? You come down beside a cache',
     body: [

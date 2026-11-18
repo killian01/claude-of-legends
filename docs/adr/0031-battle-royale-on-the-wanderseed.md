@@ -392,3 +392,14 @@ and a bot playing the seat orders on its first decision, so a bot's seat still e
 three seconds. A graced champion cannot act without ending its Grace, so the longer wait shelters
 only a seat that stands still. One life and every Respawn return are unchanged. Rules 18
 (`src/sim/royale/grace.ts` ARRIVAL_GRACE_MAX_S, `tests/royale_grace_wait.test.ts`).
+
+## Amended: a return with no pick comes back beside a cache (2026-11-19)
+
+A Respawn return with no pick that would do (and in Crews, no crewmate clear of a fight to come
+down beside) comes back LANDING_CACHE_M from a plain cache standing in the light it comes back
+to, at an Arrival's depth and at least RETURN_CLEAR_M from every enemy standing: of twelve fixed
+headings round each such cache, the point farthest from every enemy. With none, the edge of the
+light as before. No draw from the match's stream. Every seat alike: the house brain picks
+nothing, so a bot's return comes down beside a cache too. A pick is unchanged, One life is
+unchanged, and a Thornfray bout keeps its return at the edge as it keeps its own landing. Rules 24 (`src/sim/royale/return_pick.ts` cacheReturn,
+`tests/royale_return_pick.test.ts`).

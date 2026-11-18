@@ -123,14 +123,16 @@ In code the crew is the sim's team (ADR 0030) and its size `crew`.
 _Avoid_: squad, party (a party enters the Ranked queue), group, team in game text
 
 **Respawn**:
-The battle royale variant where a death costs five seconds: the champion comes back at the edge
-of the light (of the light it closes to, while the Dusk closes) with everything it had, and the
+The battle royale variant where a death costs five seconds: the champion comes back a step from
+a plain cache standing in the light (of the light it closes to, while the Dusk closes), at least
+ten meters from every enemy, else at the edge of that light, with everything it had, and the
 most takedowns when the last light goes out wins: a champion's own, or in Crews the crew's,
 every takedown its champions scored. A takedown's experience goes to its last hit,
 and a share of it to every champion with an assist on it. During the wait the globe shows, and a
 tap on it picks where the champion comes back instead: inside that light, at least ten meters
 from every champion standing, the nearest such point to the pick. Over a seat's first fall the
-globe stays down: the camera stays on the match and the champion comes back at the edge.
+globe stays down: the camera stays on the match and the champion comes back beside a cache or
+at the edge, as with no pick.
 A person's best is the most takedowns one of their seats scored in a Respawn match, since
 landing for a drop-in, kept on their line of the ladder (ADR 0033).
 What Play now launches.

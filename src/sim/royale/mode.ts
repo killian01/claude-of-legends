@@ -80,7 +80,7 @@ import { creatureXp, grantXp, landingLevels, takedownXp } from './levels';
 import { GOLDEN_PIECES, grantPieces, healShare, manaShare, seatBuild, streakShare } from './loot';
 import { markOf, markPayout, markSlayer, observeMarks, stepMarks } from './marks';
 import { flightOver, flightPos, type PadFlight, padSites, padUnder, startFlight } from './pads';
-import { returnSpot, takesReturnPick } from './return_pick';
+import { cacheReturn, returnSpot, takesReturnPick } from './return_pick';
 import {
   grantRoyaleWrath,
   observeRisings,
@@ -183,6 +183,8 @@ export interface RoyaleTally {
   fairArrivals: number;
   // Respawn returns set down at the seat's own pick (return_pick.ts).
   returnsPicked: number;
+  // Respawn returns with no pick set down beside a cache (return_pick.ts).
+  returnsByCache: number;
   // Upstarts begun, and takedowns landed while carrying one (upstart.ts).
   upstarts: number;
   upstartTakedowns: number;
@@ -276,6 +278,7 @@ export class RoyaleMode {
     burrTakedowns: 0,
     fairArrivals: 0,
     returnsPicked: 0,
+    returnsByCache: 0,
     upstarts: 0,
     upstartTakedowns: 0,
   };
@@ -910,10 +913,12 @@ export class RoyaleMode {
   }
 
   // The respawn's delay and place (SimOptions.respawnDelay, respawnPoint):
-  // RESPAWN_S and the edge of the light in Respawn, never in One life. The
+  // RESPAWN_S and beside a cache or at the edge of the light in Respawn,
+  // never in One life. The
   // place is the seat's own pick when it made one during the wait and a
   // point near it will do (return_pick.ts returnSpot: inside the light, at
-  // least RETURN_CLEAR_M from every champion standing), else the candidate
+  // least RETURN_CLEAR_M from every champion standing), else beside a cache
+  // (respawnPoint below), else the candidate
   // on the light's edge farthest from every other champion standing
   // (score.ts edgeOfLight), never the first one drawn; while the Dusk
   // closes, in the light it closes to (returnCap), for every seat. The pick
@@ -923,9 +928,10 @@ export class RoyaleMode {
   }
 
   // In Crews a return with no pick that would do comes back beside a
-  // crewmate standing clear of any fight (crews.ts besideCrew), else at the
-  // edge; the clearance and the edge read the other crews only, in Solo
-  // every other champion.
+  // crewmate standing clear of any fight (crews.ts besideCrew). Else it
+  // comes back beside a plain cache standing in the light, clear of every
+  // enemy (return_pick.ts cacheReturn), outside a bout, else at the edge; the clearance and
+  // the edge read the other crews only, in Solo every other champion.
   respawnPoint(u: Unit, sim: Sim): Vec3 | null {
     if (this.variant !== 'respawn' || this.state.stage !== 'play') return null;
     const enemies: Vec3[] = [];
@@ -948,6 +954,13 @@ export class RoyaleMode {
     if (this.crew > 1) {
       const beside = besideCrew(sim.rng, cap, mates, enemies, this.layout, this.ground);
       if (beside) return beside;
+    }
+    const byCache = this.bout
+      ? null
+      : cacheReturn(this.plainCaches(), cap, enemies, this.layout, this.ground);
+    if (byCache) {
+      this.tally.returnsByCache++;
+      return byCache;
     }
     return edgeOfLight(sim.rng, cap, enemies, this.layout, this.ground);
   }
