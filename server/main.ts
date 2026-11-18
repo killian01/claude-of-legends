@@ -76,6 +76,7 @@ import {
 } from './bots';
 import { buildId, buildInfo, deployStamp, readBuildId } from './build_info';
 import { withBuildTag } from './build_tag';
+import { dropFromClassic } from './classic_drop';
 import { rejoinClassic } from './classic_rejoin';
 import {
   classicDoorRefused,
@@ -1267,6 +1268,23 @@ function walkOutOfMatch(
     entry.abandonedAt = Date.now();
     console.log(`match ${matchId} abandoned: holding for rejoin grace`);
   }
+}
+
+// A socket leaves its match without walking out (its tab closed, or another
+// tab took the connection over): a Thornfray's or a royale's seat, or a
+// 5v5's, held for the account (server/classic_drop.ts). Not reaped on the
+// spot: a held seat deserves a grace window, so an accidental reload can
+// come back (the world loop reaps once the window closes). Runs once: the
+// socket forgets the match, so its later close handler finds nothing.
+function leaveMatchesOnDrop(client: Client, now: number): void {
+  thornfray.disconnect(client);
+  royale.disconnect(client);
+  dropFromClassic(client, matches, rejoins, now, {
+    report: (entry) => reportSeat(client, entry, 'closed'),
+    left: (entry, seat) => tellSeat(entry, 'left', seat, client.id),
+    connected: (cid) => clients.has(cid),
+    abandoned: (matchId) => console.log(`match ${matchId} abandoned: holding for rejoin grace`),
+  });
 }
 
 // A seat changed hands: everyone else in the match reads who, the people
@@ -2985,11 +3003,13 @@ wss.on('connection', (ws, req) => {
   // The closed socket leaves the queues, lobbies and select at once, as its
   // close handler would: that handler only runs once the old tab answers
   // the close (or a dead one times out), and meanwhile a Start from the new
-  // tab would seat the account twice.
+  // tab would seat the account twice. Its seat in a match is held for the
+  // account at once too, so the new tab's hello hands it back.
   for (const other of clients.values()) {
     if (other.accountId === who.accountId) {
       other.ws.close(4409, 'this account connected somewhere else');
       for (const mm of matchmakers) mm.removeEverywhere(other.id, now, 'drop');
+      leaveMatchesOnDrop(other, now);
     }
   }
 
@@ -3042,6 +3062,9 @@ wss.on('connection', (ws, req) => {
   send(id, { t: 'welcome', clientId: id, name: who.name });
 
   ws.on('message', (data) => {
+    // A socket being closed (taken over by another tab) has already left
+    // its queues and its match: a late message must not put it back.
+    if (ws.readyState !== ws.OPEN) return;
     const raw = data.toString();
     if (raw.length > MAX_MSG_BYTES) return;
     const now = Date.now();
@@ -3294,36 +3317,8 @@ wss.on('connection', (ws, req) => {
     // A drop, not a leave: a private lobby waits for this member through a
     // grace (a reload keeps the lobby), and a seat in its play stays held.
     for (const mm of matchmakers) mm.removeEverywhere(id, Date.now(), 'drop');
-    thornfray.disconnect(client);
-    royale.disconnect(client);
-    const matchId = client.matchId;
+    leaveMatchesOnDrop(client, Date.now());
     clients.delete(id);
-    // Reap matches whose players are all gone (review F.2: ghost matches
-    // kept ticking until a Sanctum fell).
-    if (matchId !== null) {
-      const entry = matches.get(matchId);
-      if (entry) {
-        // A dropped spectator just stops watching.
-        entry.match.removeSpectator(id);
-        reportSeat(client, entry, 'closed');
-        // Hand the abandoned champion to a bot, tell the team, and reserve
-        // the seat against the account so the player can come back, from
-        // this browser or any other they log in on.
-        const left = entry.match.handleDisconnect(id);
-        if (left) {
-          rejoins.reserve(client.accountId, { matchId, ...left });
-          tellSeat(entry, 'left', left, id);
-        }
-        // Not reaped on the spot: the seat reservations above deserve a
-        // grace window, so an accidental reload can come back (the world
-        // loop reaps once the window closes).
-        const anyConnected = [...entry.match.players.keys()].some((cid) => clients.has(cid));
-        if (!anyConnected && entry.abandonedAt === null) {
-          entry.abandonedAt = Date.now();
-          console.log(`match ${matchId} abandoned: holding for rejoin grace`);
-        }
-      }
-    }
   });
 });
 
