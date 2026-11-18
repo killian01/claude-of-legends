@@ -17,9 +17,10 @@ import { attachRoyaleBot } from '../src/sim/content/bots/royale';
 import { DUSK_PHASES } from '../src/sim/content/dusk';
 import { dist, type Vec3 } from '../src/sim/geo';
 import { buildObservation } from '../src/sim/observe';
-import { arrivalDepth, deepInLight } from '../src/sim/royale/drop';
+import { arrivalDepth, deepInLight, LANDING_CACHE_M } from '../src/sim/royale/drop';
 import { depthInside, insideCap } from '../src/sim/royale/dusk';
 import {
+  cacheReturn,
   INTO_MARGIN_M,
   intoLight,
   RETURN_CLEAR_M,
@@ -147,6 +148,20 @@ function down(sim: Sim, id: number, after = 1): void {
   u.respawnAt = sim.time + after;
 }
 
+// The plain caches standing, in id order, as the mode reads them.
+function plainCaches(sim: Sim): Vec3[] {
+  return sim
+    .royaleMode!.state.caches.filter((c) => c.kind === 'plain' && c.present)
+    .map((c) => c.pos);
+}
+
+// Champions standing other than `id`, where they stand.
+function othersOf(sim: Sim, id: number): Vec3[] {
+  return [...sim.units.values()]
+    .filter((o) => o.kind === 'champion' && o.id !== id && !o.dead)
+    .map((o) => o.pos as Vec3);
+}
+
 function untilBack(sim: Sim, id: number): void {
   const u = sim.units.get(id)!;
   for (let i = 0; i < 200 && u.dead; i++) sim.tick();
@@ -154,7 +169,7 @@ function untilBack(sim: Sim, id: number): void {
 }
 
 describe('a Respawn return', () => {
-  it('comes back at its pick, the pick spent; the next return, unpicked, at the edge', () => {
+  it('comes back at its pick, the pick spent; the next return, unpicked, elsewhere', () => {
     const { sim, unitIds } = landed('respawn');
     const mode = sim.royaleMode!;
     const [a, b] = [unitIds[0]!, unitIds[1]!];
@@ -221,6 +236,92 @@ describe('a Respawn return', () => {
     expect(insideCap(mode.state.dusk.next!, at)).toBe(true);
     expect(deepInLight(mode.state.dusk.next!, at, mode.layout.radius)).toBe(true);
     expect(mode.tally.returnsPicked).toBe(1);
+  });
+});
+
+describe('the return beside a cache', () => {
+  const cap: DuskCap = { center: sph(1, 0, 0), radius: 60 };
+  const cache = sph(1, 0.15, 0.1);
+
+  it('comes back a step from a cache deep in the light', () => {
+    const at = cacheReturn([cache], cap, [], layout, fakeGround)!;
+    expect(at).not.toBeNull();
+    expect(dist(at, cache)).toBeLessThanOrEqual(LANDING_CACHE_M + 1);
+    expect(dist(at, cache)).toBeGreaterThan(LANDING_CACHE_M - 1);
+    expect(deepInLight(cap, at, R)).toBe(true);
+  });
+
+  it('takes the side farthest from a champion near the cache, clear of reach', () => {
+    // 8 m or so off the cache: the far side clears RETURN_CLEAR_M, the near
+    // side does not.
+    const foe = sph(1, 0.15, 0.1 + 8 / R);
+    const side = cacheReturn([cache], cap, [foe], layout, fakeGround)!;
+    expect(side).not.toBeNull();
+    expect(dist(side, cache)).toBeLessThanOrEqual(LANDING_CACHE_M + 1);
+    expect(dist(side, foe)).toBeGreaterThanOrEqual(RETURN_CLEAR_M);
+    // The far side: beyond the cache from the foe, about 8 + 2.5 m off.
+    expect(dist(side, foe)).toBeGreaterThan(dist(cache, foe) + LANDING_CACHE_M - 0.5);
+  });
+
+  it('passes over a cache with a champion on it, one in the dark, and gives nothing with none', () => {
+    expect(cacheReturn([cache], cap, [cache], layout, fakeGround)).toBeNull();
+    const dark = sph(-1, 0.1, 0);
+    expect(cacheReturn([dark], cap, [], layout, fakeGround)).toBeNull();
+    expect(cacheReturn([], cap, [], layout, fakeGround)).toBeNull();
+    // A second cache clear of everyone is taken over the crowded one.
+    const other = sph(1, -0.15, 0.1);
+    const at = cacheReturn([cache, other], cap, [cache], layout, fakeGround)!;
+    expect(dist(at, other)).toBeLessThanOrEqual(LANDING_CACHE_M + 1);
+  });
+});
+
+describe('a Respawn return with no pick', () => {
+  it('comes back beside a plain cache standing, clear of everyone', () => {
+    const { sim, unitIds } = landed('respawn');
+    const mode = sim.royaleMode!;
+    const id = unitIds[1]!;
+    down(sim, id);
+    untilBack(sim, id);
+    const at = sim.units.get(id)!.pos as Vec3;
+    expect(mode.tally.returnsByCache).toBe(1);
+    expect(mode.tally.returnsPicked).toBe(0);
+    const near = Math.min(...plainCaches(sim).map((c) => dist(c, at)));
+    expect(near).toBeLessThanOrEqual(LANDING_CACHE_M + 1);
+    // A tick of walking at most since it was set down.
+    for (const o of othersOf(sim, id)) expect(dist(at, o)).toBeGreaterThan(RETURN_CLEAR_M - 1);
+  });
+
+  it('is the same for a house bot, which picks nothing while it waits', () => {
+    const { sim, unitIds } = landed('respawn');
+    const mode = sim.royaleMode!;
+    const id = unitIds[3]!;
+    attachRoyaleBot(sim, id);
+    sim.pickGraft(id, 0);
+    down(sim, id, RESPAWN_S);
+    untilBack(sim, id);
+    expect(mode.tally.returnsPicked).toBe(0);
+    expect(mode.tally.returnsByCache).toBe(1);
+    const at = sim.units.get(id)!.pos as Vec3;
+    const near = Math.min(...plainCaches(sim).map((c) => dist(c, at)));
+    expect(near).toBeLessThanOrEqual(LANDING_CACHE_M + 1);
+  });
+
+  it('comes back at the edge when no cache stands in the light', () => {
+    const { sim, unitIds } = landed('respawn');
+    const mode = sim.royaleMode!;
+    for (const c of mode.state.caches) {
+      c.present = false;
+      c.respawnAt = sim.time + 600;
+    }
+    const id = unitIds[1]!;
+    down(sim, id);
+    untilBack(sim, id);
+    expect(mode.tally.returnsByCache).toBe(0);
+    // The whole planet is lit in the calm: the edge's point is the walkable
+    // one farthest from everyone, so far off any cache spot.
+    const at = sim.units.get(id)!.pos as Vec3;
+    const near = Math.min(...mode.state.caches.map((c) => dist(c.pos, at)));
+    expect(near).toBeGreaterThan(LANDING_CACHE_M + 1);
   });
 });
 

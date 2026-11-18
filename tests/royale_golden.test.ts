@@ -12,7 +12,8 @@
 // idle fire; all three again under 15, Sylra's planet damage share, and
 // under 17, Elowen's planet shares, under 19, Dain's, under 20, Maera's, and
 // under 21, Ostrand joining the pool; Respawn again under 22, its big
-// creatures rising at 1:40.
+// creatures rising at 1:40, and under 24, a return with no pick coming back
+// beside a cache.
 //
 // A red run means a seam moved the battle royale: a changed order of random
 // draws in the Dusk, the Seedfalls, the caches, the Grafts, the drop or the
@@ -41,7 +42,7 @@ interface Golden {
 }
 
 const GOLDEN = {
-  respawnSolo7: { landed60: 627606779, end: 2950608717 },
+  respawnSolo7: { landed60: 460981961, end: 696948903 },
   oneLifeSolo7: { landed60: 311617927, end: 3872947724 },
   oneLifeTrios5: { landed60: 2428003195, end: 2410443987 },
 } satisfies Record<string, Golden>;
