@@ -156,6 +156,8 @@ interface ThornfrayEntry {
   seatChanged: boolean;
   // The connections whose seat already wrote its report.
   reported: Set<number>;
+  // The match's end was begun: one that failed is not paid again.
+  ending: boolean;
 }
 
 export class ThornfrayService {
@@ -417,6 +419,7 @@ export class ThornfrayService {
         prize: built.prize,
         replayIds: [],
         ticksBefore: 0,
+        ending: false,
         holders,
         abandonedAt: null,
         failures: 0,
@@ -751,27 +754,44 @@ export class ThornfrayService {
   }
 
   // The bout's first tick over: its result to the ledger, its replay kept,
-  // then the next bout at once, or the match's end after the Final.
+  // then the next bout at once, or the match's end after the Final. A bout
+  // is kept once: an end that failed after its result went to the ledger
+  // goes on from there on the next tick instead of keeping it again, and a
+  // match's end that failed closes the match rather than paying it twice.
   private endBout(entry: ThornfrayEntry): void {
     const m = entry.match;
     const host = m.bout;
     if (!host) throw new Error('a Thornfray plays bouts only');
-    const result = host.result();
-    recordBout(entry.m.ledger, result);
-    for (const p of [...m.players.values()]) this.foldPlayer(entry, p);
-    const replay = m.replayRecord();
-    if (replay) {
+    if (entry.m.ledger.results.length === entry.index) {
+      const result = host.result();
+      recordBout(entry.m.ledger, result);
+      // Each person's stint on its own: one that fails costs only its own.
+      for (const p of [...m.players.values()]) {
+        try {
+          this.foldPlayer(entry, p);
+        } catch (err) {
+          this.deps.log(`thornfray ${entry.id} stint fold failed: ${String(err)}`);
+        }
+      }
+      entry.ticksBefore += m.sim.tickCount;
       try {
-        this.deps.saveReplay(m.id, replay);
-        entry.replayIds.push(m.id);
+        const replay = m.replayRecord();
+        if (replay) {
+          this.deps.saveReplay(m.id, replay);
+          entry.replayIds.push(m.id);
+        }
       } catch (err) {
         this.deps.log(`thornfray ${entry.id} bout ${m.id} replay save failed: ${String(err)}`);
       }
+      const winner = entry.m.seats[result.ranking[0] ?? -1]?.name ?? '';
+      this.deps.log(`thornfray ${entry.id}: bout ${entry.index + 1} (${result.kind}) to ${winner}`);
     }
-    entry.ticksBefore += m.sim.tickCount;
-    const winner = entry.m.seats[result.ranking[0] ?? -1]?.name ?? '';
-    this.deps.log(`thornfray ${entry.id}: bout ${entry.index + 1} (${result.kind}) to ${winner}`);
     if (entry.m.ledger.results.length >= entry.m.ledger.draws.length) {
+      if (entry.ending) {
+        this.close(entry, true);
+        return;
+      }
+      entry.ending = true;
       this.endMatch(entry);
       return;
     }
