@@ -157,6 +157,104 @@ describe('the bouts', () => {
     expect(h.service.entries.size).toBe(0);
   });
 
+  it('records a bout once when its end fails midway and is tried again', () => {
+    const h = thornfrayHarness();
+    const a = h.connect(1, 'ash');
+    h.enter(a);
+    h.say(a, { t: 'thornfray_start' });
+    // The first bout's end throws once, after its result went to the ledger.
+    const first = h.sim();
+    const entry = [...h.service.entries.values()][0]!;
+    const push = h.logs.push.bind(h.logs);
+    let thrown = false;
+    h.logs.push = (...lines: string[]) => {
+      if (!thrown && lines.some((l) => l.includes(': bout 1 '))) {
+        thrown = true;
+        throw new Error('log failed');
+      }
+      return push(...lines);
+    };
+    h.counts(Array.from({ length: BOUT_SEATS }, (_, s) => (s === 0 ? 9 : 0)));
+    h.nextBout();
+    expect(thrown).toBe(true);
+    expect(h.logs.filter((l) => l.includes('tick failed'))).toHaveLength(1);
+    // One result, one replay, the second bout built once and told once.
+    expect(entry.m.ledger.results).toHaveLength(1);
+    expect(entry.replayIds).toHaveLength(1);
+    expect(entry.index).toBe(1);
+    // The clock counts the bout once (the retry stepped its sim once more).
+    expect(entry.ticksBefore).toBe(first.tickCount - 1);
+    expect(h.fake.sims).toHaveLength(2);
+    expect(h.to(1, 'match_start').map((s) => s.royale?.tf?.b)).toEqual([0, 1]);
+    playOut(h, 0);
+    expect(h.last(1, 'thornfray_result')?.bouts).toHaveLength(BOUTS);
+  });
+
+  it('goes on to the next bout when one person stint cannot be folded', () => {
+    const h = thornfrayHarness();
+    const a = h.connect(1, 'ash');
+    h.enter(a);
+    h.say(a, { t: 'thornfray_start' });
+    const entry = [...h.service.entries.values()][0]!;
+    const units = h.sim().units;
+    const get = units.get.bind(units);
+    units.get = (id: number) => {
+      if (entry.m.ledger.results.length === 1) throw new Error('fold failed');
+      return get(id);
+    };
+    h.nextBout();
+    expect(h.logs.some((l) => l.includes('stint fold failed'))).toBe(true);
+    expect(h.logs.filter((l) => l.includes('tick failed'))).toHaveLength(0);
+    expect(entry.m.ledger.results).toHaveLength(1);
+    expect(h.to(1, 'match_start').map((s) => s.royale?.tf?.b)).toEqual([0, 1]);
+  });
+
+  it('goes on to the next bout when a bout replay cannot be made', () => {
+    const h = thornfrayHarness();
+    const a = h.connect(1, 'ash');
+    h.enter(a);
+    h.say(a, { t: 'thornfray_start' });
+    const entry = [...h.service.entries.values()][0]!;
+    entry.match.replayRecord = () => {
+      throw new Error('replay failed');
+    };
+    h.nextBout();
+    expect(h.logs.some((l) => l.includes('replay save failed'))).toBe(true);
+    expect(h.logs.filter((l) => l.includes('tick failed'))).toHaveLength(0);
+    expect(entry.m.ledger.results).toHaveLength(1);
+    expect(entry.replayIds).toEqual([]);
+    expect(h.to(1, 'match_start').map((s) => s.royale?.tf?.b)).toEqual([0, 1]);
+  });
+
+  it('ends a match once when its end fails midway, and lets everyone go', () => {
+    const h = thornfrayHarness();
+    const a = h.connect(1, 'ash');
+    h.enter(a);
+    h.say(a, { t: 'thornfray_start' });
+    const entry = [...h.service.entries.values()][0]!;
+    // Every bout but the Final played out.
+    for (let i = 0; i < BOUTS - 1; i++) h.nextBout();
+    expect(entry.index).toBe(BOUTS - 1);
+    // The match's end throws once, after the result was sent.
+    const send = h.service['deps'].send;
+    let thrown = false;
+    h.service['deps'].send = (to, msg) => {
+      send(to, msg);
+      if (msg.t === 'thornfray_result' && !thrown) {
+        thrown = true;
+        throw new Error('send failed');
+      }
+    };
+    h.nextBout();
+    h.step(1);
+    expect(thrown).toBe(true);
+    expect(entry.m.ledger.results).toHaveLength(BOUTS);
+    expect(h.to(1, 'thornfray_result')).toHaveLength(1);
+    expect(h.service.entries.size).toBe(0);
+    expect(h.last(1, 'match_end')).toBeDefined();
+    expect(a.matchId).toBeNull();
+  });
+
   it('saves each bout under its own numeric id, held from the prune while it runs', () => {
     const h = thornfrayHarness();
     const a = h.connect(1, 'ash');
