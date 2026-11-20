@@ -49,6 +49,10 @@ function harness(
     bests?: 'kept' | 'gone' | 'none';
     // Whether a line holds a seat in another mode.
     elsewhere?: (owner: number) => boolean;
+    // A line whose Respawn best throws when raised.
+    raiseThrowsFor?: number;
+    // A send to this person that throws, for messages of this kind.
+    sendThrows?: { to: number; t: ServerMsg['t'] };
   } = {},
 ) {
   const sent: { to: number; msg: ServerMsg }[] = [];
@@ -59,6 +63,7 @@ function harness(
   const raised: [owner: number, tally: number][] = [];
   const raiseBest = (owner: number, tally: number): number | null => {
     raised.push([owner, tally]);
+    if (owner === opts.raiseThrowsFor) throw new Error('best store failed');
     if (opts.bests === 'gone') return null;
     const before = bests.get(owner) ?? 0;
     bests.set(owner, Math.max(before, tally));
@@ -70,6 +75,7 @@ function harness(
   let nextId = 100;
   // Snapshots are many: the last few per person are kept.
   const keep = (to: number, msg: ServerMsg): void => {
+    if (opts.sendThrows?.to === to && opts.sendThrows.t === msg.t) throw new Error('socket failed');
     sent.push({ to, msg });
     if (msg.t !== 'snap') return;
     const snaps = sent.filter((s) => s.to === to && s.msg.t === 'snap');
@@ -516,6 +522,36 @@ describe('the Respawn best (ADR 0033)', () => {
       expect(result.v).toBe('respawn');
       expect(result).not.toHaveProperty('bestBefore');
       expect(h.raised).toHaveLength(bests === 'gone' ? 1 : 0);
+    }
+  });
+
+  it("keeps everyone's end when one person's best fails to raise", () => {
+    const h = harness({ raiseThrowsFor: 1 });
+    h.enter(h.connect(1, 'alice'));
+    h.enter(h.connect(2, 'bob'));
+    h.runTo(DROP_S + PLAY_S + 0.1);
+    // Alice's card still comes, without a best before; Bob's is whole.
+    expect(h.last(1, 'royale_result')).not.toHaveProperty('bestBefore');
+    expect(h.last(2, 'royale_result')!.bestBefore).toBe(0);
+    // Respawn closes at once, both seats are told, and the replay is kept.
+    expect(h.to(1, 'match_end')).toHaveLength(1);
+    expect(h.to(2, 'match_end')).toHaveLength(1);
+    expect(h.seats.map((s) => s.how)).toEqual(['ended', 'ended']);
+    expect(h.replays.size).toBe(1);
+    expect(h.service.load()).toBe(0);
+  });
+
+  it("keeps everyone's end when one person's card or match_end fails to send", () => {
+    for (const t of ['royale_result', 'match_end'] as const) {
+      const h = harness({ sendThrows: { to: 1, t } });
+      h.enter(h.connect(1, 'alice'));
+      h.enter(h.connect(2, 'bob'));
+      h.runTo(DROP_S + PLAY_S + 0.1);
+      expect(h.last(2, 'royale_result')).toBeDefined();
+      expect(h.to(2, 'match_end')).toHaveLength(1);
+      expect(h.seats.map((s) => s.how)).toEqual(['ended', 'ended']);
+      expect(h.replays.size).toBe(1);
+      expect(h.service.load()).toBe(0);
     }
   });
 
