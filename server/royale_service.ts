@@ -14,7 +14,7 @@
 // it the socket's messages through one case and its deps.
 
 import { type ClientMsg, type ServerMsg, stepOnWire } from '../src/net/protocol';
-import type { RoyaleVariant } from '../src/net/royale_wire';
+import type { RoyaleResult, RoyaleVariant } from '../src/net/royale_wire';
 import type { RoyaleCrew } from '../src/sim/royale/types';
 import { bankAwards } from './points';
 import { ROYALE_VERBS } from './royale_commands';
@@ -604,39 +604,58 @@ export class RoyaleService {
   private end(entry: RoyaleEntry): void {
     const m = entry.match;
     let people = 0;
+    // The end runs once (endedAt is set before it), so each person's part
+    // is kept on its own: one that throws costs nobody else their card,
+    // nor the replay, nor Respawn's close.
     for (const p of m.players.values()) {
       if (!p.resultSent) {
-        const result = m.resultFor(p.clientId);
-        if (result) {
-          if (m.variant === 'respawn') {
-            const before = this.deps.raiseBest?.(p.owner, respawnSeatTally(result)) ?? null;
-            if (before !== null) result.bestBefore = before;
-          }
-          this.deps.send(p.clientId, result);
-        }
         p.resultSent = true;
+        try {
+          const result = m.resultFor(p.clientId);
+          if (result) {
+            if (m.variant === 'respawn') this.noteBest(m.id, p.owner, result);
+            this.deps.send(p.clientId, result);
+          }
+        } catch (err) {
+          this.deps.log(`royale ${m.id} result failed for a seat: ${String(err)}`);
+        }
       }
       const c = this.deps.client(p.clientId);
       if (!c) continue;
       this.report(c, entry, 'ended');
       people += 1;
     }
-    const replay = entry.hadPeople ? m.replayRecord() : null;
-    if (replay) {
-      try {
-        this.deps.saveReplay(m.id, replay);
-      } catch (err) {
-        this.deps.log(`royale ${m.id} replay save failed: ${String(err)}`);
-      }
+    try {
+      const replay = entry.hadPeople ? m.replayRecord() : null;
+      if (replay) this.deps.saveReplay(m.id, replay);
+    } catch (err) {
+      this.deps.log(`royale ${m.id} replay save failed: ${String(err)}`);
     }
     this.deps.log(`royale ${m.id} ended with ${people} person(s) in`);
     if (m.variant === 'respawn') this.close(entry, true);
   }
 
+  // Raises a Respawn line's best; a store that fails still lets the card
+  // go, without the best before.
+  private noteBest(matchId: number, owner: number, result: RoyaleResult): void {
+    try {
+      const before = this.deps.raiseBest?.(owner, respawnSeatTally(result)) ?? null;
+      if (before !== null) result.bestBefore = before;
+    } catch (err) {
+      this.deps.log(`royale ${matchId} best raise failed: ${String(err)}`);
+    }
+  }
+
   private close(entry: RoyaleEntry, notify: boolean): void {
+    // Each seat on its own: one send that throws leaves no one else seated.
     for (const p of entry.match.players.values()) {
       this.unseat(p.clientId);
-      if (notify) this.deps.send(p.clientId, { t: 'match_end' });
+      if (!notify) continue;
+      try {
+        this.deps.send(p.clientId, { t: 'match_end' });
+      } catch (err) {
+        this.deps.log(`royale ${entry.match.id} match_end failed for a seat: ${String(err)}`);
+      }
     }
     for (const [owner, r] of this.reservations) {
       if (r.matchId === entry.match.id) this.reservations.delete(owner);
