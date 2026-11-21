@@ -489,12 +489,17 @@ export class ThornfrayService {
     entry.abandonedAt = null;
   }
 
-  // Every person in the bout begins a stint and hears its start.
+  // Every person in the bout begins a stint and hears its start, each on
+  // its own: one that fails costs only its own, never the people after it.
   private startStints(entry: ThornfrayEntry): void {
     for (const h of entry.holders.values()) {
       if (h.clientId === null) continue;
-      this.beginStint(entry, h);
-      this.sendStart(entry, h.clientId);
+      try {
+        this.beginStint(entry, h);
+        this.sendStart(entry, h.clientId);
+      } catch (err) {
+        this.deps.log(`thornfray ${entry.id} bout start failed for ${h.name}: ${String(err)}`);
+      }
     }
   }
 

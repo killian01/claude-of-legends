@@ -226,6 +226,53 @@ describe('the bouts', () => {
     expect(h.to(1, 'match_start').map((s) => s.royale?.tf?.b)).toEqual([0, 1]);
   });
 
+  it("tells every person the next bout's start when one person's start fails", () => {
+    const h = thornfrayHarness();
+    const a = h.connect(1, 'ash');
+    const b = h.connect(2, 'bryn');
+    h.enter(a);
+    h.enter(b);
+    h.say(a, { t: 'thornfray_start' });
+    const entry = [...h.service.entries.values()][0]!;
+    expect(h.to(2, 'match_start').map((s) => s.royale?.tf?.b)).toEqual([0]);
+    // The first person is told first, so the second comes after the failure.
+    const order = [...entry.holders.values()].map((x) => x.clientId).filter((c) => c !== null);
+    expect(order).toEqual([1, 2]);
+    // The second bout's start to the first person throws.
+    const send = h.service['deps'].send;
+    h.service['deps'].send = (to, msg) => {
+      if (to === 1 && msg.t === 'match_start' && msg.royale?.tf?.b === 1) {
+        throw new Error('send failed');
+      }
+      send(to, msg);
+    };
+    h.nextBout();
+    expect(entry.index).toBe(1);
+    expect(h.logs.some((l) => l.includes('bout start failed'))).toBe(true);
+    expect(h.logs.filter((l) => l.includes('tick failed'))).toHaveLength(0);
+    // The other person is told and begins their stint on the new bout.
+    expect(h.to(2, 'match_start').map((s) => s.royale?.tf?.b)).toEqual([0, 1]);
+    const held = [...entry.holders.values()].find((x) => x.clientId === 2)!;
+    expect(held.stintFrom).not.toBeNull();
+    expect(h.fake.sims).toHaveLength(2);
+  });
+
+  it('starts the Thornfray for every person when one first start fails', () => {
+    const h = thornfrayHarness();
+    const a = h.connect(1, 'ash');
+    const b = h.connect(2, 'bryn');
+    h.enter(a);
+    h.enter(b);
+    const send = h.service['deps'].send;
+    h.service['deps'].send = (to, msg) => {
+      if (to === 1 && msg.t === 'match_start') throw new Error('send failed');
+      send(to, msg);
+    };
+    h.say(a, { t: 'thornfray_start' });
+    expect(h.to(2, 'match_start').map((s) => s.royale?.tf?.b)).toEqual([0]);
+    expect(h.logs.some((l) => l.includes('started with 2 person(s)'))).toBe(true);
+  });
+
   it('ends a match once when its end fails midway, and lets everyone go', () => {
     const h = thornfrayHarness();
     const a = h.connect(1, 'ash');
