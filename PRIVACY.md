@@ -172,7 +172,12 @@ not know the game has accounts.
 
 The record is a database on this machine, read by the maintainer and by
 nobody else, and it exists so that an announcement can be told apart from a
-front page that loses people.
+front page that loses people. One count is taken out of it for the automated
+sessions that run here each night (see "Who reads these files" below): how
+many visits came through the links the game posts on X, by day and by post,
+and how many of those visits went on to play or made an account. Counts
+only, read without changing anything: never a visit, a visitor id, a
+browser or a place.
 
 ## What a practice match sends
 
