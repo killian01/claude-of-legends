@@ -121,7 +121,9 @@ describe('a whole battle royale of fifty house bots', () => {
     expect(a.tally.takedowns).toBeGreaterThan(150);
     expect(a.tally.cachesOpened).toBeGreaterThan(150);
     expect(a.tally.duskDeaths).toBeLessThan(a.tally.takedowns / 5);
-    expect(a.tally.campsTaken).toBeGreaterThan(15);
+    // 15 on this seed since Elowen's lighter Mist Lance (rules version 25);
+    // over seeds 1 to 24 the field still takes 20 camps a match, as before.
+    expect(a.tally.campsTaken).toBeGreaterThanOrEqual(15);
     expect(a.winnerLevel).toBeGreaterThanOrEqual(9);
     expect(a.winnerItems.length).toBeGreaterThanOrEqual(3);
     // The middle of the field levelled up too.

@@ -127,7 +127,9 @@ export const CLAMOR_S = 3;
 // (drop.ts cacheSideSpot), no longer at a quiet spot.
 // 24: a Respawn return with no pick comes back beside a plain cache in the
 // light, clear of every enemy (return_pick.ts cacheReturn), before the edge.
-export const ROYALE_RULES_VERSION = 24;
+// 25: Elowen's Mist Lance deals 54 base damage, not 62
+// (content/champions/elowen.ts), on the planet as in a match.
+export const ROYALE_RULES_VERSION = 25;
 
 // One of the Dusk's caps: a circle on the sphere, its radius a chord.
 export interface DuskCap {
