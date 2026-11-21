@@ -59,5 +59,6 @@ describe('a recorded 5v5', () => {
 
 // Moved when Nisk joined the roster: the sorted ids the seats are dealt
 // from gained an eleventh, and Nisk plays one of the ten seats. Moved again
-// when Ostrand joined as the twelfth.
-const PINNED = 2850528437;
+// when Ostrand joined as the twelfth, and when Elowen's Mist Lance went
+// from 62 to 54 base damage.
+const PINNED = 1887328805;

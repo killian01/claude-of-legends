@@ -22,6 +22,26 @@ function tickUntilHit(sim: Sim, casterId: number, target: Unit, horizon = 40): b
 const markCount = (u: Unit): number => u.statuses.filter((s) => s.kind === 'mark').length;
 
 describe('mist marks', () => {
+  it('a first Mist Lance at rank 1 deals 54 magic damage before resistance', () => {
+    const sim = new Sim(13);
+    const elowen = sim.addChampion(0, { x: 75, z: 75 }, 'elowen');
+    elowen.abilityRanks = { Q: 1, W: 0, E: 0, R: 0 };
+    const dummy = sim.addChampion(1, { x: 80, z: 75 }, 'torv');
+    sim.tick();
+
+    expect(sim.castAbility(elowen.id, 'Q', { x: dummy.pos.x, z: dummy.pos.z })).toBe(true);
+    let dealt = 0;
+    for (let i = 0; i < 40 && dealt === 0; i++) {
+      for (const ev of sim.tick()) {
+        if (ev.type === 'damage' && ev.sourceId === elowen.id && ev.targetId === dummy.id) {
+          expect(ev.dtype).toBe('magic');
+          dealt += ev.amount;
+        }
+      }
+    }
+    expect(dealt).toBeCloseTo((54 * 100) / (100 + dummy.stats.mr), 3);
+  });
+
   it('two Mist Lances trigger the burst and slow, clearing the marks', () => {
     const sim = new Sim(13);
     const elowen = sim.addChampion(0, { x: 75, z: 75 }, 'elowen');

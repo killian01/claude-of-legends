@@ -52,7 +52,7 @@ export const ELOWEN: ChampionDef = {
         range: 9.5,
         pierce: true,
         onHit: [
-          { kind: 'damage', base: 62, apRatio: 0.95, dtype: 'magic' },
+          { kind: 'damage', base: 54, apRatio: 0.95, dtype: 'magic' },
           // The mist clings: the second lance on a marked target bursts and
           // slows. Duration outlives the rank-1 cooldown so the weave works
           // from level 1.
