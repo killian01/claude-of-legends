@@ -4,7 +4,8 @@
 // passive ONCE. Deterministic like every passive: sim state and ctx only.
 // The first three break the "stat sticks only" ceiling with one signature
 // effect per role: sustain for tanks, an execute for carries, mobility for
-// the attack-speed line.
+// the attack-speed line. Firstbolt gives the magic line its own: the
+// opening of a burst.
 
 import { addStatus, healFactor } from '../combat/status';
 import type { DamageVia } from '../passive_types';
@@ -39,6 +40,9 @@ const TICK_PERIOD_S = 0.25;
 const DEATHMARK_THRESHOLD = 0.3;
 const DEATHMARK_BONUS = 1.12;
 
+const FIRSTBOLT_THRESHOLD = 0.7;
+const FIRSTBOLT_BONUS = 1.12;
+
 const GALE_MS_PCT = 0.12;
 const GALE_DURATION_S = 1.5;
 
@@ -66,6 +70,21 @@ const DOOMBRAND: ItemPassiveDef = {
   },
 };
 
+// The mirror of Deathmark for the magic line: it rewards the spell that
+// starts a fight, not the one that ends it. Abilities only.
+const TEMPEST_CORE: ItemPassiveDef = {
+  itemId: 'tempest_core',
+  name: 'Firstbolt',
+  description: 'Your ability damage against targets above 70% health is increased by 12%.',
+  modifyDamage(_ctx, _self, target, amount, _dtype, via) {
+    if (via !== 'ability') return amount;
+    if (target.maxHp > 0 && target.hp / target.maxHp > FIRSTBOLT_THRESHOLD) {
+      return amount * FIRSTBOLT_BONUS;
+    }
+    return amount;
+  },
+};
+
 const SKYSHEAR: ItemPassiveDef = {
   itemId: 'skyshear',
   name: 'Gale',
@@ -87,4 +106,5 @@ export const ITEM_PASSIVES: Readonly<Record<string, ItemPassiveDef>> = {
   [WORLDHEART.itemId]: WORLDHEART,
   [DOOMBRAND.itemId]: DOOMBRAND,
   [SKYSHEAR.itemId]: SKYSHEAR,
+  [TEMPEST_CORE.itemId]: TEMPEST_CORE,
 };

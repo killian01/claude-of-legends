@@ -35,6 +35,15 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
+    day: '2026-11-22',
+    title: 'Tempest Core opens the fight: Firstbolt',
+    body: [
+      "The mages' finished item now has a signature of its own. Firstbolt: your abilities deal 12% more damage to a target above 70% of its health. Deathmark finishes a fight; Firstbolt starts one, so the spell you open with hits hardest.",
+      'Tempest Core gives 160 ability power instead of 175 to make room for it. The house bots that build it get Firstbolt too, in the lanes and on the Wanderseed.',
+    ],
+    link: { label: 'Play', to: 'play' },
+  },
+  {
     day: '2026-11-19',
     title: 'Back from a fall, beside a cache',
     body: [

@@ -129,7 +129,9 @@ export const CLAMOR_S = 3;
 // light, clear of every enemy (return_pick.ts cacheReturn), before the edge.
 // 25: Elowen's Mist Lance deals 54 base damage, not 62
 // (content/champions/elowen.ts), on the planet as in a match.
-export const ROYALE_RULES_VERSION = 25;
+// 26: Tempest Core carries Firstbolt and 160 ability power, not 175
+// (content/item_passives.ts), on the planet as in a match.
+export const ROYALE_RULES_VERSION = 26;
 
 // One of the Dusk's caps: a circle on the sphere, its radius a chord.
 export interface DuskCap {
