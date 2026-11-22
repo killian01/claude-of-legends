@@ -257,6 +257,48 @@ describe('the bouts', () => {
     expect(h.fake.sims).toHaveLength(2);
   });
 
+  it('frees the seat of a person whose own bout start fails, so entering takes it back', () => {
+    const h = thornfrayHarness();
+    const a = h.connect(1, 'ash');
+    const b = h.connect(2, 'bryn');
+    h.enter(a);
+    h.enter(b);
+    h.say(a, { t: 'thornfray_start' });
+    const entry = [...h.service.entries.values()][0]!;
+    const send = h.service['deps'].send;
+    let fail = true;
+    h.service['deps'].send = (to, msg) => {
+      if (fail && to === 1 && msg.t === 'match_start' && msg.royale?.tf?.b === 1) {
+        throw new Error('send failed');
+      }
+      send(to, msg);
+    };
+    h.nextBout();
+    expect(entry.index).toBe(1);
+    // The seat is left like a closed socket: its bot plays on, the person is free.
+    expect(a.matchId).toBeNull();
+    expect(entry.match.players.has(1)).toBe(false);
+    const seat = [...entry.holders.values()].find((x) => x.name === 'ash')!;
+    expect(seat.clientId).toBeNull();
+    // The other person still plays and hears the seat change after their start.
+    expect(entry.match.players.has(2)).toBe(true);
+    expect(h.to(2, 'match_start').map((s) => s.royale?.tf?.b)).toEqual([0, 1]);
+    // Entering again takes the seat back on the bout being played.
+    fail = false;
+    h.enter(a);
+    expect(a.matchId).toBe(entry.id);
+    expect(seat.clientId).toBe(1);
+    expect(h.to(1, 'match_start').map((s) => s.royale?.tf?.b)).toEqual([0, 1]);
+    // Told why, and no seat report yet: the seat is not over.
+    expect(h.last(1, 'error')?.message).toMatch(/take your seat back/);
+    expect(h.seats).toHaveLength(0);
+    // The seat's one report is the match's end, after coming back.
+    for (let i = entry.index; i < BOUTS; i++) h.nextBout();
+    h.step(1);
+    expect(h.service.entries.size).toBe(0);
+    expect(h.seats.filter((s) => s.how === 'ended')).toHaveLength(2);
+  });
+
   it('starts the Thornfray for every person when one first start fails', () => {
     const h = thornfrayHarness();
     const a = h.connect(1, 'ash');

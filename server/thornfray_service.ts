@@ -491,14 +491,33 @@ export class ThornfrayService {
 
   // Every person in the bout begins a stint and hears its start, each on
   // its own: one that fails costs only its own, never the people after it.
+  // A person whose start failed never heard of the bout, so they leave it
+  // once everyone else has heard theirs: the seat's bot plays on, entering
+  // again takes the seat back, and the seat is reported when it truly ends.
   private startStints(entry: ThornfrayEntry): void {
+    const failed: number[] = [];
     for (const h of entry.holders.values()) {
       if (h.clientId === null) continue;
       try {
         this.beginStint(entry, h);
         this.sendStart(entry, h.clientId);
       } catch (err) {
+        failed.push(h.clientId);
         this.deps.log(`thornfray ${entry.id} bout start failed for ${h.name}: ${String(err)}`);
+      }
+    }
+    for (const id of failed) {
+      const client = this.deps.client(id);
+      if (!client) continue;
+      try {
+        this.leaveSeat(client, entry, null);
+        this.deps.send(id, {
+          t: 'error',
+          message:
+            'The next bout could not start for you. Enter Thornfray again to take your seat back.',
+        });
+      } catch (err) {
+        this.deps.log(`thornfray ${entry.id}: leaving after a failed start: ${String(err)}`);
       }
     }
   }
@@ -623,11 +642,12 @@ export class ThornfrayService {
   }
 
   // Leaving (the pause menu's Leave, or the socket closing): the seat's bot
-  // plays on and the seat stays the person's for the match.
-  private leaveSeat(client: RoyaleClient, entry: ThornfrayEntry, how: SeatEnd): void {
+  // plays on and the seat stays the person's for the match. No `how` when
+  // the seat is not over (a failed start): it is reported at the end.
+  private leaveSeat(client: RoyaleClient, entry: ThornfrayEntry, how: SeatEnd | null): void {
     const p = entry.match.players.get(client.id);
     if (p) this.foldPlayer(entry, p);
-    this.report(client, entry, how);
+    if (how !== null) this.report(client, entry, how);
     const left = entry.match.leave(client.id, true);
     const h = this.holderOf(entry, client.id);
     if (h) h.clientId = null;
