@@ -294,6 +294,7 @@ const PASSIVE_SHORT: Readonly<Record<string, string>> = {
   worldheart: '2% health a second after 5 s unhurt',
   doombrand: '+12% damage to targets under 30%',
   skyshear: '+12% move speed for 1.5 s on champion hits',
+  tempest_core: '+12% ability damage to targets above 70%',
 };
 
 export function passiveLine(itemId: string): string | null {

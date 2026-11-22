@@ -181,7 +181,8 @@ const T3: readonly ItemDef[] = [
     name: 'Tempest Core',
     cost: 3200,
     tier: 3,
-    stats: { ap: 175 },
+    // Firstbolt (item_passives.ts) carries part of its power: 160, not 175.
+    stats: { ap: 160 },
     buildsFrom: ['storm_staff', 'spark_rod'],
   },
   {

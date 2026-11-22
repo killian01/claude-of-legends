@@ -186,6 +186,10 @@ _Avoid_: utility spell, and the names other MOBAs give this pick
 The one consumable: bought at the fountain for 50 gold, carried in a bag slot, drunk anywhere alive for 150 health over 10 seconds. At most two carried; one runs at a time; damage does not stop it, and a drink neither starts nor cancels a recall. Never in the battle royale.
 _Avoid_: potion, flask, and the names other games give theirs
 
+**Item passive**:
+The one signature effect a finished tier 3 item carries beside its stats, granted once however many copies are owned (src/sim/content/item_passives.ts): Heartbeat (Worldheart) heals out of combat, Deathmark (Doombrand) finishes targets under 30% health, Gale (Skyshear) quickens on champion hits, and Firstbolt (Tempest Core) adds 12% to ability damage on a target above 70% health, so the spell that opens a fight hits hardest.
+_Avoid_: unique, mythic, aura
+
 **Decision budget**:
 The token bucket that rate-limits budgeted actions identically for every participant: refills at about 4 per second of sim time, capacity at most 2, both configurable. Ability casts are budgeted; movement is not.
 _Avoid_: APM cap, input throttle
