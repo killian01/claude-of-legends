@@ -68,6 +68,7 @@ import {
 } from './net/replay';
 import { isRoyaleResult, royaleKill, royaleNotes, startRoyale } from './net/royale_client';
 import type { BoutStart, RoyaleResult, ThornfrayResult } from './net/royale_wire';
+import { SnapPacer, waitsForSnaps } from './net/snap_pacer';
 import {
   installStats,
   type MatchEndReporter,
@@ -1171,6 +1172,66 @@ async function runOnline(choice: HomeChoice, guest = false, returning = false): 
       if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
     };
 
+    // A snapshot's turn has come (net/snap_pacer.ts): the mirror world
+    // takes it and the presentation hears its tick.
+    const applySnap = (msg: Extract<ServerMsg, { t: 'snap' }>): void => {
+      if (finished) {
+        pacer.clear();
+        return;
+      }
+      const changed = world.applyServer(msg);
+      if (!pres && !opening && world.selfUnitId !== 0 && world.units.has(world.selfUnitId)) {
+        opening = true;
+        void openPresentation();
+      }
+      // The snapshot carries the winner: played through, whatever
+      // happens to the tab from here.
+      if (world.winner !== null) ends?.report();
+      if (changed) {
+        // The coached bot answers through its snapshot: the order it holds
+        // and the play it is running.
+        const me = world.units.get(world.selfUnitId);
+        if (me) coachBar?.update(me.coachOrder, me.play);
+        const kills: { unitId: number; killerId: number }[] = [];
+        const golds: number[] = [];
+        const casts: { unitId: number; key?: AbilityKey }[] = [];
+        const hits: { targetId: number; amount: number }[] = [];
+        const misses: { unitId: number; targetId: number }[] = [];
+        for (const e of msg.events) {
+          if (e.e === 'death') kills.push({ unitId: e.unitId, killerId: e.killerId });
+          else if (e.e === 'gold') golds.push(e.amount);
+          else if (e.e === 'cast') casts.push({ unitId: e.unitId, key: e.k });
+          else if (e.e === 'miss') misses.push({ unitId: e.unitId, targetId: e.targetId });
+          else if (e.e === 'dmg') hits.push({ targetId: e.targetId, amount: e.amount });
+        }
+        pres?.onWorldTick({
+          kills,
+          golds,
+          casts,
+          hits,
+          attacks: attacksFrom(msg.events),
+          voidmaulSlams: voidmaulSlamsFrom(msg.events),
+          misses,
+        });
+      }
+    };
+    // The snapshots, played out at the server's tick rather than as the
+    // connection delivers them, so moving things glide instead of jumping.
+    const pacer = new SnapPacer<Extract<ServerMsg, { t: 'snap' }>>(applySnap);
+    let paceTimer = 0;
+    const pace = (): void => {
+      window.clearTimeout(paceTimer);
+      const due = pacer.nextDue();
+      if (due === null) return;
+      paceTimer = window.setTimeout(
+        () => {
+          pacer.pump(performance.now());
+          pace();
+        },
+        Math.max(0, due - performance.now()),
+      );
+    };
+
     ws.addEventListener('message', (event) => {
       if (finished) return;
       let msg: ServerMsg;
@@ -1179,6 +1240,8 @@ async function runOnline(choice: HomeChoice, guest = false, returning = false): 
       } catch {
         return;
       }
+      // A message that must follow the held snapshots lets them through first.
+      if (waitsForSnaps(msg.t)) pacer.flush();
       switch (msg.t) {
         case 'queue_status':
           // A lobby that queued as a party gets queue updates: swap the
@@ -1333,44 +1396,10 @@ async function runOnline(choice: HomeChoice, guest = false, returning = false): 
           selectUi?.remove();
           selectUi = null;
           break;
-        case 'snap': {
-          const changed = world.applyServer(msg);
-          if (!pres && !opening && world.selfUnitId !== 0 && world.units.has(world.selfUnitId)) {
-            opening = true;
-            void openPresentation();
-          }
-          // The snapshot carries the winner: played through, whatever
-          // happens to the tab from here.
-          if (world.winner !== null) ends?.report();
-          if (changed) {
-            // The coached bot answers through its snapshot: the order it holds
-            // and the play it is running.
-            const me = world.units.get(world.selfUnitId);
-            if (me) coachBar?.update(me.coachOrder, me.play);
-            const kills: { unitId: number; killerId: number }[] = [];
-            const golds: number[] = [];
-            const casts: { unitId: number; key?: AbilityKey }[] = [];
-            const hits: { targetId: number; amount: number }[] = [];
-            const misses: { unitId: number; targetId: number }[] = [];
-            for (const e of msg.events) {
-              if (e.e === 'death') kills.push({ unitId: e.unitId, killerId: e.killerId });
-              else if (e.e === 'gold') golds.push(e.amount);
-              else if (e.e === 'cast') casts.push({ unitId: e.unitId, key: e.k });
-              else if (e.e === 'miss') misses.push({ unitId: e.unitId, targetId: e.targetId });
-              else if (e.e === 'dmg') hits.push({ targetId: e.targetId, amount: e.amount });
-            }
-            pres?.onWorldTick({
-              kills,
-              golds,
-              casts,
-              hits,
-              attacks: attacksFrom(msg.events),
-              voidmaulSlams: voidmaulSlamsFrom(msg.events),
-              misses,
-            });
-          }
+        case 'snap':
+          pacer.push(msg, msg.time, performance.now());
+          pace();
           break;
-        }
         case 'score':
           world.applyServer(msg);
           break;
