@@ -8,7 +8,7 @@
 // once per slot, the first time a behavior asks for it.
 
 import type { AbilityDef } from '../combat/casting';
-import { type ChampionHints, hintsFor } from '../content/bots/hints';
+import { type ChampionHints, hintsFor, RESCUE_THREAT_RANGE } from '../content/bots/hints';
 import { type CHAMPIONS, championDef } from '../content/champions';
 import { GAME_MAP, type GameMap } from '../content/map';
 import { hypot } from '../exact';
@@ -179,6 +179,20 @@ export function pickCast(ctx: SlotContext, champ: ObsUnit, engage = true): Actio
   if (s.abilityReady.R && s.recastArmed !== 'R') {
     const r = def.abilities.R;
     const range = abilityRange(r);
+    if (hints.ult.rescueBelow !== undefined) {
+      const below = hints.ult.rescueBelow;
+      const hurt = obs.units.find(
+        (u) =>
+          u.friendly &&
+          u.kind === 'champion' &&
+          u.id !== s.id &&
+          u.hpFrac > 0 &&
+          u.hpFrac < below &&
+          hypot(u.x - s.x, u.z - s.z) <= range &&
+          enemyChampions.some((e) => hypot(e.x - u.x, e.z - u.z) <= RESCUE_THREAT_RANGE),
+      );
+      if (hurt) return { kind: 'cast', key: 'R', x: hurt.x, z: hurt.z };
+    }
     const minR = hints.minRange?.R ?? 0;
     const cluster = enemyChampions.filter(
       (e) => hypot(e.x - champ.x, e.z - champ.z) <= (hints.ult.radius ?? 5),

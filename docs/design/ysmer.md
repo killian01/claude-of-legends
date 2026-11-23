@@ -105,6 +105,14 @@ Slice 2 (`src/sim/content/bots/hints.ts`, a playbook under `content/playbooks/`)
    lantern. The portrait is requested and lands with slice 3.
 2. Bots: hints and playbook as above, her royale build and tuning, tested on both maps
    (`championDef` already lets a bot seated on her play the kit behind the switch).
+   Landed 2026-11-24: her hints (`content/bots/hints.ts`: Q poke, W under herself in a fight
+   and home again under 30 percent health, E an engage from 3 or more, R behind a new gate
+   `ult.rescueBelow`: an allied champion in reach under 30 percent with an enemy champion
+   within 5 of it, read by the Star Orchard laner and by the battle royale's crews, before the
+   enemy gates), and a planet tuning of hp 1.15, damage 1.65: 53 percent of her landing duels
+   and 52 percent after the calm (`royale_duel --with ysmer`, seeds 1 to 8). The general
+   playbooks need no entry: they read the hints. Tests: `tests/ysmer_bots.test.ts` (the Star
+   Orchard laner; the crews' read of the rescue gate is still to be pinned in slice 4).
 3. Render: the manifest entry on mage.glb with the lantern prop, the trade's thread of light on
    the wire, the spell looks, the portrait and the ability paintings copied in and listed.
 4. Balance with the headless tools, skins and laurel price, the news entry with her portrait,
