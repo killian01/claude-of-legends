@@ -36,6 +36,18 @@ export interface NewsEntry {
 export const NEWS: readonly NewsEntry[] = [
   {
     day: '2026-11-23',
+    title: 'Shop while you wait',
+    body: [
+      'A fall in a 5v5 is shopping time: a fallen champion buys from anywhere on the map. ' +
+        'When your gold reaches the item the shop suggests, the screen over your fall now says ' +
+        'so, with the key or the button that opens the shop.',
+      'It also says when you stand at your fountain again, and the pause menu opened over a ' +
+        'fall counts the same seconds.',
+    ],
+    link: { label: 'Play', to: 'play' },
+  },
+  {
+    day: '2026-11-23',
     title: 'Emberstray, a new Thornfray bout',
     body: [
       'A third kind of bout joins the Thornfray. In Emberstray a ring of light, the Glow, ' +

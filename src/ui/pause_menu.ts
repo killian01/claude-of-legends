@@ -2,7 +2,7 @@
 // screen (ui/pause_layout.ts has the grid): the actions (Resume, Toggle
 // fullscreen, Leave match), the settings panel, and the ladder box over the
 // feedback box. While a Respawn champion is down, the title's row says when
-// it comes back (pauseWaitLine), so the menu opened over a fall does not
+// it comes back (pauseWaitLine; in a 5v5, ui/five_wait.ts fiveBackLine), so the menu opened over a fall does not
 // read as the match's end. The HUD makes the overlay, the ladder box, the feedback box
 // and the settings panel, and keeps their behavior; this places them and
 // gives the menu its look. A box shows what it holds: the ladder box stays

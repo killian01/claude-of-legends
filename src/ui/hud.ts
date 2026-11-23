@@ -132,6 +132,7 @@ import {
   escapeAuthored,
   statLabel,
 } from './describe';
+import { fiveBackLine, fiveShopLine } from './five_wait';
 import { iconDataUrl, itemIconUrl } from './icons';
 import { DISCORD } from './links';
 import { MultikillLadder, type MultikillLook, multikillLook } from './multikill';
@@ -3938,10 +3939,31 @@ export class Hud {
       return;
     }
     this.deathOverlay.classList.toggle('open', u.dead);
-    if (u.dead) {
-      const respawn = `Respawn in ${Math.max(0, u.respawnAt - this.world.time).toFixed(1)}s`;
-      this.deathSub.textContent = this.deathRecap ? `${this.deathRecap} · ${respawn}` : respawn;
+    // A 5v5 fall's wait (ui/five_wait.ts): when the champion stands at its
+    // fountain again, in the wash and in the pause menu opened over it,
+    // and, with the gold for the suggested item, to shop meanwhile.
+    const fiveBack =
+      u.dead && this.world.winner === null ? fiveBackLine(u.respawnAt - this.world.time) : null;
+    if (fiveBack !== null) {
+      setText(this.deathSub, this.deathRecap ? `${this.deathRecap} · ${fiveBack}` : fiveBack);
+      setText(this.pauseWait, fiveBack);
     }
+    if (this.pauseWait.hidden !== (fiveBack === null)) this.pauseWait.hidden = fiveBack === null;
+    const suggestion = u.dead ? suggestedItem(u.championId, u.items) : null;
+    const shopLine =
+      suggestion === null
+        ? null
+        : fiveShopLine(
+            {
+              shops: seatShops(this.guideMode),
+              afford: u.gold >= effectiveItemCost(suggestion, u.items),
+              shopOpen: this.shop.classList.contains('open'),
+              guideOff: this.steps.off,
+            },
+            this.stepsInput,
+          );
+    if (shopLine !== null) setText(this.deathHint, shopLine);
+    if (this.deathHint.hidden !== (shopLine === null)) this.deathHint.hidden = shopLine === null;
 
     const winner = this.world.winner;
     this.endOverlay.classList.toggle('open', winner !== null);
