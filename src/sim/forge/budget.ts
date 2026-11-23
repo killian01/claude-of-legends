@@ -202,8 +202,9 @@ export function costOfEffect(e: EffectSpec): number {
     }
     case 'cooldownRefund':
       return e.pctOfRemaining * P.cooldownRefundPerPct;
-    // A roster-only effect: the forge's bounds never admit it.
+    // Roster-only effects: the forge's bounds never admit them.
     case 'swear':
+    case 'swap':
       return 0;
     case 'empower': {
       // Several strikes are paid one each, up to the window's pace; a
@@ -262,6 +263,12 @@ export function costOfCast(spec: CastSpec, castRange: number): number {
     }
     case 'self_or_ally':
       return costOfEffects(spec.effects);
+    // A roster-only delivery (Ysmer's In My Stead): the forge never admits it.
+    case 'champion_target':
+      return (
+        Math.max(costOfEffects(spec.onAlly), costOfEffects(spec.onEnemy)) +
+        costOfEffects(spec.selfEffects)
+      );
     case 'enemy_target':
       return (
         (costOfEffects(spec.effects) * C.pointClickWeight + costOfEffects(spec.selfEffects)) *

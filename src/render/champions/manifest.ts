@@ -464,6 +464,19 @@ const ALL_VISUALS: Readonly<Record<string, ChampionVisualDef>> = {
     portrait: { clip: 'attack', time: 0.4, yaw: 0.5 },
     props: [{ kind: 'sword', bone: 'handslot.r' }],
   },
+  // Ysmer, the Turnlamp: a hooded lamplighter, KayKit's mage (CREDITS.md),
+  // the cape in the skin's body color. Behind her release switch: the
+  // lantern prop and the trade's thread of light land with her render
+  // slice (docs/design/ysmer.md); a staff holds the hand until then.
+  ysmer: {
+    url: '/models/champions/mage.glb',
+    height: 2.3,
+    barY: 3.0,
+    clips: { ...KAYKIT_CLIPS, attack: '2H_Ranged_Shoot', cast: 'Spellcast_Raise' },
+    teamMeshes: ['Mage_Cape'],
+    portrait: { clip: 'cast', time: 0.4, yaw: 0.45 },
+    props: [{ kind: 'staff', bone: 'handslot.r' }],
+  },
 };
 
 // The roster's visuals, every host's preload and readiness list: a champion

@@ -149,6 +149,17 @@ A knight who picks one enemy and will not let go. The long form is `docs/design/
 - E, Gauntlet Throw: a skillshot that names the Sworn; recast to dash to it.
 - R, Oathfield: a closed ring of wall around him; nobody walks or dashes in or out, projectiles fly over.
 
+### Ysmer, the Turnlamp (Support, bot)
+
+A hooded lamplighter who trades places: a friend pulled out of harm, a foe pulled into hers.
+The thirteenth champion, in build behind the release switch; the long form is `docs/design/ysmer.md`.
+
+- Passive, Homeward Glow: she and allied champions near her move faster while badly hurt.
+- Q, Wick Shot: a slowing bolt of lamplight.
+- W, Hung Lantern: a lantern at her feet that mends allies and reveals enemies; recast to return to it.
+- E, Changeling Spark: a skillshot; the enemy champion it strikes trades places with her and is slowed.
+- R, In My Stead: the champion nearest the aim, either side, trades places with her; an ally is shielded, an enemy rooted.
+
 ## Coverage check
 
 Roles: 3 top (tank, two fighters), 3 mid or flex (mage, assassin, battlemage), 3 marksman, 2 support (heal, engage), 1 skirmisher flex. These are the home lanes (`CONTEXT.md`): the fill completes a team by them and the sim seats each champion in its own. Every crowd-control primitive, projectile shape, and zone type is exercised by at least one kit, so the roster doubles as a test matrix for the effect system.

@@ -158,6 +158,8 @@ function clause(e: EffectSpec): string {
     }
     case 'swear':
       return `makes it your ${span('tt-util', 'Sworn')}`;
+    case 'swap':
+      return `you and it ${span('tt-util', 'trade places')}`;
     case 'cooldownRefund':
       return `refunds ${span('tt-util', pct(e.pctOfRemaining))} of ${e.key}'s remaining cooldown`;
     case 'empower': {
@@ -287,6 +289,13 @@ function describeCast(spec: CastSpec, castRange: number): string[] {
       if (b.onTick?.length) {
         lines.push(`Enemies inside, every ${b.tickEvery ?? 0.5}s: ${sentence(b.onTick)}.`);
       }
+      return lines;
+    }
+    case 'champion_target': {
+      const lines = [`Reaches the champion nearest your aim, ally or enemy (range ${castRange}).`];
+      if (spec.onAlly.length) lines.push(`An ally: ${sentence(spec.onAlly)}.`);
+      if (spec.onEnemy.length) lines.push(`An enemy: ${sentence(spec.onEnemy)}.`);
+      if (spec.selfEffects?.length) lines.push(`On yourself: ${sentence(spec.selfEffects)}.`);
       return lines;
     }
     case 'enemy_target': {

@@ -171,6 +171,7 @@ export function defaultEffect(kind: EffectSpec['kind']): EffectSpec {
     case 'cooldownRefund':
       return { kind, key: 'Q', pctOfRemaining: 0.5 };
     case 'swear':
+    case 'swap':
       return { kind };
     case 'empower':
       return {
@@ -346,6 +347,13 @@ export function defaultCast(kind: CastSpec['kind']): CastSpec {
       };
     case 'self_or_ally':
       return { kind, searchRadius: 2.5, effects: [{ kind: 'shield', base: 80, duration: 2.5 }] };
+    case 'champion_target':
+      return {
+        kind,
+        searchRadius: 2.5,
+        onAlly: [{ kind: 'shield', base: 80, duration: 2.5 }],
+        onEnemy: [],
+      };
     case 'enemy_target':
       return {
         kind,
@@ -390,6 +398,8 @@ const CAST_KINDS = Object.keys(CAST_BOUNDS) as CastSpec['kind'][];
 const CAST_LISTS: Record<CastSpec['kind'], readonly { key: string; label: string }[]> = {
   skillshot: [{ key: 'onHit', label: 'on hit' }],
   oathfield: [],
+  // Roster-only, like the Oathfield: never offered to the Forge.
+  champion_target: [],
   zone: [
     { key: 'onEnter', label: 'on enter' },
     { key: 'onTick', label: 'each tick (enemies)' },

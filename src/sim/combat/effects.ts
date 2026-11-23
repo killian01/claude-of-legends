@@ -28,6 +28,7 @@ import type { AbilityKey, DamageType, Vec2 } from '../types';
 import type { Unit } from '../unit';
 import { dealDamage } from './damage';
 import { addMarkStack, addStatus, clearMarks, healFactor, isRooted, slowPct } from './status';
+import { tradePlaces } from './swap';
 
 // The eight compass directions as unit vectors, every 45 degrees: the
 // constants are exact, where the engine's cosine of a multiple of PI/4
@@ -222,6 +223,8 @@ export type EffectSpec =
   | { kind: 'cooldownRefund'; key: AbilityKey; pctOfRemaining: number }
   // Names the target the source's Sworn, over any Sworn it held (sworn.ts).
   | { kind: 'swear' }
+  // The source and the target trade places (combat/swap.ts, Ysmer).
+  | { kind: 'swap' }
   // Arms the target's next auto attack within `duration` with rider
   // effects, optionally splashing around the struck victim; `hits` arms
   // that many attacks inside the window instead of one.
@@ -466,6 +469,11 @@ export function applyEffects(
       case 'swear': {
         const source = ctx.units.get(sourceId);
         if (source) swear(ctx, source, target, true);
+        break;
+      }
+      case 'swap': {
+        const source = ctx.units.get(sourceId);
+        if (source) tradePlaces(ctx, source, target);
         break;
       }
       case 'conditional': {

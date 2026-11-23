@@ -20,6 +20,7 @@ import type { AbilityKey, Vec2 } from '../types';
 import { hostile, type Unit } from '../unit';
 import { raiseWall } from '../walls';
 import { allyDashAim } from './ally_dash';
+import { championNearAim } from './champion_target';
 import { type ChargeSpec, chargesOf, openStore, spendCharge } from './charges';
 import { applyEffects, type EffectSpec, type Power } from './effects';
 import {
@@ -86,6 +87,18 @@ export type CastSpec =
       kind: 'enemy_target';
       searchRadius: number;
       effects: readonly EffectSpec[];
+      selfEffects?: readonly EffectSpec[];
+    }
+  // The champion nearest the aim, ally or enemy, within the cast range
+  // (Ysmer's In My Stead, combat/champion_target.ts): `onAlly` or `onEnemy`
+  // on it, then `selfEffects` on the caster. Nobody in reach, no cast:
+  // refused before anything is paid. In a free-for-all every champion is
+  // an enemy, so the spell is never dead there.
+  | {
+      kind: 'champion_target';
+      searchRadius: number;
+      onAlly: readonly EffectSpec[];
+      onEnemy: readonly EffectSpec[];
       selfEffects?: readonly EffectSpec[];
     }
   | { kind: 'cone'; range: number; halfAngle: number; onHit: readonly EffectSpec[] }
@@ -348,6 +361,15 @@ export function executeCast(
       if (spec.selfEffects) applyEffects(ctx, caster.id, power, caster, spec.selfEffects);
       return true;
     }
+    case 'champion_target': {
+      const at = clampToRange(caster.pos, aim, castRange);
+      const target = championNearAim(ctx, caster, at, castRange, spec.searchRadius);
+      if (!target) return false;
+      const effects = hostile(caster, target) ? spec.onEnemy : spec.onAlly;
+      applyEffects(ctx, caster.id, power, target, effects);
+      if (spec.selfEffects) applyEffects(ctx, caster.id, power, caster, spec.selfEffects);
+      return true;
+    }
     case 'cone': {
       // Inside the cone when the angle between the aim and the unit is at
       // most the half angle, tested on cosines with exact arithmetic
@@ -544,6 +566,10 @@ export function castAbility(
   if (spec.kind === 'enemy_target') {
     const at = clampToRange(caster.pos, aim, def.castRange);
     if (!findEnemyTarget(ctx, caster, at, spec.searchRadius, def.castRange)) return false;
+  }
+  if (spec.kind === 'champion_target') {
+    const at = clampToRange(caster.pos, aim, def.castRange);
+    if (!championNearAim(ctx, caster, at, def.castRange, spec.searchRadius)) return false;
   }
   // The Oathfield needs an enemy champion in reach the same way.
   if (spec.kind === 'oathfield' && !nearestEnemyChampion(ctx, caster, spec.reach)) return false;

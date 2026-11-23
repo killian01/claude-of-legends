@@ -111,6 +111,8 @@ export function burstOfSpec(spec: CastSpec): number {
     case 'wall':
     case 'oathfield':
       return 0;
+    case 'champion_target':
+      return burstOfEffects(spec.onEnemy);
     // One pod bursts under one step: its entry payload and the cloud's
     // ticks inside the window, like a zone's.
     case 'trap':

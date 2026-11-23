@@ -21,6 +21,7 @@ import { RHOKA } from './rhoka';
 import { SYLRA } from './sylra';
 import { TORV } from './torv';
 import { VESK } from './vesk';
+import { YSMER } from './ysmer';
 
 export interface ChampionBaseStats {
   hp: number;
@@ -120,6 +121,7 @@ const ALL: readonly ChampionDef[] = [
   RHOKA,
   NISK,
   OSTRAND,
+  YSMER,
 ];
 
 const RELEASED: readonly ChampionDef[] = ALL.filter((c) => c.released !== false);
