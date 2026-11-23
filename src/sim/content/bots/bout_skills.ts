@@ -68,6 +68,24 @@ export const STARGLEAN_BOTS: BoutBots = {
   pace: null,
 };
 
+// Emberstray: the tend errand (bout_calls.ts tendCall) from 35 percent
+// health, to the glow anywhere in the Thornyard (80 m, its width); under
+// the floor the brain's own walk heals the bot first. The rest as
+// Lastwick's.
+export const EMBERSTRAY_BOTS: BoutBots = {
+  errand: 'tend',
+  floor: 0.35,
+  reach: 80,
+  duskMargin: 0.5,
+  cornered: 8,
+  calm: 0,
+  pace: null,
+};
+
+// The tend errand: a bot this near the glow's heart, as a share of its
+// radius, holds still there; farther, it walks to the heart.
+export const GLOW_SETTLE_SHARE = 0.5;
+
 // The glean errand's cache: the nearest standing one in reach, a golden
 // one counted GLEAN_GOLDEN_M closer and a Seedfall's GLEAN_SEEDFALL_M (they
 // count 2 and 3), never one an enemy in sight stands within GLEAN_BESIDE_M

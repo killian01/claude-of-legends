@@ -7,11 +7,12 @@
 // tests/thornfray_bout_versions.test.ts) and BOUT_ENGINE_VERSION.
 
 import { fingerprintOf } from '../fingerprint';
+import { EMBERSTRAY } from './emberstray';
 import { LASTWICK } from './lastwick';
 import { STARGLEAN } from './starglean';
 import type { BoutKind, BoutKindId } from './types';
 
-export const BOUT_KINDS: readonly BoutKind[] = [LASTWICK, STARGLEAN];
+export const BOUT_KINDS: readonly BoutKind[] = [LASTWICK, STARGLEAN, EMBERSTRAY];
 
 // The released pool, in registry order.
 export function boutPool(kinds: readonly BoutKind[] = BOUT_KINDS): BoutKind[] {

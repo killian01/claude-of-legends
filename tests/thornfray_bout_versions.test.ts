@@ -131,6 +131,42 @@ const PINNED: readonly Pinned[] = [
     pendingPrize: [{ seat: 3, cards: ['stoneblood', 'last_rush', 'thornhide'] }],
     prizeGrafts: [{ seat: 0, graft: 'stoneblood' }],
   },
+  {
+    kind: 'emberstray',
+    version: 1,
+    engine: 1,
+    index: 0,
+    region: 'ruins',
+    checksum: 2675609294,
+    ticks: 2201,
+    counts: [
+      35.20000000000014, 6.349999999999985, 20.70000000000016, 23.100000000000193,
+      27.90000000000026, 10.700000000000017, 19.100000000000136, 0.49999999999999994,
+    ],
+    ranking: [0, 4, 3, 2, 6, 5, 1, 7],
+    paid: [5, 0, 2, 3, 4, 0, 1, 0],
+    offered: [],
+    pendingPrize: [],
+    prizeGrafts: [],
+  },
+  {
+    kind: 'emberstray',
+    version: 1,
+    engine: 1,
+    index: BOUTS - 1,
+    region: 'cliffs',
+    checksum: 3640505540,
+    ticks: 2201,
+    counts: [
+      9.55, 0, 1.1000000000000003, 0, 26.600000000000243, 10.20000000000001, 8.899999999999991,
+      4.6499999999999915,
+    ],
+    ranking: [4, 5, 0, 6, 7, 2, 3, 1],
+    paid: [6, 0, 0, 0, 10, 8, 4, 2],
+    offered: ['bloodsap', 'hunters_eye', 'stoneblood'],
+    pendingPrize: [{ seat: 3, cards: ['stoneblood', 'last_rush', 'thornhide'] }],
+    prizeGrafts: [{ seat: 0, graft: 'stoneblood' }],
+  },
 ];
 
 // The engine's shared data, as captured under BOUT_ENGINE_VERSION.

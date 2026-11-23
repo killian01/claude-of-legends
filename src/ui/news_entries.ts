@@ -35,6 +35,22 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
+    day: '2026-11-23',
+    title: 'Emberstray, a new Thornfray bout',
+    body: [
+      'A third kind of bout joins the Thornfray. In Emberstray a ring of light, the Glow, ' +
+        'stands at the heart of the Thornyard. It rests for twelve seconds, then drifts at a ' +
+        'walk to its next stop, rests, and drifts again.',
+      'Every second you stand inside it counts. Anyone inside counts too, so the way to count ' +
+        'alone is to clear it, and to keep it while it moves. A fall costs five seconds and the ' +
+        'walk back: pick the side it is drifting to. The most seconds held when the clock runs ' +
+        'out at 1:40 wins the bout.',
+      'The ring is gold while you are the one nearest its heart, red while someone else is, ' +
+        'and the house bots come for it like everyone else.',
+    ],
+    link: { label: 'Play a Thornfray', to: 'play' },
+  },
+  {
     day: '2026-11-22',
     title: 'Tempest Core opens the fight: Firstbolt',
     body: [

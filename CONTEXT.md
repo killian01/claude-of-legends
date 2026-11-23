@@ -1432,3 +1432,15 @@ The Thornfray bout where a fall costs five seconds and the most gleaned when its
 wins: a cache opened counts one, a golden cache two, a Seedfall cache three, the Seedfalls
 coming three at once every half minute; a takedown takes one from the fallen.
 _Avoid_: seed race, loot race, collect round
+
+**Emberstray**:
+The Thornfray bout where a fall costs five seconds and the most seconds standing in the Glow
+when its clock runs out wins. Everyone inside the Glow counts, so the way to count alone is to
+clear it.
+_Avoid_: king of the hill, capture point, zone control, ember (that is what the server spends)
+
+**Glow**:
+Emberstray's goal: a ring of light twelve meters across that rests twelve seconds, then drifts at
+a walk to its next stop across the heart of the Thornyard, its route drawn at the landing and
+always inside the light. A champion standing in it counts its seconds.
+_Avoid_: the circle, the zone, the hill, the point, ember, crown

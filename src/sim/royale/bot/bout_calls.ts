@@ -19,6 +19,7 @@ import {
   GLEAN_LIT_MARGIN_S,
   GLEAN_SEEDFALL_M,
   GLEAN_STEP_IN_M,
+  GLOW_SETTLE_SHARE,
   HUNT_CACHE_M,
   HUNT_LIT_MARGIN_S,
   HUNT_STALE_S,
@@ -254,10 +255,32 @@ export function huntCall(sense: Sense, bots: BoutBots): BoutErrand | null {
   return goal ? { why: 'hunt', action: walkVia(sense, goal) } : null;
 }
 
+// Emberstray's errand, the tend: from the kind's health floor, to the
+// glow (its 'circle' goal, goal_emberstray.ts) within the kind's reach,
+// to its heart until the bot stands within GLOW_SETTLE_SHARE of its
+// radius from it, and held there; as the glow drifts the bot steps after
+// it. The glow always stands in the light, so the walk never leaves it.
+// With an enemy in sight the fight block has already decided: a bot that
+// fights fights; one that passed on the fight is given room by the brain
+// first (brain.ts give-room) and comes back to the Glow once it has it.
+export function tendCall(sense: Sense, bots: BoutBots): BoutErrand | null {
+  if (sense.s.hpFrac < bots.floor) return null;
+  const glow = (sense.r.bout?.goals ?? []).find((g) => g.shape === 'circle');
+  if (!glow) return null;
+  const at = p3(glow);
+  const d = dist(sense.me, at);
+  if (d > bots.reach) return null;
+  if (d <= glow.radius * GLOW_SETTLE_SHARE) {
+    return { why: 'tend-hold', action: holdStill(sense) };
+  }
+  return { why: 'tend', action: moveTo(sense, at) };
+}
+
 // Every errand a kind may name, by its id.
 export const BOUT_CALLS: Readonly<Record<string, BoutCall>> = {
   glean: gleanCall,
   hunt: huntCall,
+  tend: tendCall,
 };
 
 // The errand the bout's kind names, asked for this slot; null on the
