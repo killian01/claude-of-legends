@@ -36,6 +36,18 @@ export interface NewsEntry {
 export const NEWS: readonly NewsEntry[] = [
   {
     day: '2026-11-23',
+    title: 'Smoother 5v5 matches online',
+    body: [
+      'Over a long connection the updates of a 5v5 match can arrive unevenly, two at once and ' +
+        'then none for a moment, and everything on screen jumped and paused with them.',
+      'The game now plays them out at the pace the match runs, holding one back a few ' +
+        'hundredths of a second when it must, so champions, minions and spells move smoothly. ' +
+        'Your own champion still answers your click at once.',
+    ],
+    link: { label: 'Play', to: 'play' },
+  },
+  {
+    day: '2026-11-23',
     title: 'Shop while you wait',
     body: [
       'A fall in a 5v5 is shopping time: a fallen champion buys from anywhere on the map. ' +
