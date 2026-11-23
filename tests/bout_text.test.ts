@@ -121,6 +121,12 @@ describe("a bout's top line", () => {
 describe("a bout's win line and pill", () => {
   it('says the rule and the bout, the Final as such, nothing in the Lull', () => {
     expect(boutWinLine(STARGLEAN, 2, snap())).toBe('Most gleaned wins · Bout 3 of 6');
+    const EMBERSTRAY = BOUT_KINDS.find((k) => k.id === 'emberstray')!;
+    expect(boutWinLine(EMBERSTRAY, 2, snap())).toBe('Hold the Glow longest · Bout 3 of 6');
+    expect(boutCount(EMBERSTRAY, snap({ tf: { c: 12.4, pl: 2, bc: 20 } }))).toBe(
+      '12.4 s held, 2nd',
+    );
+    expect(boutCount(EMBERSTRAY, snap({ tf: { c: 12.4, pl: 2, bc: 20 } }), true)).toBe('12.4, 2nd');
     expect(boutWinLine(LASTWICK, 5, snap())).toBe(
       'Last one standing wins · Bout 6 of 6 · the Final',
     );

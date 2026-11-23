@@ -1,7 +1,8 @@
 # Thornfray, eight champions in six bouts
 
 Status: built, and opened with its first two bouts, Lastwick and Starglean (slice 7 of the
-plan). The decision record is ADR 0035; the build is `docs/plan-thornfray.md`; the words are in
+plan); Emberstray joined them on 2026-11-23 (`docs/design/emberstray.md`). The decision
+record is ADR 0035; the build is `docs/plan-thornfray.md`; the words are in
 `CONTEXT.md` (Thornfray, Bout, Final, Bushel, Thornyard, Lull, Lastwick, Starglean). Every number
 below is a first pass, measured and tuned by the slices that land it.
 
@@ -382,6 +383,13 @@ Seedfall caches opened in all, the winner near 12 to 15. Its data is
 `src/sim/content/bouts/starglean.ts`, its count the shared `gleanedScorer`
 (`src/sim/royale/bouts/count.ts`).
 
+## Emberstray
+
+The most seconds held in the Glow, a ring that rests and drifts across the Thornyard's heart.
+Respawn's death. Its design, numbers and measure are `docs/design/emberstray.md`; its data
+`src/sim/content/bouts/emberstray.ts`, its goal `src/sim/royale/bouts/goal_emberstray.ts`, its
+count the shared `heldTimeScorer`.
+
 ## How a person plays a bout
 
 - **Lastwick.** The Lull: read the table, see the Thornyard on the globe, tap a landing (near a
@@ -395,6 +403,9 @@ Seedfall caches opened in all, the winner near 12 to 15. Its data is
   three; the crowd that comes for it is the bout's fight. A fall costs five seconds and one
   gleaned; the globe's tap picks the return. The top line always says the seat's count and
   place.
+- **Emberstray.** Land toward the Glow, the ring with a column of light (on the minimap too).
+  Stand in it to count, step with it when it drifts, clear it to count alone; after a fall the
+  globe's tap picks the side to come back on.
 - **Every bout.** The bout's card at the left says the rule for a few seconds at the landing;
   the win line keeps it said. The x2 pill stands beside the count in the Final.
 
@@ -434,6 +445,8 @@ observation's royale block), and fights on sight in every bout.
   seen every lit one since, the one it saw longest ago. As the Dusk closes the sweep closes on
   the light's heart with it, so a seat hiding is found the way a person finds one: by looking.
   With an enemy in sight the fight block has decided first, as in every bout.
+- **Emberstray's bots** tend: their errand (`tend`) walks to the Glow's heart from 35 percent
+  health and holds near it, stepping after it as it drifts, asked after the fight block.
 - **Starglean's bots** glean: their errand (`glean`) walks to a called Seedfall anywhere in the
   Thornyard for a bot at 40 percent health and more, takes a cache in sight before a roam, and
   holds a Seedfall cache's opening as the held opening allows. A bot at 45 percent health on a
