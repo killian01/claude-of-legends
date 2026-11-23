@@ -56,7 +56,7 @@ async function hashes() {
 }
 const pinned = await hashes();
 assert.equal(createHash('sha256').update(modelBytes).digest('hex'), pinned.model);
-await mkdir(output + '/frames', { recursive: true });
+await mkdir(`${output}/frames`, { recursive: true });
 const report = {
   source,
   attackKind,
@@ -142,8 +142,7 @@ async function browserMain(attackKind) {
     for (let x = 0; x < 256; x++) {
       const n = (x * 19 + y * 31 + ((x * y) % 47)) % 29,
         b = Math.sin(x * 0.11) * Math.cos(y * 0.07) * 5;
-      ctx.fillStyle =
-        'rgb(' + (38 + n * 0.25 + b) + ',' + (52 + n * 0.38 + b) + ',' + (43 + n * 0.3 + b) + ')';
+      ctx.fillStyle = `rgb(${38 + n * 0.25 + b},${52 + n * 0.38 + b},${43 + n * 0.3 + b})`;
       ctx.fillRect(x, y, 1, 1);
     }
   const texture = new THREE.CanvasTexture(canvas);
@@ -485,12 +484,12 @@ async function browserMain(attackKind) {
     scene.updateMatrixWorld(true);
     const point = new THREE.Vector3();
     const soles = (currentKind === 'crush' ? ['R', 'L'] : ['R']).map((side) => {
-      const prefix = THREE.PropertyBinding.sanitizeNodeName('Voidmaul_ForeFoot.' + side);
+      const prefix = THREE.PropertyBinding.sanitizeNodeName(`Voidmaul_ForeFoot.${side}`);
       let mesh;
       visual.root.traverse((node) => {
         if (node.isSkinnedMesh && node.name.startsWith(prefix)) mesh = node;
       });
-      if (!mesh?.isSkinnedMesh) throw new Error('Missing production ForeFoot.' + side);
+      if (!mesh?.isSkinnedMesh) throw new Error(`Missing production ForeFoot.${side}`);
       mesh.skeleton.update();
       const points = [],
         positions = mesh.geometry.attributes.position;
@@ -517,11 +516,11 @@ async function browserMain(attackKind) {
               : 'Voidmaul_AttackCrater';
           const burstName =
             currentKind === 'crush'
-              ? 'Voidmaul_CrushPawBurst_' + (sole.side === 'R' ? 'Right' : 'Left')
+              ? `Voidmaul_CrushPawBurst_${sole.side === 'R' ? 'Right' : 'Left'}`
               : 'Voidmaul_AttackShockwave';
           const centers = [craterName, burstName].map((name) => {
             const mesh = effectRoot.getObjectByName(name);
-            if (!mesh?.isMesh) throw new Error('Missing contact ground mesh ' + name);
+            if (!mesh?.isMesh) throw new Error(`Missing contact ground mesh ${name}`);
             return new THREE.Vector3()
               .fromBufferAttribute(mesh.geometry.attributes.position, 0)
               .applyMatrix4(mesh.matrixWorld);
@@ -645,9 +644,9 @@ try {
   });
   await page.setRequestInterception(true);
   page.on('request', (request) => {
-    if (request.url() === origin + '/models/creatures/voidmaul.glb')
+    if (request.url() === `${origin}/models/creatures/voidmaul.glb`)
       void request.respond({ status: 200, contentType: 'model/gltf-binary', body: modelBytes });
-    else if (request.url() === origin + '/__voidmaul_attack_smoke')
+    else if (request.url() === `${origin}/__voidmaul_attack_smoke`)
       void request.respond({
         status: 200,
         contentType: 'text/html',
@@ -660,7 +659,7 @@ try {
       });
     else void request.continue();
   });
-  await page.goto(origin + '/__voidmaul_attack_smoke', {
+  await page.goto(`${origin}/__voidmaul_attack_smoke`, {
     waitUntil: 'domcontentloaded',
     timeout: 60000,
   });
@@ -745,7 +744,7 @@ try {
         seamGap = 0;
       for (const [name, rows] of Object.entries(sample.bone_matrices_gltf_armature)) {
         const bone = s.visual.root.getObjectByName(THREE.PropertyBinding.sanitizeNodeName(name));
-        if (!bone) throw new Error('Missing exported bone ' + name);
+        if (!bone) throw new Error(`Missing exported bone ${name}`);
         const expected = new THREE.Vector3(rows[0][3], rows[1][3], rows[2][3]);
         const gap = bone
           .getWorldPosition(new THREE.Vector3())
@@ -799,7 +798,7 @@ try {
     const bytes = await page.evaluate(
       () => window.voidmaulAttackSmoke.renderer.domElement.toDataURL('image/png').split(',')[1],
     );
-    await writeFile(output + '/' + name, Buffer.from(bytes, 'base64'));
+    await writeFile(`${output}/${name}`, Buffer.from(bytes, 'base64'));
     return bytes;
   }
   report.contactPlacement = await page.evaluate((measureOnly) => {
@@ -814,7 +813,7 @@ try {
     return results;
   }, measureOnly);
   for (const pose of report.contactPlacement) {
-    assert.ok(pose.horizontalGap < 0.001, 'Impact missed paw: ' + JSON.stringify(pose));
+    assert.ok(pose.horizontalGap < 0.001, `Impact missed paw: ${JSON.stringify(pose)}`);
     assert.ok(pose.meshMinimumY > -0.005);
     if (!measureOnly) {
       assert.equal(pose.feedback.length, 1);
@@ -823,11 +822,11 @@ try {
       for (const footprint of pose.footprintMatches) {
         assert.ok(
           footprint.crater.horizontalGap < 0.001,
-          'Crater missed paw: ' + JSON.stringify(footprint),
+          `Crater missed paw: ${JSON.stringify(footprint)}`,
         );
         assert.ok(
           footprint.burst.horizontalGap < 0.001,
-          'Pressure burst missed paw: ' + JSON.stringify(footprint),
+          `Pressure burst missed paw: ${JSON.stringify(footprint)}`,
         );
       }
     }
@@ -930,7 +929,7 @@ try {
     });
     for (const sample of report.readability) {
       assert.ok(sample.finite);
-      assert.ok(sample.visiblePixelRatio > 0.65, 'Debris/dust obscured body: ' + sample.seconds);
+      assert.ok(sample.visiblePixelRatio > 0.65, `Debris/dust obscured body: ${sample.seconds}`);
     }
     const peak = report.readability.find((sample) => sample.seconds === 2.15);
     assert.equal(peak.stoneCount, 128);
@@ -1031,11 +1030,11 @@ try {
           return s.state();
         }, seconds - previous);
         assert.ok(state.finite);
-        const filename = 'attack_' + view + '_' + String(index).padStart(2, '0') + '.png';
+        const filename = `attack_${view}_${String(index).padStart(2, '0')}.png`;
         frames.push({ seconds, image: await png(filename) });
         report.stages[view].push({ ...state, seconds, filename });
         previous = seconds;
-        console.log('Attack ' + view + ': ' + seconds.toFixed(2) + ' s');
+        console.log(`Attack ${view}: ${seconds.toFixed(2)} s`);
       }
       await sheetPage.setContent('<body style="margin:0;background:#101920"></body>');
       const sheet = await sheetPage.evaluate(
@@ -1053,10 +1052,10 @@ try {
             const x = (i % 4) * 400,
               y = 44 + Math.floor(i / 4) * 328,
               img = new Image();
-            img.src = 'data:image/png;base64,' + frames[i].image;
+            img.src = `data:image/png;base64,${frames[i].image}`;
             await img.decode();
             ctx.font = '17px sans-serif';
-            ctx.fillText(frames[i].seconds.toFixed(2) + ' s', x + 10, y + 20);
+            ctx.fillText(`${frames[i].seconds.toFixed(2)} s`, x + 10, y + 20);
             ctx.drawImage(img, x, y + 28, 400, 300);
           }
           return canvas.toDataURL('image/png').split(',')[1];
@@ -1073,7 +1072,7 @@ try {
             'm',
         },
       );
-      await writeFile(output + '/attack_' + view + '_sheet.png', Buffer.from(sheet, 'base64'));
+      await writeFile(`${output}/attack_${view}_sheet.png`, Buffer.from(sheet, 'base64'));
     }
     await sheetPage.close();
     report.scarPersistence = [];
@@ -1097,9 +1096,9 @@ try {
       for (const clearance of clearances)
         assert.ok(
           clearance >= 0.004 && clearance <= 0.006,
-          'Settled rock missed floor: ' + JSON.stringify({ age, clearance }),
+          `Settled rock missed floor: ${JSON.stringify({ age, clearance })}`,
         );
-      const filename = 'scar_' + String(age).replace('.', '_') + 's_without_boss.png';
+      const filename = `scar_${String(age).replace('.', '_')}s_without_boss.png`;
       await png(filename);
       report.scarPersistence.push({ filename, ...scar });
     }
@@ -1118,11 +1117,11 @@ try {
         return s.state();
       }, seconds - previous);
       assert.ok(state.finite);
-      await png('frames/frame_' + String(frame).padStart(4, '0') + '.png');
+      await png(`frames/frame_${String(frame).padStart(4, '0')}.png`);
       report.previewStates.push({ ...state, frame, seconds });
       previous = seconds;
       if (frame % fps === 0)
-        console.log('Preview ' + frame + '/' + (frameCount - 1) + ': ' + seconds.toFixed(2) + ' s');
+        console.log(`Preview ${frame}/${frameCount - 1}: ${seconds.toFixed(2)} s`);
     }
     report.shaderErrors = await page.evaluate(() => window.voidmaulAttackSmoke.shaderErrors);
     assert.deepEqual(report.shaderErrors, []);
@@ -1137,12 +1136,12 @@ try {
     report.fullClipCaptured = !quick;
   }
   report.passed = true;
-  console.log('Voidmaul Attack WebGL smoke passed: ' + output);
+  console.log(`Voidmaul Attack WebGL smoke passed: ${output}`);
 } catch (error) {
   report.passed = false;
   report.failure = error.stack;
   throw error;
 } finally {
-  await writeFile(output + '/report.json', JSON.stringify(report, null, 2) + '\n');
+  await writeFile(`${output}/report.json`, `${JSON.stringify(report, null, 2)}\n`);
   await browser.close();
 }
