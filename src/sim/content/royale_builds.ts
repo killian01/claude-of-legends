@@ -47,6 +47,9 @@ export const PLANET_BUILDS: Readonly<Record<string, readonly string[]>> = {
   // shields find no ally: the attack speed line and its Gale, the
   // execute, then the Heartbeat's two Heart Gems.
   maera: ['skyshear', 'doombrand', 'worldheart', 'rendfang', 'swiftplate', 'swift_treads'],
+  // Ysmer's spells scale on ability power: the mages' line, opened by
+  // Tempest Core's Firstbolt.
+  ysmer: ['worldheart', 'tempest_core', 'null_engine', 'archmind', 'spirit_ward', 'swift_treads'],
 };
 
 export function planetBuild(championId: string | null): readonly string[] | undefined {

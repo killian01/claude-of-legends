@@ -20,6 +20,7 @@ const DELIVERY: Record<CastSpec['kind'], string> = {
   wall: 'a conjured wall that blocks the path',
   trap: 'a hidden pod that bursts underfoot',
   oathfield: 'a ring of stone raised around the caster',
+  champion_target: 'a lantern-lit exchange with one champion',
 };
 
 // The effect kinds worth drawing, in the order they should be mentioned;
@@ -34,6 +35,7 @@ const EFFECT_WORDS: readonly { kind: EffectSpec['kind']; word: string }[] = [
   { kind: 'knockup', word: 'a launch into the air' },
   { kind: 'knockback', word: 'a shove backward' },
   { kind: 'pull', word: 'a pull inward' },
+  { kind: 'swap', word: 'two figures trading places' },
   { kind: 'taunt', word: 'a taunt' },
   { kind: 'slow', word: 'a chilling slow' },
   { kind: 'blind', word: 'blinding' },
@@ -58,6 +60,8 @@ function effectLists(spec: CastSpec): readonly (readonly EffectSpec[] | undefine
       return [spec.effects];
     case 'enemy_target':
       return [spec.effects, spec.selfEffects];
+    case 'champion_target':
+      return [spec.onEnemy, spec.onAlly, spec.selfEffects];
     case 'cone':
       return [spec.onHit];
     case 'burst':

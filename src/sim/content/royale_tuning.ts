@@ -85,6 +85,11 @@ export const PLANET_TUNING: Readonly<Record<string, PlanetTuning>> = {
   // 45% (seeds 1 to 10, 2026-10-25), and with his bruiser build 55% and
   // 70%; 1.15 gives 48% and 56%. Read again in Respawn on release.
   ostrand: { hp: 1, dmg: 1.12 },
+  // Behind her release switch: at 1 and 1.3 she won 10% of her landing
+  // duels and 12% after the calm, at 1.2 and 1.7 59% and 72%, at 1.1 and
+  // 1.55 30% and 28%; 1.15 and 1.65 give 53% and 52% (royale_duel
+  // --with ysmer, seeds 1 to 8, 2026-11-24). Read again in Respawn on release.
+  ysmer: { hp: 1.15, dmg: 1.65 },
 };
 
 const NEUTRAL: PlanetTuning = { hp: 1, dmg: 1 };

@@ -138,6 +138,11 @@ function mapSpec(spec: CastSpec, fn: AmountFn): void {
       mapEffects(spec.effects, fn);
       mapEffects(spec.selfEffects, fn);
       break;
+    case 'champion_target':
+      mapEffects(spec.onAlly, fn);
+      mapEffects(spec.onEnemy, fn);
+      mapEffects(spec.selfEffects, fn);
+      break;
     case 'cone':
       mapEffects(spec.onHit, fn);
       break;

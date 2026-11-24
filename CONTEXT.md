@@ -416,6 +416,13 @@ pass, so whoever is inside stays inside and the fight outside can still shoot in
 crosses it. See docs/design/ostrand.md.
 _Avoid_: arena, cage, ring (the creature site's word)
 
+**Trade places**:
+Two units standing, in one tick, each where the other stood: Ysmer's Changeling Spark trades
+her with the enemy champion it strikes, and In My Stead with the champion nearest her aim, ally
+or enemy. A trade is a blink for both, so no wall or ring stops it; a structure, a dead unit or
+an immobile one is never traded (src/sim/combat/swap.ts). See docs/design/ysmer.md.
+_Avoid_: swap in game text, teleport, switch
+
 **Mastery**:
 A purely cosmetic per-champion rank derived from a player's recorded online matches on that champion (server/mastery.ts thresholds). Shown on the career profile with a title per rank; never affects gameplay, matchmaking, or rating.
 _Avoid_: champion points, grind level

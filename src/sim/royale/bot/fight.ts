@@ -6,6 +6,7 @@
 // the escape, the kite. Every distance a chord (src/sim/geo.ts).
 
 import type { AbilityDef } from '../../combat/casting';
+import { RESCUE_THREAT_RANGE } from '../../content/bots/hints';
 import { BURR_MARGIN, BURR_TARGET_PULL } from '../../content/bots/royale_skills';
 import { ITEMS } from '../../content/items';
 import { addScaled, dirTo, dist, dot, norm, scale, unit, type Vec3 } from '../../geo';
@@ -199,6 +200,17 @@ export function pickCast(
   if (ult && s.abilityReady.R && s.recastArmed !== 'R') {
     const r = def.abilities.R;
     const range = abilityRange(r);
+    // A crewmate in trouble first (Ysmer's In My Stead); none in a solo match.
+    if (hints.ult.rescueBelow !== undefined) {
+      const below = hints.ult.rescueBelow;
+      const hurt = sense.allies.find(
+        (u) =>
+          u.hpFrac < below &&
+          dist(sense.me, p3(u)) <= range &&
+          sense.enemies.some((e) => dist(p3(e), p3(u)) <= RESCUE_THREAT_RANGE),
+      );
+      if (hurt) return cast('R', p3(hurt));
+    }
     const minR = hints.minRange?.R ?? 0;
     const radius = hints.ult.radius ?? 5;
     const cluster = sense.enemies.filter((e) => dist(p3(e), at) <= radius).length;

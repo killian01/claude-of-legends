@@ -39,6 +39,7 @@ function reachOfSpec(spec: CastSpec, castRange: number): number {
     case 'self_or_ally':
       return Math.max(castRange, spec.searchRadius ?? 0);
     case 'enemy_target':
+    case 'champion_target':
     case 'wall':
       return castRange;
     case 'oathfield':

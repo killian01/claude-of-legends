@@ -24,10 +24,22 @@ export interface ChampionHints {
   // The ultimate is spent when EITHER gate opens (both optional), and with
   // `whenHealthier` only while the bot's own health share is at least the
   // target's: a duel it means to win.
-  ult: { minEnemies?: number; radius?: number; targetHpBelow?: number; whenHealthier?: boolean };
+  ult: {
+    minEnemies?: number;
+    radius?: number;
+    targetHpBelow?: number;
+    whenHealthier?: boolean;
+    // An ultimate that reaches an ally (Ysmer's In My Stead): cast on an
+    // allied champion in reach under this share of its health with an
+    // enemy champion within RESCUE_THREAT_RANGE of it, before any other gate.
+    rescueBelow?: number;
+  };
   // ADR 0005: press the armed recast home when own health drops below this.
   recastHomeBelow?: number;
 }
+
+// How near an enemy champion must stand to a hurt ally for a rescue.
+export const RESCUE_THREAT_RANGE = 5;
 
 export const DEFAULT_HINTS: ChampionHints = {
   keys: { Q: 'poke', W: 'poke', E: 'poke' },
@@ -95,6 +107,16 @@ export const BOT_HINTS: Record<string, ChampionHints> = {
   ostrand: {
     keys: { Q: 'poke', W: 'steroid', E: 'engage' },
     ult: { minEnemies: 1, radius: 4.5, whenHealthier: true },
+  },
+  // The bolt pokes, the lantern goes down under her in a fight and takes
+  // her home when she is hurt, the spark is an engage from past point
+  // blank. The ultimate rescues a hurt ally first; else it brings a hurt
+  // enemy into her place in a duel she leads.
+  ysmer: {
+    keys: { Q: 'poke', W: 'steroid', E: 'engage' },
+    minRange: { E: 3 },
+    ult: { targetHpBelow: 0.5, whenHealthier: true, rescueBelow: 0.3 },
+    recastHomeBelow: 0.3,
   },
 };
 
