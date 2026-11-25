@@ -54,6 +54,9 @@ interface Screen {
   // renderer draws nothing (a gap).
   hidden?: readonly [number, number][];
   gaps?: readonly [number, number][];
+  // Spans [from, to) in ms drawn in a view of their own (the planet's
+  // globe): handed to the dial aside, the ground paused after them.
+  asides?: readonly [number, number][];
   // A clock that hands the time over rounded to the millisecond.
   roundedClock?: boolean;
 }
@@ -214,6 +217,7 @@ export function playMatch(m: MatchMachine): Played {
   let at = 0;
   let free = 0;
   let away = false;
+  let viewing = false;
   let belowMs = 0;
   while (at < m.seconds * 1000) {
     const hidden = m.hidden?.find(([a, b]) => at >= a && at < b);
@@ -233,7 +237,14 @@ export function playMatch(m: MatchMachine): Played {
     const last = at;
     at = shownAt(at, free, refreshMs, m.strict === true);
     if (last >= SETTLE && before > 0) belowMs += at - last;
-    dial.frame(at, m.scriptShare === undefined ? 2 : m.scriptShare * work);
+    const scriptMs = m.scriptShare === undefined ? 2 : m.scriptShare * work;
+    const aside = m.asides?.some(([a, b]) => at >= a && at < b) === true;
+    if (aside) dial.aside(at, scriptMs);
+    else {
+      if (viewing) dial.pause(at);
+      dial.frame(at, scriptMs);
+    }
+    viewing = aside;
     if (dial.index !== before) changes.push({ at, index: dial.index });
     if (ladder.settled !== settled.at(-1)!.index) settled.push({ at, index: ladder.settled });
   }

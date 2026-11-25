@@ -534,11 +534,27 @@ describe('what is not the frame rate', () => {
   });
 
   it("a match's first seconds, a pause, and a frame not drawn", () => {
-    // Slow while the match loads: not judged.
+    // Slow while the match loads: not counted, and glanced at only under a
+    // third of the target. At 12.5 a second the glance steps down once,
+    // and the ground's room gives the top back in one step, its first
+    // trial counted (by 21 s), never again.
     const loading = ladderFor();
+    const loaded = drive(
+      loading,
+      { refreshHz: 60, top: 1.25, workMs: (_r, at) => (at < SETTLE ? 80 : 10) },
+      120,
+    ).changes;
+    expect(loaded.map((c) => c.index)).toEqual([4, 0]);
+    expect(loaded[0]!.at / 1000).toBeLessThan(6);
+    expect(loaded[1]!.at / 1000).toBeLessThan(21);
+    // At 21 a second, over a third, nothing is taken.
+    const usual = ladderFor();
     expect(
-      drive(loading, { refreshHz: 60, top: 1.25, workMs: (_r, at) => (at < SETTLE ? 80 : 10) }, 60)
-        .changes,
+      drive(
+        usual,
+        { refreshHz: 60, top: 1.25, workMs: (_r, at) => (at < SETTLE ? 1000 / 21 : 10) },
+        60,
+      ).changes,
     ).toEqual([]);
     // A pause drops the windows and judges nothing until it ends.
     const paused = ladderFor();

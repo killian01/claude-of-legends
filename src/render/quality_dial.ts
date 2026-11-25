@@ -140,6 +140,7 @@ export class QualityDial {
   private shadowsOff = false;
   private sinceSweep = 0;
   private savedAt = Number.NEGATIVE_INFINITY;
+  private savedHeld = false;
   private readonly source = (): DrawnQualityWire => this.wire();
 
   constructor(setup: DialSetup) {
@@ -190,7 +191,10 @@ export class QualityDial {
     if (!this.host) return;
     if (this.pinned === null) {
       if (this.ladder.frame(at, scriptMs) !== this.applied) this.apply();
-      if (at - this.savedAt >= SAVE_EVERY_MS) this.save(at);
+      // Saved at once when the first seconds tell a page far too slow, or
+      // stop telling it: a match that ends soon after still tells the next.
+      const held = this.ladder.glanceHeld;
+      if (at - this.savedAt >= SAVE_EVERY_MS || held !== this.savedHeld) this.save(at);
     }
     if (this.shadowsOff && ++this.sinceSweep >= SWEEP_FRAMES) {
       this.sinceSweep = 0;
@@ -198,7 +202,14 @@ export class QualityDial {
     }
   }
 
-  // A frame not drawn (a hold, a lost picture, the planet's drop).
+  // A frame drawn in a view of its own (the planet's globe): glanced at for
+  // a page far too slow from its first frames, never counted.
+  aside(at: number, scriptMs: number): void {
+    if (!this.host || this.pinned !== null) return;
+    if (this.ladder.frame(at, scriptMs, true) !== this.applied) this.apply();
+  }
+
+  // A frame not drawn (a hold, a lost picture).
   gap(): void {
     this.ladder.gap();
   }
@@ -237,6 +248,7 @@ export class QualityDial {
 
   private save(at: number): void {
     this.savedAt = at;
+    this.savedHeld = this.ladder.glanceHeld;
     // The screen's refresh as the page's frames have read it, the menus'
     // light ones among them, or as the match's mixed ones did; never the
     // match's cadence alone, which a slower screen would show as well.
@@ -251,6 +263,7 @@ export class QualityDial {
           topMs: this.ladder.topMs,
           topShare: this.ladder.topShare,
           quickTop: this.ladder.quickTop,
+          glanceHeld: this.ladder.glanceHeld,
         }),
       },
     };

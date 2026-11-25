@@ -88,6 +88,7 @@ const laptop = (pin: 'full' | 'low' | null = null, mode: 'classic' | 'royale' = 
   new QualityDial({ mode, top: 1.25, phone: false, pin, now: 0 });
 
 const remembered = () => JSON.parse(store.get(QUALITY_KEY)!);
+const mem = (lean: number, played: number, slow: number) => ({ lean, played, slow });
 
 describe('the shadows on the ground', () => {
   it('stop and start again on the objects that received them, and no other', () => {
@@ -120,12 +121,12 @@ describe('the dial', () => {
       h: 1080,
       shadows: true,
     });
-    // Not judged while the match settles (10 s); under a third of the
-    // target, only the top's first eight windows (of 14 frames, 1.05 s
-    // each), with no fresh ones after them.
-    let at = play(dial, gl, 75, 17.5);
+    // Not counted while the match settles (10 s), but glanced at: under a
+    // third of the target, five of its windows (of 14 frames, 1.05 s each)
+    // step down at once.
+    let at = play(dial, gl, 75, 5);
     expect(gl.ratio).toBe(1.25);
-    at = play(dial, gl, 75, 18.5, at);
+    at = play(dial, gl, 75, 5.5, at);
     expect(gl.ratio).toBe(0.75);
     play(dial, gl, 75, 120, at);
     // So far under, no rung between holds the line on the costs: straight
@@ -181,6 +182,19 @@ describe('the dial', () => {
     expect(writes).toBe(5);
     expect(remembered().modes.classic).toEqual({ lean: 0, played: 0, slow: 1 });
     dial.dispose();
+  });
+
+  it('remembers a match far too slow from its first frames, ended after 20 s', () => {
+    // 75 ms a frame at the top: the first seconds take the step, the ground
+    // is still slow on the floor, and the memory is written then, not 30 s
+    // in. Two such matches, each ended without a dispose, lean the third.
+    for (let i = 0; i < 2; i++) {
+      const dial = laptop();
+      const { gl } = attached(dial);
+      play(dial, gl, 75, 20);
+      expect(remembered().modes.classic).toEqual(i === 0 ? mem(0, 0, 1) : mem(1, 0, 0));
+    }
+    expect(laptop().lean).toEqual({ antialias: true, effectLights: false });
   });
 
   it("keeps the other kind of match's memory when it writes its own", () => {

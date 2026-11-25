@@ -35,6 +35,22 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
+    day: '2026-11-25',
+    title: 'Smooth from the first seconds on a slower machine',
+    body: [
+      'On a computer or phone that draws a match only a few frames a second, the game used to ' +
+        'wait twenty seconds or more, the drop over the planet included, before drawing more ' +
+        'lightly.',
+      'It now sees that within the first few seconds, even while the planet turns under the ' +
+        'drop, and draws lighter at once, so the landing and the first fight are smooth. A ' +
+        'machine that only stalled while the match loaded gets its full picture back as soon as ' +
+        'it shows it can.',
+      'And it remembers: after two such matches, even short ones, the next starts lighter from ' +
+        'its very first frame.',
+    ],
+    link: { label: 'Play', to: 'play' },
+  },
+  {
     day: '2026-11-23',
     title: 'Smoother 5v5 matches online',
     body: [
