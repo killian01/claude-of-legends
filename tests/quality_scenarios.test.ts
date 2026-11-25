@@ -30,8 +30,10 @@
 // F. Matches of 2 to 10 minutes, as when a player joins a running one, hold
 //    all of that.
 // G. A page under a third of the target from its first frames draws a rung
-//    down within 22 s of the start and has it kept within 35 s, and leans
-//    after two such matches.
+//    down within 7 s of the start, while the match settles or the planet's
+//    globe holds the view (where nothing is counted), has it kept within
+//    35 s, and leans after two such matches; a capable one on the globe
+//    never steps.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { type ModeMemory, QUALITY_KEY } from '../src/game/quality_memory';
@@ -313,9 +315,9 @@ describe('D. a machine that got faster', () => {
 });
 
 describe('G. slow from the first frames', () => {
-  it('under a third of the target draws a rung down within 22 s of the start, kept by 35', () => {
-    // The settling's ten seconds and the top's eight windows, no fresh ones;
-    // a third of the target and over waits its twenty seconds as before.
+  it('under a third of the target draws a rung down within 7 s of the start, kept by 35', () => {
+    // Five of the settling's windows glanced at; a third of the target and
+    // over waits its twenty seconds as before.
     for (const scriptShare of [undefined, 0.95]) {
       for (const top of [1.25, 2]) {
         for (const fps of [3, 5, 8, 12, 15, 19]) {
@@ -330,13 +332,37 @@ describe('G. slow from the first frames', () => {
             },
           ]);
           const at = `${fps} at ${top}, script ${scriptShare}`;
-          expect(p!.changes[0]!.at / 1000, at).toBeLessThanOrEqual(22);
+          expect(p!.changes[0]!.at / 1000, at).toBeLessThanOrEqual(7);
           expect(p!.settled[1]!.at / 1000, at).toBeLessThanOrEqual(35);
         }
         const [usual] = series([
           { refreshHz: 60, strict: false, top, seconds: 60, workMs: fill(1000 / 21, top) },
         ]);
         expect(usual!.changes[0]!.at / 1000).toBeGreaterThan(30);
+      }
+    }
+  });
+
+  it("steps down on the planet's globe, kept on the ground; a capable page never steps", () => {
+    // A royale match: the drop's globe for its first 11 s, counted nowhere.
+    // A page at a few frames a second stood on its top until the ground's
+    // own windows, 23 s and more in.
+    const asides: [number, number][] = [[0, 11_000]];
+    for (const top of [1.25, 2]) {
+      for (const fps of [3, 5, 8, 12, 15, 19]) {
+        const [p] = series([
+          { refreshHz: 60, strict: false, top, asides, seconds: 60, workMs: fill(1000 / fps, top) },
+        ]);
+        const at = `${fps} at ${top}`;
+        expect(p!.changes[0]!.at / 1000, at).toBeLessThanOrEqual(7);
+        expect(p!.settled[1]!.at / 1000, at).toBeLessThanOrEqual(35);
+        expect(p!.settled[1]!.index, at).toBeGreaterThan(0);
+      }
+      for (const hz of [60, 120, 144]) {
+        const [p] = series([
+          { refreshHz: hz, top, asides, seconds: 120, workMs: fill(1000 / (hz * 1.5), top) },
+        ]);
+        expect(p!.changes, `capable at ${hz}`).toEqual([]);
       }
     }
   });
@@ -361,7 +387,26 @@ describe('G. slow from the first frames', () => {
   });
 
   it('gives a leap back a rung at a time once the page is fast again', () => {
-    // 5 a second for 40 s, then a machine with room to spare.
+    // At 60 for 12 s, 5 a second until 40 s (a counted leap), then a machine
+    // with room to spare.
+    const top = 1.25;
+    const slow = documented(200, top);
+    const fast = documented(9, top);
+    const [p] = series([
+      {
+        refreshHz: 60,
+        strict: false,
+        top,
+        seconds: 300,
+        workMs: (r, l, at) => (at >= 12_000 && at < 40_000 ? slow(r, l, at) : fast(r, l, at)),
+      },
+    ]);
+    const after = p!.settled.filter((s) => s.at > 40_000).map((s) => s.index);
+    expect(after).toEqual([3, 2, 1, 0]);
+  });
+
+  it('gives a leap taken in its first seconds back in one step', () => {
+    // 5 a second from the first frame until 40 s: the glance's leap.
     const top = 1.25;
     const slow = documented(200, top);
     const fast = documented(9, top);
@@ -374,8 +419,9 @@ describe('G. slow from the first frames', () => {
         workMs: (r, l, at) => (at < 40_000 ? slow(r, l, at) : fast(r, l, at)),
       },
     ]);
+    expect(p!.changes[0]!.at / 1000).toBeLessThan(7);
     const after = p!.settled.filter((s) => s.at > 40_000).map((s) => s.index);
-    expect(after).toEqual([3, 2, 1, 0]);
+    expect(after).toEqual([0]);
   });
 
   it('leans after two such matches, its top left within its first seconds', () => {

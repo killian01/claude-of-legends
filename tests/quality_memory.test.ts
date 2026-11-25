@@ -36,7 +36,22 @@ const pick = (l: ReturnType<typeof ladderFor>) => ({
   topMs: l.topMs,
   topShare: l.topShare,
   quickTop: l.quickTop,
+  glanceHeld: l.glanceHeld,
 });
+// Frames at `fps(index, at)` a second from the very first, those in
+// `aside` drawn in a view of their own (the planet's globe), for `seconds`.
+const slowFromStart = (
+  l: ReturnType<typeof ladderFor>,
+  fps: (index: number, at: number) => number,
+  seconds: number,
+  aside: readonly [number, number] = [0, 0],
+) => {
+  let at = 0;
+  while (at < seconds * 1000) {
+    at += 1000 / fps(l.index, at);
+    l.frame(at, undefined, at >= aside[0] && at < aside[1]);
+  }
+};
 
 describe('the lean levels', () => {
   it('leave out the lights first, then the antialiasing as well', () => {
@@ -121,6 +136,45 @@ describe('what a match leaves for the next', () => {
     const fast = ladderFor();
     exact(fast, () => 58, 130);
     expect(afterMatch({ start: mem(0, 0, 1), ...pick(fast) })).toEqual(mem(0));
+  });
+
+  it('counts a short match far too slow from its first frames, and still so a rung down', () => {
+    // 5 a second on the top, 12 a rung down: ended 20 s in, before a
+    // hundred seconds were counted, each such match is slow, and two in a
+    // row make the next one leaner.
+    const fiveThenTwelve = (i: number) => (i === 0 ? 5 : 12);
+    let memory = mem(0);
+    for (let n = 0; n < 2; n++) {
+      const l = ladderFor();
+      slowFromStart(l, fiveThenTwelve, 20);
+      expect(l.glanceHeld).toBe(true);
+      // Without the first seconds' step, too short to tell, as before.
+      expect(afterMatch({ start: memory, ...pick(l), glanceHeld: false })).toEqual(memory);
+      memory = afterMatch({ start: memory, ...pick(l) });
+    }
+    expect(memory).toEqual(mem(1));
+    // A royale match: the drop's globe for its first 11 s, then 25 s on the
+    // ground, slow on both.
+    const royale = ladderFor();
+    slowFromStart(royale, fiveThenTwelve, 25, [0, 11_000]);
+    expect(royale.glanceHeld).toBe(true);
+    expect(afterMatch({ start: mem(0), ...pick(royale) })).toEqual(mem(0, 0, 1));
+  });
+
+  it('learns nothing from a short match that only stalled while it loaded', () => {
+    // 5 a second for 8 s, then 58 on any rung: the step is taken, and the
+    // ground shows room to spare; ended at 15 s or at 40 s, nothing moves.
+    for (const seconds of [15, 40]) {
+      const l = ladderFor();
+      slowFromStart(l, (_i, at) => (at < 8000 ? 5 : 58), seconds);
+      expect(l.glanceHeld, `${seconds} s`).toBe(false);
+      expect(afterMatch({ start: mem(0, 0, 1), ...pick(l) })).toEqual(mem(0, 0, 1));
+    }
+    // A capable page never takes the step at all.
+    const fast = ladderFor();
+    slowFromStart(fast, () => 58, 30);
+    expect(fast.glanceHeld).toBe(false);
+    expect(afterMatch({ start: mem(0, 0, 1), ...pick(fast) })).toEqual(mem(0, 0, 1));
   });
 
   it("is weighed on the screen's own rate: a 30 Hz screen at full rate never leans", () => {

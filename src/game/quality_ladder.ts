@@ -33,6 +33,15 @@
 // page at 5 a second stood on its floor a minute or more in); kept, each
 // rung it went over is a step given back one at a time.
 //
+// Nor does such a page wait for its first counted seconds at all: the
+// settling's windows and those of a view of its own (the planet's globe, a
+// drop or a Respawn wait, where nothing is counted) are glanced at, and five
+// of them in a row all under a third of the target take that step at once,
+// once a match, counted on the ground as any step once the counting starts
+// and, kept, given back in one step: those windows may have been a load's.
+// A page at a few frames a second stood on its top twenty seconds or more
+// into a royale match, the globe's ten and the settling's before its eight.
+//
 // A browser hands requestAnimationFrame the refresh's time, so frames that
 // all take two refreshes on a 60 Hz screen read as a 30 Hz screen's would
 // (frame_rate.ts): the rate known before the match stands over a whole
@@ -63,6 +72,7 @@ export const LADDER_RULES = {
   quickShare: 1 / 3, // of the target: under it, the top's start is short and nothing fresh
   topQuantile: 0.9, // the top's share: nine windows in ten at it or under
   walkFastShare: 0.45, // of the target: under it, a fast screen's refreshes walk
+  glanceWindows: 5, // uncounted windows in a row all under the quick share: a step at once
 };
 
 // One slow frame in a window is a hitch, left out of its rate; slow frames
@@ -105,6 +115,8 @@ interface Trial {
   seen: number;
   rates: number[];
   walked: boolean;
+  // Taken on uncounted windows (glance): kept, given back in one step.
+  glanced?: boolean;
 }
 
 export class QualityLadder {
@@ -127,6 +139,11 @@ export class QualityLadder {
   private heldBefore = 0;
   private upHeldUntil = Number.NEGATIVE_INFINITY;
   private upFails = 0;
+  // The uncounted windows glanced at, and whether their one step was taken.
+  private glanced: number[] = [];
+  private glanceSpent = false;
+  // The last few windows drawn on the ground, as shares of the target.
+  private ground: number[] = [];
   // The top's windows as shares of the target.
   private readonly topShares: number[] = [];
   // Judged in all and on the top; the refresh read off frames some of which
@@ -177,6 +194,20 @@ export class QualityLadder {
   // or under: under 0.6 the top drew far too slowly all along
   // (quality_memory.ts), not for a fight or three that filled most of its
   // windows while the ladder stood a rung down between them.
+  // The glanced step taken and the page still far from the top on the
+  // ground: two windows at least, their middle under the room share, on a
+  // lighter rung. A page that only stalled while loading draws the ground
+  // with room to spare and tells nothing; this one is slow however short
+  // the match (quality_memory.ts).
+  get glanceHeld(): boolean {
+    return (
+      this.glanceSpent &&
+      this.current > 0 &&
+      this.ground.length >= 2 &&
+      median(this.ground) < LADDER_RULES.roomShare
+    );
+  }
+
   get topShare(): number | null {
     const s = [...this.topShares].sort((a, b) => a - b);
     return s.length > 0 ? s[Math.floor(s.length * LADDER_RULES.topQuantile)]! : null;
@@ -189,8 +220,9 @@ export class QualityLadder {
   }
 
   // A frame shown at `at`, its script having taken `scriptMs`; answers the
-  // rung to draw the next one on.
-  frame(at: number, scriptMs?: number): number {
+  // rung to draw the next one on. A frame `aside` was drawn in a view of
+  // its own: only glanced at, never counted.
+  frame(at: number, scriptMs?: number, aside = false): number {
     const r = LADDER_RULES;
     const dt = this.lastAt === null ? 0 : at - this.lastAt;
     const first = this.lastAt === null;
@@ -229,7 +261,8 @@ export class QualityLadder {
       this.refresh = Math.max(this.refresh ?? 0, rate);
     }
     this.bestHz = Math.max(this.bestHz, fps);
-    if (at >= this.settleUntil) this.judge(fps, script, at, ms);
+    if (at >= this.settleUntil && !aside) this.weigh(fps, script, at, ms);
+    else this.glance(fps);
     return this.current;
   }
 
@@ -247,15 +280,30 @@ export class QualityLadder {
     this.scripts = [];
     this.recent = [];
     this.fresh = null;
+    this.glanced = [];
     this.settleUntil = Math.max(this.settleUntil, until);
     if (this.trial) Object.assign(this.trial, { seen: 0, rates: [] });
   }
 
-  private judge(fps: number, script: number, at: number, ms: number): void {
+  // An uncounted window: five in a row under a third of the target take the
+  // first step of the match at once, from the top, before any other.
+  private glance(fps: number): void {
+    const r = LADDER_RULES;
+    if (this.glanceSpent || this.trial || this.current > 0 || this.steps.length > 0) return;
+    const target = Math.min(r.capHz, this.screenHz ?? r.capHz);
+    this.glanced = [...this.glanced, fps].slice(-r.glanceWindows);
+    if (this.glanced.length < r.glanceWindows) return;
+    if (Math.max(...this.glanced) >= r.quickShare * target) return;
+    this.glanceSpent = true;
+    this.begin(true, median(this.glanced), true);
+  }
+
+  private weigh(fps: number, script: number, at: number, ms: number): void {
     const r = LADDER_RULES;
     const target = Math.min(r.capHz, this.screenHz ?? r.capHz);
     const line = r.lineShare * target;
     this.judgedMs += ms;
+    this.ground = [...this.ground, fps / target].slice(-4);
     if (this.current === 0) {
       this.topMs += ms;
       this.topShares.push(fps / target);
@@ -325,10 +373,19 @@ export class QualityLadder {
     return this.floor;
   }
 
-  private begin(down: boolean, before: number): void {
+  private begin(down: boolean, before: number, glanced = false): void {
     if (down && this.current === 0 && this.topMs < LADDER_RULES.startMs) this.quickTop = true;
     const to = down ? this.below(before) : this.steps.at(-1)!.from;
-    this.trial = { down, from: this.current, to, before, seen: 0, rates: [], walked: false };
+    this.trial = {
+      down,
+      from: this.current,
+      to,
+      before,
+      seen: 0,
+      rates: [],
+      walked: false,
+      glanced,
+    };
     this.current = to;
     this.recent = [];
     this.fresh = null;
@@ -357,9 +414,15 @@ export class QualityLadder {
       }
     } else if (after >= gain * trial.before) {
       // A leap over rungs is kept as a step from each, given back one by
-      // one; the rungs walked after it go back with its last.
-      for (let from = trial.from; from < trial.to; from++) {
-        this.steps.push({ from, before: trial.before, gain });
+      // one; the rungs walked after it go back with its last. A glanced one
+      // is a step from the top, given back in one: its windows may have been
+      // a load's, and a page with room on the rung it went to tries the top
+      // again at once rather than a rung at a time.
+      if (trial.glanced) this.steps.push({ from: trial.from, before: trial.before, gain });
+      else {
+        for (let from = trial.from; from < trial.to; from++) {
+          this.steps.push({ from, before: trial.before, gain });
+        }
       }
       this.recent = trial.rates;
       if (after < r.lineShare * target && this.mayStepDown(after, 0, at)) this.begin(true, after);

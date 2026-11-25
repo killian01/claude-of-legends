@@ -3978,13 +3978,13 @@ export class Renderer {
   }
 
   // A frame drawn, begun at `began`: the quality dial judges it, unless it
-  // was the planet's drop or dive (a view of its own), and starts afresh
-  // on the ground after them.
+  // was the planet's drop or dive (a view of its own, only glanced at for a
+  // page far too slow), and starts afresh on the ground after them.
   private drew(began: number, frameAt: number | undefined): void {
     const drop = this.planet !== null && (this.planet.droppingNow || this.planet.divingNow);
     if (drop) {
       this.viewingDrop = true;
-      this.dial.gap();
+      this.dial.aside(frameAt ?? began, performance.now() - began);
       return;
     }
     if (this.viewingDrop) {
