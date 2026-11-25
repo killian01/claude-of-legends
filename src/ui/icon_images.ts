@@ -59,6 +59,10 @@ export const ABILITY_ICON_IMAGES: ReadonlySet<string> = new Set<string>([
   'nisk_W',
   'nisk_E',
   'nisk_R',
+  'ysmer_Q',
+  'ysmer_W',
+  'ysmer_E',
+  'ysmer_R',
 ]);
 
 // Sigil paintings shipped at public/icons/sigils/<sigilId>.webp.

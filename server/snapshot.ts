@@ -357,6 +357,11 @@ export function buildSnapshot(
       (sim.isVisible(team, ev.unitId) || sim.isVisible(team, ev.targetId))
     ) {
       snapEvents.push({ e: 'miss', unitId: ev.unitId, targetId: ev.targetId });
+    } else if (
+      ev.type === 'swap' &&
+      (sim.isVisible(team, ev.unitId) || sim.isVisible(team, ev.otherId))
+    ) {
+      snapEvents.push({ e: 'swap', unitId: ev.unitId, otherId: ev.otherId });
     } else if (ev.type === 'victory') {
       snapEvents.push({ e: 'victory', team: ev.team });
     }

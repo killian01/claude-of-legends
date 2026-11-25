@@ -349,6 +349,9 @@ export type SnapEvent =
   // A visible unit's strike landed nothing: it fumbled (CONTEXT.md:
   // Fumble). Told to whoever sees the striker or the target.
   | { e: 'miss'; unitId: number; targetId: number }
+  // Two units traded places (CONTEXT.md: Trade places), for the thread of
+  // light between the two spots. Told to whoever sees either of them.
+  | { e: 'swap'; unitId: number; otherId: number }
   | { e: 'victory'; team: TeamId }
   | RoyaleSnapEvent;
 

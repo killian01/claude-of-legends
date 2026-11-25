@@ -49,6 +49,7 @@ import {
   prefetchStarOrchard,
 } from './game/star_orchard';
 import { loadStarOrchard } from './game/star_orchard_records';
+import { swapsFrom } from './game/swap_notes';
 import { boutArrival, thornfrayNext } from './game/thornfray_flow';
 import { voidmaulSlamsFrom } from './game/voidmaul_slam_notes';
 import { buildIdFromMeta, startBuildWatch } from './net/build_watch';
@@ -500,6 +501,7 @@ async function runOffline(pick: OfflinePick, guest = false): Promise<PostMatchAc
           hits,
           attacks: attacksFrom(events),
           voidmaulSlams: voidmaulSlamsFrom(events),
+          swaps: swapsFrom(events),
           misses,
         });
       }
@@ -668,6 +670,7 @@ async function runReplay(source: number, at?: number, follow?: number): Promise<
           hits: [],
           attacks: attacksFrom(events),
           voidmaulSlams: voidmaulSlamsFrom(events),
+          swaps: swapsFrom(events),
           misses,
         });
       checkDrift();
@@ -863,6 +866,7 @@ async function runSpectate(matchId: number, team: TeamId): Promise<PostMatchActi
               hits: [],
               attacks: attacksFrom(msg.events),
               voidmaulSlams: voidmaulSlamsFrom(msg.events),
+              swaps: swapsFrom(msg.events),
               misses,
             });
           }
@@ -1211,6 +1215,7 @@ async function runOnline(choice: HomeChoice, guest = false, returning = false): 
           hits,
           attacks: attacksFrom(msg.events),
           voidmaulSlams: voidmaulSlamsFrom(msg.events),
+          swaps: swapsFrom(msg.events),
           misses,
         });
       }
@@ -1519,6 +1524,7 @@ function planetNotes(events: Extract<ServerMsg, { t: 'snap' }>['events']): World
     hits,
     attacks: attacksFrom(events),
     voidmaulSlams: voidmaulSlamsFrom(events),
+    swaps: swapsFrom(events),
     misses,
     royale: royaleNotes(events),
   };

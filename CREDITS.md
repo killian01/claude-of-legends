@@ -53,6 +53,7 @@ falls back to the in-engine cinematic render when a file is missing
 | `dain.webp`, `sylra.webp`, `fenn.webp`, `elowen.webp`, `ashvyn.webp`, `maera.webp`, `torv.webp`, `rhoka.webp` | Generated with Google Gemini from the prompts in docs/design/portrait-prompts.md | Google Gemini output terms |
 | `nisk.webp` | Generated with an image model from the Nisk prompt in docs/design/portrait-prompts.md, supplied by killian01 | The generator's output terms |
 | `ostrand.webp` | Generated with an image model from the Ostrand prompt in docs/design/portrait-prompts.md, supplied by killian01 | The generator's output terms |
+| `ysmer.webp` | Generated with an image model from the Ysmer prompt in docs/design/portrait-prompts.md | The generator's output terms |
 
 ## Tier emblems (`public/icons/tiers/`)
 
@@ -117,7 +118,7 @@ The sources stay in `art_src/logo/` (ignored, like the other raw art).
 
 ## Painted ability, item and sigil icons (`public/icons/`)
 
-The 80 paintings that beat the procedural icon painter: every ability,
+The 84 paintings that beat the procedural icon painter: every ability,
 all 28 items, all four sigils.
 They follow the art contract in docs/design/icon-art-style.md, whose
 subject lines come from our own kit and item records (ADR 0004). The

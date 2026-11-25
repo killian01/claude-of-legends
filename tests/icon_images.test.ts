@@ -7,7 +7,7 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { CHAMPION_LIST, CHAMPIONS } from '../src/sim/content/champions/index';
+import { CHAMPION_LIST, CHAMPIONS, UNRELEASED_CHAMPIONS } from '../src/sim/content/champions/index';
 import { ITEMS } from '../src/sim/content/items';
 import { SIGILS } from '../src/sim/content/sigils';
 import { ABILITY_ICON_IMAGES, ITEM_ICON_IMAGES, SIGIL_ICON_IMAGES } from '../src/ui/icon_images';
@@ -55,7 +55,8 @@ describe('painted icon manifest', () => {
       const cut = id.lastIndexOf('_');
       const champion = id.slice(0, cut);
       const key = id.slice(cut + 1);
-      expect(CHAMPIONS[champion], id).toBeDefined();
+      // A champion behind the release switch may have its paintings first.
+      expect(CHAMPIONS[champion] ?? UNRELEASED_CHAMPIONS[champion], id).toBeDefined();
       expect(['Q', 'W', 'E', 'R'], id).toContain(key);
     }
     for (const id of ITEM_ICON_IMAGES) expect(ITEMS[id], id).toBeDefined();

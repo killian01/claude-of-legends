@@ -142,7 +142,8 @@ export function startSpectator(
         notes &&
         (notes.casts.length > 0 ||
           notes.attacks.length > 0 ||
-          (notes.voidmaulSlams?.length ?? 0) > 0)
+          (notes.voidmaulSlams?.length ?? 0) > 0 ||
+          (notes.swaps?.length ?? 0) > 0)
       ) {
         renderer.onCombatNotes(notes);
       }

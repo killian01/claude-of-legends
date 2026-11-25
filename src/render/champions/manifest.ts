@@ -32,7 +32,7 @@ export type SpellClipNames = Partial<Record<'Q' | 'W' | 'E' | 'R', string>>;
 export interface ChampionPropDef {
   // A procedural prop shape built in props.ts, or, when url is set instead,
   // a static GLB loaded alongside the champion (a Meshy weapon export).
-  kind?: 'sword' | 'shield' | 'daggers' | 'staff' | 'rifle' | 'bow' | 'blowgun';
+  kind?: 'sword' | 'shield' | 'daggers' | 'staff' | 'rifle' | 'bow' | 'blowgun' | 'lantern';
   // GLB prop model; overrides kind. Normalized at load so its bounding-box
   // center sits on the anchor and its longest axis spans `size` world units.
   url?: string;
@@ -465,9 +465,8 @@ const ALL_VISUALS: Readonly<Record<string, ChampionVisualDef>> = {
     props: [{ kind: 'sword', bone: 'handslot.r' }],
   },
   // Ysmer, the Turnlamp: a hooded lamplighter, KayKit's mage (CREDITS.md),
-  // the cape in the skin's body color. Behind her release switch: the
-  // lantern prop and the trade's thread of light land with her render
-  // slice (docs/design/ysmer.md); a staff holds the hand until then.
+  // the cape in the skin's body color, an iron lantern hung from a pole in
+  // her hand (props.ts).
   ysmer: {
     url: '/models/champions/mage.glb',
     height: 2.3,
@@ -475,7 +474,7 @@ const ALL_VISUALS: Readonly<Record<string, ChampionVisualDef>> = {
     clips: { ...KAYKIT_CLIPS, attack: '2H_Ranged_Shoot', cast: 'Spellcast_Raise' },
     teamMeshes: ['Mage_Cape'],
     portrait: { clip: 'cast', time: 0.4, yaw: 0.45 },
-    props: [{ kind: 'staff', bone: 'handslot.r' }],
+    props: [{ kind: 'lantern', bone: 'handslot.r' }],
   },
 };
 

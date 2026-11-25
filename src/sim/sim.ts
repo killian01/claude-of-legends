@@ -116,6 +116,9 @@ export type SimEvent =
   | VoidmaulSlamEvent
   // A strike that landed nothing: its striker fumbled (combat/auto_attack.ts).
   | { type: 'miss'; unitId: number; targetId: number }
+  // Two units traded places (combat/swap.ts, CONTEXT.md: Trade places):
+  // the one whose effect made the trade, and the other.
+  | { type: 'swap'; unitId: number; otherId: number }
   // A hidden pod burst under an enemy champion (traps.ts).
   | { type: 'trap'; zoneId: number; unitId: number; sourceId: number }
   | { type: 'death'; unitId: number; killerId: number }

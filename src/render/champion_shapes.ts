@@ -37,6 +37,7 @@ const LOOKS: Readonly<Record<string, ChampionLook>> = {
   rhoka: { deco: 'claws', bulk: 1.0 },
   nisk: { deco: 'tube', bulk: 0.75 },
   ostrand: { deco: 'shield', bulk: 1.15 },
+  ysmer: { deco: 'staff', bulk: 0.9 },
 };
 
 export function buildChampionMesh(

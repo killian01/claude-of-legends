@@ -29,8 +29,9 @@ function tradeable(ctx: CombatCtx, u: Unit): boolean {
 // stood (a trade is not a landing: no landing payload fires), both walks
 // are dropped so neither keeps walking a path laid from the old spot, and
 // a recall's channel is broken as any move breaks it: a held enemy does
-// not go home from where it was brought. Returns false, moving nobody,
-// when either cannot be moved.
+// not go home from where it was brought. A trade made is told as a 'swap'
+// event (the renderer's thread of light between the two spots). Returns
+// false, moving nobody and telling nothing, when either cannot be moved.
 export function tradePlaces(ctx: CombatCtx, a: Unit, b: Unit): boolean {
   if (a.id === b.id || !tradeable(ctx, a) || !tradeable(ctx, b)) return false;
   const was = copy(a.pos);
@@ -42,5 +43,6 @@ export function tradePlaces(ctx: CombatCtx, a: Unit, b: Unit): boolean {
   b.activeDash = null;
   cancelRecall(a);
   cancelRecall(b);
+  ctx.events.push({ type: 'swap', unitId: a.id, otherId: b.id });
   return true;
 }

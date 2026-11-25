@@ -67,6 +67,17 @@ import {
   verdantShellCast,
 } from './sylra_fx';
 import type { VfxSystem } from './system';
+import {
+  buildHungLantern,
+  buildSpark,
+  buildWick,
+  lanternTick,
+  sparkImpact,
+  sparkTick,
+  steadRaise,
+  wickImpact,
+  wickTrail,
+} from './ysmer_fx';
 
 export interface SchoolColors {
   main: number;
@@ -885,6 +896,37 @@ export const SPELL_VFX: Readonly<Record<string, SpellVisual>> = {
   // the ring itself).
   ostrand_R: {
     castFx: (fx, x, z) => oathfieldRise(fx, x, z),
+  },
+
+  // Ysmer (ysmer_fx.ts): lamplight, an iron lantern, a two-colored spark.
+  // The autos: a small bead of lamplight off the lantern.
+  ysmer_A: {
+    projectile: (radius) => buildWick(radius * 0.7),
+    impact: (fx, x, z) => fx.sparkBurst(x, 1.0, z, 0xffb347, 4, 3, { life: 0.25, size: 0.22 }),
+  },
+  // Wick Shot: a bead of lamplight dropping embers, bursting warm.
+  ysmer_Q: {
+    projectile: (radius) => buildWick(radius),
+    projectileTick: (fx, x, z) => wickTrail(fx, x, z),
+    impact: (fx, x, z) => wickImpact(fx, x, z),
+  },
+  // Hung Lantern: an iron post and its lantern, light pooled under it.
+  ysmer_W: {
+    zone: (radius, _colors, hostile) => buildHungLantern(radius, hostile),
+    zoneTick: (fx, holder, x, z, radius, ageMs, _colors, dtMs) =>
+      lanternTick(fx, holder, x, z, radius, ageMs, dtMs),
+  },
+  // Changeling Spark: two motes of different light circling each other;
+  // the trade itself draws its thread (the renderer's swap notes).
+  ysmer_E: {
+    projectile: (radius) => buildSpark(radius),
+    projectileTick: (fx, x, z, _dtMs, _colors, _nowMs, holder) => sparkTick(fx, x, z, holder),
+    impact: (fx, x, z) => sparkImpact(fx, x, z),
+  },
+  // In My Stead: the lantern raised, a column of lamplight where she stood.
+  ysmer_R: {
+    castFx: (fx, x, z, _dirX, _dirZ, _colors, fromX, fromZ) =>
+      steadRaise(fx, fromX ?? x, fromZ ?? z),
   },
 };
 

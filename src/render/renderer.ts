@@ -13,6 +13,7 @@ import {
 } from '../game/map_quality';
 import { pointOnStage, rectOnStage, stageSizeOf } from '../game/match_stage';
 import { playCastSfx, playSfx } from '../game/sfx';
+import type { SwapNote } from '../game/swap_notes';
 import type { VoidmaulSlamNote } from '../game/voidmaul_slam_notes';
 import { wheelPixels } from '../game/wheel_step';
 import {
@@ -124,6 +125,7 @@ import { disposeEffect } from './vfx/timed';
 import { TowerReachFx } from './vfx/tower_reach_fx';
 import { TowerShotFx } from './vfx/tower_shot_fx';
 import { VOIDMAUL_HOLE_ORDER } from './vfx/voidmaul_rift_fx';
+import { tradeThread } from './vfx/ysmer_fx';
 import { voidmaulArenaForImpact } from './voidmaul_arena';
 import { voidmaulAttackFeedback } from './voidmaul_attack_feedback';
 import { VoidmaulImpacts } from './voidmaul_impacts';
@@ -274,6 +276,9 @@ export interface CombatNotes {
   // Auto-attacks fired by visible units, for swing animations.
   attacks: readonly { unitId: number; targetId: number; voidmaulAttack?: VoidmaulAttackKind }[];
   voidmaulSlams?: readonly VoidmaulSlamNote[];
+  // Trades of places (CONTEXT.md: Trade places): a thread of lamplight
+  // between the two spots and a flash at each.
+  swaps?: readonly SwapNote[];
   // Strikes that landed nothing, their striker fumbling (CONTEXT.md:
   // Fumble): a "Miss" rises over the target.
   misses?: readonly { unitId: number; targetId: number }[];
@@ -1123,6 +1128,9 @@ export class Renderer {
       );
     } else if (p.kind === 'zone') {
       this.aimSpot = add(new THREE.Mesh(new THREE.CircleGeometry(p.radius ?? 1, 32), mat(0.25)));
+    } else if (p.kind === 'champion_target') {
+      const r = p.radius ?? 1;
+      this.aimSpot = add(new THREE.Mesh(new THREE.RingGeometry(r - 0.14, r, 32), mat(0.5)));
     } else if (p.kind === 'wall') {
       // A bar as long as the rampart, riding the cursor, kept perpendicular
       // to the cast direction by updateAimPreview.
@@ -1552,6 +1560,22 @@ export class Renderer {
         ),
         stones,
       );
+    }
+    // A trade of places: the thread of lamplight between the two spots.
+    // The sim already moved both, so each one's `curr` is the other one's
+    // old spot. Online, an end the viewer cannot see is not in the world:
+    // the thread runs from the seen one's old spot to where it stands now,
+    // the same two spots.
+    for (const swap of notes.swaps ?? []) {
+      const a = this.tracked.get(swap.unitId);
+      const b = this.tracked.get(swap.otherId);
+      const seenA = a?.mesh.visible === true;
+      const seenB = b?.mesh.visible === true;
+      const end = seenA ? a : seenB ? b : undefined;
+      if (!end) continue;
+      const other = seenA && seenB ? b!.curr : end.prev;
+      tradeThread(this.vfx, end.curr.x, end.curr.z, other.x, other.z);
+      playSfx('chime', 0.8 * this.sfxGain(end.curr.x, end.curr.z));
     }
     // The viewer's own damage dealt: a crack sound plus numbers over the
     // victim, scaled and recolored by how big the hit is.
