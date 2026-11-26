@@ -63,6 +63,7 @@ import type { MatchCover } from './practice_clock';
 import { seatCasts, withoutCasts } from './seat_casts';
 import { getSettings, updateSettings } from './settings';
 import { playCastSfx, playSfx, preloadSfx } from './sfx';
+import type { SwapNote } from './swap_notes';
 import { aimedPoint, quickPoint } from './thumb_cast';
 import {
   type AttackHold,
@@ -103,6 +104,8 @@ export interface WorldNotes {
   // Auto-attacks fired by visible units, for swing animations.
   attacks: readonly AttackNote[];
   voidmaulSlams?: readonly VoidmaulSlamNote[];
+  // Trades of places (CONTEXT.md: Trade places), for the thread of light.
+  swaps?: readonly SwapNote[];
   // Strikes that landed nothing (the fumble), for the "Miss" over the
   // target; absent where the host tells none.
   misses?: readonly { unitId: number; targetId: number }[];
@@ -689,7 +692,9 @@ export function startPresentation(
         renderer.showAimPreview({
           castRange: ab.castRange,
           kind: ab.spec.kind,
-          radius: spec.radius,
+          // A champion-targeted cast reaches whoever stands nearest the aim
+          // within its search radius: that circle rides the cursor.
+          radius: ab.spec.kind === 'champion_target' ? ab.spec.searchRadius : spec.radius,
           range: spec.range,
           halfAngle: spec.halfAngle,
           length: spec.length,
@@ -903,6 +908,7 @@ export function startPresentation(
         notes.hits.length > 0 ||
         notes.attacks.length > 0 ||
         (notes.voidmaulSlams?.length ?? 0) > 0 ||
+        (notes.swaps?.length ?? 0) > 0 ||
         (notes.misses?.length ?? 0) > 0
       )
         renderer.onCombatNotes(notes);

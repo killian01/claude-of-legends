@@ -84,6 +84,32 @@ export function buildChampionProp(kind: ChampionPropDef['kind'], accent: number)
       group.add(reed, mouth, end);
       break;
     }
+    case 'lantern': {
+      // Ysmer's lamp pole: a dark shaft, a crook at the top and an iron
+      // lantern hung from it, its flame always amber (the trade's own light,
+      // whatever the skin), the skin's accent on the cage's bands. No point
+      // light: a light appearing would relink every lit material.
+      const shaft = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.045, 0.06, 1.9, 5),
+        lambert(0x4a3a2c),
+      );
+      shaft.position.y = 0.55;
+      const crook = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.42), darkMat);
+      crook.position.set(0, 1.5, 0.19);
+      const bandMat = lambert(accent, 0.5);
+      const cap = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.14, 6), bandMat);
+      cap.position.set(0, 1.3, 0.38);
+      const cage = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.15, 0.3, 6, 1, true), darkMat);
+      cage.position.set(0, 1.1, 0.38);
+      const flameMat = new THREE.MeshBasicMaterial({ color: 0xffc76a });
+      flameMat.toneMapped = false;
+      const flame = new THREE.Mesh(new THREE.OctahedronGeometry(0.1), flameMat);
+      flame.position.copy(cage.position);
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.12, 0.05, 6), bandMat);
+      base.position.set(0, 0.94, 0.38);
+      group.add(shaft, crook, cap, cage, flame, base);
+      break;
+    }
     case 'bow': {
       // A soft accent glow keeps the bow readable on dark skins.
       const arc = new THREE.Mesh(

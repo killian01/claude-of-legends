@@ -115,5 +115,14 @@ Slice 2 (`src/sim/content/bots/hints.ts`, a playbook under `content/playbooks/`)
    Orchard laner; the crews' read of the rescue gate is still to be pinned in slice 4).
 3. Render: the manifest entry on mage.glb with the lantern prop, the trade's thread of light on
    the wire, the spell looks, the portrait and the ability paintings copied in and listed.
+   Landed 2026-11-26: every trade made is told as a `swap` event (`combat/swap.ts`), carried
+   by the 5v5 and battle royale snapshots to whoever sees either end and read by
+   `game/swap_notes.ts` alike from a local tick, a replay, a spectated match or the wire; the
+   renderer draws the thread of amber light between the two spots, a flash and a ring at each
+   end (`render/vfx/ysmer_fx.ts`). Her looks in the catalog: a bead of lamplight for Q and the
+   autos, the iron lantern on its post for W, the two-colored spark for E, a column of light
+   for R. The lantern prop (`props.ts`) replaces the staff. The aim of a champion-targeted
+   cast shows its search circle at the cursor. The portrait and the four paintings are in
+   `public/`, listed and credited.
 4. Balance with the headless tools, skins and laurel price, the news entry with her portrait,
    phone and desktop checked, and `released: true`.

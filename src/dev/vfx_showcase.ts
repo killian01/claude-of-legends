@@ -4,6 +4,7 @@
 // look at it. Presentation only; never imported by the game.
 
 import { loadStarOrchardMatch } from '../game/star_orchard';
+import { swapsFrom } from '../game/swap_notes';
 import { orchardSim } from '../net/replay';
 import { Renderer } from '../render/renderer';
 import type { ChampionDef } from '../sim/content/champions';
@@ -100,6 +101,8 @@ const SHOTS: Readonly<Record<string, Shot>> = {
   nisk: { from: { x: 77, z: 70 }, aim: { x: 75, z: 77 }, key: 'Q' },
   // Ostrand's gauntlet swears a dummy; his other keys fire from the same spot.
   ostrand: { from: { x: 71.5, z: 77.5 }, aim: CENTER, key: 'E' },
+  // Ysmer's spark trades her with the dummy it strikes: the thread shows.
+  ysmer: { from: { x: 80, z: 72 }, aim: CENTER, key: 'E' },
   // The look demo, one shot per key: the same champion drawn four ways.
   look_q: { from: { x: 68, z: 84 }, aim: { x: 76.5, z: 79 }, key: 'Q' },
   look_w: { from: { x: 66, z: 75 }, aim: CENTER, key: 'W' },
@@ -161,13 +164,14 @@ function frame(now: number): void {
     topUp();
     const casts: { unitId: number; key?: AbilityKey }[] = [];
     const attacks: { unitId: number; targetId: number }[] = [];
-    for (const ev of sim.tick()) {
+    const events = sim.tick();
+    for (const ev of events) {
       if (ev.type === 'cast') casts.push({ unitId: ev.unitId, key: ev.key });
       else if (ev.type === 'attack') attacks.push({ unitId: ev.unitId, targetId: ev.targetId });
     }
     renderer.onSimTick();
     try {
-      renderer.onCombatNotes({ golds: [], casts, hits: [], attacks });
+      renderer.onCombatNotes({ golds: [], casts, hits: [], attacks, swaps: swapsFrom(events) });
     } catch {
       // Audio may be unavailable headless; the visuals must go on.
     }

@@ -237,6 +237,11 @@ function royaleEvents(
           out.push({ e: 'miss', unitId: ev.unitId, targetId: ev.targetId });
         }
         break;
+      case 'swap':
+        if (sees(ev.unitId) || sees(ev.otherId)) {
+          out.push({ e: 'swap', unitId: ev.unitId, otherId: ev.otherId });
+        }
+        break;
       case 'royale_land':
         if (sees(ev.unitId)) out.push({ e: 'royale_land', unitId: ev.unitId });
         break;
