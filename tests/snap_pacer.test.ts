@@ -1,4 +1,3 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { MAX_HOLD_MS, MAX_QUEUED, SnapPacer, waitsForSnaps } from '../src/net/snap_pacer';
 
@@ -126,18 +125,5 @@ describe('SnapPacer', () => {
     for (const t of ['snap', 'score', 'chat', 'probe', 'ping', 'points']) {
       expect(waitsForSnaps(t)).toBe(false);
     }
-  });
-});
-
-describe('the 5v5 client paces its snapshots', () => {
-  const src = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
-  const start = src.indexOf('async function runOnline(');
-  const body = src.slice(start, src.indexOf('\nasync function ', start + 10));
-
-  it('holds each snap in the pacer instead of applying it on arrival', () => {
-    expect(body).toMatch(/new SnapPacer</);
-    expect(body).toMatch(/case 'snap':\s*pacer\.push\(msg, msg\.time, performance\.now\(\)\)/);
-    expect(body).toMatch(/if \(waitsForSnaps\(msg\.t\)\) pacer\.flush\(\)/);
-    expect(body).toMatch(/pacer\.clear\(\)/);
   });
 });

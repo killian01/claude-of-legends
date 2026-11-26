@@ -55,6 +55,7 @@ import { voidmaulSlamsFrom } from './game/voidmaul_slam_notes';
 import { buildIdFromMeta, startBuildWatch } from './net/build_watch';
 import { ClientWorld, type PlanetWalk } from './net/client_world';
 import { openGuest } from './net/guest';
+import { pacedSnaps, pageClock } from './net/paced_snaps';
 import { buildPracticeReport, sendPracticeReport } from './net/practice_report';
 import type { ClientMsg, ForgedMatchAssets, ServerMsg } from './net/protocol';
 import {
@@ -69,7 +70,6 @@ import {
 } from './net/replay';
 import { isRoyaleResult, royaleKill, royaleNotes, startRoyale } from './net/royale_client';
 import type { BoutStart, RoyaleResult, ThornfrayResult } from './net/royale_wire';
-import { SnapPacer, waitsForSnaps } from './net/snap_pacer';
 import {
   installStats,
   type MatchEndReporter,
@@ -809,9 +809,37 @@ async function runSpectate(matchId: number, team: TeamId): Promise<PostMatchActi
     const world = new ClientWorld(() => undefined, loaded.orchard.map);
     let view: SpectatorView | null = null;
     let finished = false;
+    // The snapshots, played out at the server's tick (net/paced_snaps.ts).
+    const paced = pacedSnaps<Extract<ServerMsg, { t: 'snap' }>>((msg) => {
+      const changed = world.applyServer(msg);
+      if (!view && world.units.size > 0) {
+        view = startSpectator(container, world, team, () => finish('menu'), loaded.terrain);
+      }
+      if (changed && view) {
+        const kills: { unitId: number; killerId: number }[] = [];
+        const casts: { unitId: number; key?: AbilityKey }[] = [];
+        const misses: { unitId: number; targetId: number }[] = [];
+        for (const e of msg.events) {
+          if (e.e === 'death') kills.push({ unitId: e.unitId, killerId: e.killerId });
+          else if (e.e === 'cast') casts.push({ unitId: e.unitId, key: e.k });
+          else if (e.e === 'miss') misses.push({ unitId: e.unitId, targetId: e.targetId });
+        }
+        view.onWorldTick({
+          kills,
+          golds: [],
+          casts,
+          hits: [],
+          attacks: attacksFrom(msg.events),
+          voidmaulSlams: voidmaulSlamsFrom(msg.events),
+          swaps: swapsFrom(msg.events),
+          misses,
+        });
+      }
+    }, pageClock);
     const finish = (action: PostMatchAction): void => {
       if (finished) return;
       finished = true;
+      paced.stop();
       view?.dispose();
       view = null;
       if (ws.readyState === ws.OPEN) {
@@ -837,6 +865,8 @@ async function runSpectate(matchId: number, team: TeamId): Promise<PostMatchActi
       } catch {
         return;
       }
+      // A message that must follow the held snapshots lets them through first.
+      paced.before(msg.t);
       switch (msg.t) {
         case 'match_start':
           registerForgedFromMatch(msg.forgedAssets);
@@ -845,33 +875,9 @@ async function runSpectate(matchId: number, team: TeamId): Promise<PostMatchActi
         case 'score':
           world.applyServer(msg);
           break;
-        case 'snap': {
-          const changed = world.applyServer(msg);
-          if (!view && world.units.size > 0) {
-            view = startSpectator(container, world, team, () => finish('menu'), loaded.terrain);
-          }
-          if (changed && view) {
-            const kills: { unitId: number; killerId: number }[] = [];
-            const casts: { unitId: number; key?: AbilityKey }[] = [];
-            const misses: { unitId: number; targetId: number }[] = [];
-            for (const e of msg.events) {
-              if (e.e === 'death') kills.push({ unitId: e.unitId, killerId: e.killerId });
-              else if (e.e === 'cast') casts.push({ unitId: e.unitId, key: e.k });
-              else if (e.e === 'miss') misses.push({ unitId: e.unitId, targetId: e.targetId });
-            }
-            view.onWorldTick({
-              kills,
-              golds: [],
-              casts,
-              hits: [],
-              attacks: attacksFrom(msg.events),
-              voidmaulSlams: voidmaulSlamsFrom(msg.events),
-              swaps: swapsFrom(msg.events),
-              misses,
-            });
-          }
+        case 'snap':
+          paced.snap(msg, msg.time);
           break;
-        }
         case 'player_joined':
         case 'player_back':
         case 'player_left': {
@@ -1180,7 +1186,7 @@ async function runOnline(choice: HomeChoice, guest = false, returning = false): 
     // takes it and the presentation hears its tick.
     const applySnap = (msg: Extract<ServerMsg, { t: 'snap' }>): void => {
       if (finished) {
-        pacer.clear();
+        paced.stop();
         return;
       }
       const changed = world.applyServer(msg);
@@ -1222,20 +1228,7 @@ async function runOnline(choice: HomeChoice, guest = false, returning = false): 
     };
     // The snapshots, played out at the server's tick rather than as the
     // connection delivers them, so moving things glide instead of jumping.
-    const pacer = new SnapPacer<Extract<ServerMsg, { t: 'snap' }>>(applySnap);
-    let paceTimer = 0;
-    const pace = (): void => {
-      window.clearTimeout(paceTimer);
-      const due = pacer.nextDue();
-      if (due === null) return;
-      paceTimer = window.setTimeout(
-        () => {
-          pacer.pump(performance.now());
-          pace();
-        },
-        Math.max(0, due - performance.now()),
-      );
-    };
+    const paced = pacedSnaps<Extract<ServerMsg, { t: 'snap' }>>(applySnap, pageClock);
 
     ws.addEventListener('message', (event) => {
       if (finished) return;
@@ -1246,7 +1239,7 @@ async function runOnline(choice: HomeChoice, guest = false, returning = false): 
         return;
       }
       // A message that must follow the held snapshots lets them through first.
-      if (waitsForSnaps(msg.t)) pacer.flush();
+      paced.before(msg.t);
       switch (msg.t) {
         case 'queue_status':
           // A lobby that queued as a party gets queue updates: swap the
@@ -1402,8 +1395,7 @@ async function runOnline(choice: HomeChoice, guest = false, returning = false): 
           selectUi = null;
           break;
         case 'snap':
-          pacer.push(msg, msg.time, performance.now());
-          pace();
+          paced.snap(msg, msg.time);
           break;
         case 'score':
           world.applyServer(msg);
@@ -1659,9 +1651,17 @@ async function runRoyale(
     // Play again (Respawn's Play the next match) enters anew on a new socket
     // (server/royale_service.ts moves nobody).
     let shownResult: RoyaleResult | null = null;
+    // The snapshots, played out at the server's tick rather than as the
+    // connection delivers them (net/paced_snaps.ts).
+    const paced = pacedSnaps<Extract<ServerMsg, { t: 'snap' }>>((msg) => {
+      const changed = world.applyServer(msg);
+      if (!pres && world.selfUnitId !== 0 && world.units.has(world.selfUnitId)) open();
+      if (changed && pres) pres.onWorldTick(planetNotes(msg.events));
+    }, pageClock);
     const finish = (action: PostMatchAction): void => {
       if (finished) return;
       finished = true;
+      paced.stop();
       ends?.report();
       ends?.dispose();
       ends = null;
@@ -1756,6 +1756,8 @@ async function runRoyale(
       } catch {
         return;
       }
+      // A message that must follow the held snapshots lets them through first.
+      if (typeof raw === 'object' && raw !== null) paced.before((raw as { t?: unknown }).t);
       // The result is the mode's own message (net/royale_wire.ts).
       if (isRoyaleResult(raw)) {
         layer.unguard();
@@ -1773,12 +1775,9 @@ async function runRoyale(
           droppedIn = msg.dropIn === true;
           world.applyServer(msg);
           break;
-        case 'snap': {
-          const changed = world.applyServer(msg);
-          if (!pres && world.selfUnitId !== 0 && world.units.has(world.selfUnitId)) open();
-          if (changed && pres) pres.onWorldTick(planetNotes(msg.events));
+        case 'snap':
+          paced.snap(msg, msg.time);
           break;
-        }
         case 'score':
           world.applyServer(msg);
           break;
@@ -1875,9 +1874,17 @@ async function runThornfray(pick: RoyalePick, guest: boolean): Promise<PostMatch
     let pendingPoints: Extract<ServerMsg, { t: 'points' }> | null = null;
     let pendingResult: ThornfrayResult | null = null;
     let shownResult: ThornfrayResult | null = null;
+    // The snapshots, played out at the server's tick (net/paced_snaps.ts);
+    // a bout's start lets the last bout's through first.
+    const paced = pacedSnaps<Extract<ServerMsg, { t: 'snap' }>>((msg) => {
+      const changed = world.applyServer(msg);
+      if (!pres && world.selfUnitId !== 0 && world.units.has(world.selfUnitId)) open();
+      if (changed && pres) pres.onWorldTick(planetNotes(msg.events));
+    }, pageClock);
     const finish = (action: PostMatchAction): void => {
       if (finished) return;
       finished = true;
+      paced.stop();
       ends?.report();
       ends?.dispose();
       ends = null;
@@ -1960,6 +1967,7 @@ async function runThornfray(pick: RoyalePick, guest: boolean): Promise<PostMatch
       } catch {
         return;
       }
+      if (typeof raw === 'object' && raw !== null) paced.before((raw as { t?: unknown }).t);
       if (isThornfrayGather(raw)) {
         gathering.update(raw);
         return;
@@ -1995,12 +2003,9 @@ async function runThornfray(pick: RoyalePick, guest: boolean): Promise<PostMatch
           }
           break;
         }
-        case 'snap': {
-          const changed = world.applyServer(msg);
-          if (!pres && world.selfUnitId !== 0 && world.units.has(world.selfUnitId)) open();
-          if (changed && pres) pres.onWorldTick(planetNotes(msg.events));
+        case 'snap':
+          paced.snap(msg, msg.time);
           break;
-        }
         case 'score':
           world.applyServer(msg);
           break;

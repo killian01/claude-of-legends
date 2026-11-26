@@ -36,6 +36,18 @@ export interface NewsEntry {
 export const NEWS: readonly NewsEntry[] = [
   {
     day: '2026-11-26',
+    title: 'Smoother battle royales and Thornfrays online',
+    body: [
+      'The 5v5 has played its updates out at the pace the match runs for a few days. The ' +
+        'battle royale, the Thornfray and watching a live match now do the same: over a long ' +
+        'connection, champions, bots and spells on the planet move smoothly instead of ' +
+        'jumping and pausing.',
+      'Your own champion still answers your click at once.',
+    ],
+    link: { label: 'Play', to: 'play' },
+  },
+  {
+    day: '2026-11-26',
     title: 'The way back to your lane',
     body: [
       'In a 5v5, a champion who falls comes back at the fountain, far from where the fight was. ' +
