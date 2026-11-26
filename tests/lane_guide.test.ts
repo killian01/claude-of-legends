@@ -29,6 +29,7 @@ import {
   laneArrived,
   laneCall,
   laneCardAhead,
+  laneCardOnReturn,
   laneCardVisible,
   laneTarget,
   leadToward,
@@ -69,6 +70,20 @@ describe('the words', () => {
     expect(mouse.walk).toBe(true);
     const touch = laneCall('bot', 'play', { touch: true, time: 0, arrived: false });
     expect(touch.line).toBe('Head for your first tower. Tap here to walk there.');
+  });
+
+  it('shows the way back after a fall, for a lane and the forest', () => {
+    const lane = laneCall('top', 'play', { touch: false, time: 300, arrived: false, again: true });
+    expect(lane).toEqual({
+      title: 'Top lane',
+      line: 'Click here to walk back to your lane.',
+      walk: true,
+    });
+    const forest = laneCall(null, 'play', { touch: true, time: 300, arrived: false, again: true });
+    expect(forest.line).toBe('Tap here to walk back to your camps.');
+    expect(forest.walk).toBe(true);
+    const there = laneCall('top', 'play', { touch: false, time: 330, arrived: true, again: true });
+    expect(there.walk).toBe(false);
   });
 
   it('gives the forest its camp clock', () => {
@@ -227,9 +242,36 @@ describe('arrival', () => {
       lane: 'bot',
       target: { x: firstTower(0, 'bot').x, z: firstTower(0, 'bot').z },
       arrived: false,
+      down: false,
+      back: false,
     });
     // Dead: no arrival read from where the body lies.
     expect(stepGuide(null, map, 0, 'top', null, []).arrived).toBe(false);
+  });
+
+  it('starts over after a fall, for every lane and both teams, but not while the body lies', () => {
+    for (const team of TEAMS) {
+      const fountain = map.fountains.find((f) => f.team === team)!;
+      for (const lane of [...LANES, null]) {
+        const spot = lane === null ? laneTarget(map, team, null, [])! : firstTower(team, lane);
+        let g = stepGuide(null, map, team, lane, fountain, []);
+        g = stepGuide(g, map, team, lane, spot, []);
+        expect(g.arrived).toBe(true);
+        // Fallen in the lane: still arrived, and not back yet.
+        g = stepGuide(g, map, team, lane, null, []);
+        expect(g).toMatchObject({ arrived: true, down: true, back: false });
+        g = stepGuide(g, map, team, lane, null, []);
+        expect(g.back).toBe(false);
+        // Risen at the fountain: guided again, back on that one step only.
+        g = stepGuide(g, map, team, lane, fountain, []);
+        expect(g).toMatchObject({ arrived: false, down: false, back: true });
+        g = stepGuide(g, map, team, lane, fountain, []);
+        expect(g).toMatchObject({ arrived: false, back: false });
+        // Walked back: arrived again.
+        g = stepGuide(g, map, team, lane, spot, []);
+        expect(g.arrived).toBe(true);
+      }
+    }
   });
 
   it('is reached by the one move order the card gives, before the tower, for both teams', () => {
@@ -314,6 +356,31 @@ describe('the card', () => {
       { time: 4 + LANE_CARD_HOLD, blocked: false, arrived: false },
     ]);
     expect(lost.shown).toEqual([true, true, false]);
+  });
+
+  it('comes back after a fall with the way back, for a person only, and not once closed', () => {
+    const fountain = map.fountains.find((f) => f.team === 1)!;
+    let g = stepGuide(null, map, 1, 'mid', firstTower(1, 'mid'), []);
+    g = stepGuide(g, map, 1, 'mid', null, []);
+    g = stepGuide(g, map, 1, 'mid', fountain, []);
+    expect(g.back).toBe(true);
+    const spent = closeLaneCard(stepLaneCard(LANE_CARD_START, 8, false, true), 14);
+    let state = laneCardOnReturn(spent, g, 'play', false);
+    expect(state).toEqual({ shownAt: null, doneAt: null, again: true });
+    // Waits for the shop like the first, then stays until the lane.
+    state = stepLaneCard(state, 120, true, false);
+    expect(laneCardVisible(state, true)).toBe(false);
+    state = stepLaneCard(state, 124, false, false);
+    expect(laneCardVisible(state, false)).toBe(true);
+    expect(state.again).toBe(true);
+    state = stepLaneCard(state, 150, false, true);
+    expect(laneCardVisible(state, false)).toBe(false);
+    // A coach's bot walks itself; the close button means the player knows.
+    expect(laneCardOnReturn(spent, g, 'coach', false)).toBe(spent);
+    expect(laneCardOnReturn(spent, g, 'play', true)).toBe(spent);
+    // No fall, no card.
+    const still = stepGuide(g, map, 1, 'mid', fountain, []);
+    expect(laneCardOnReturn(spent, still, 'play', false)).toBe(spent);
   });
 
   it('hides under a menu and comes back', () => {
@@ -408,7 +475,7 @@ describe('the arrow', () => {
 
   it("shows for a person's seat only, until arrival, and not over a target in view nearby", () => {
     const target = { x: 50, z: 50 };
-    const guide = { lane: 'top' as const, target, arrived: false };
+    const guide = { lane: 'top' as const, target, arrived: false, down: false, back: false };
     const far = { x: 10, z: 10 };
     expect(arrowWanted('play', guide, far, false)).toBe(true);
     expect(arrowWanted('coach', guide, far, false)).toBe(false);

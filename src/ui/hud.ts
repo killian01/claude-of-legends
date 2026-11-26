@@ -111,6 +111,7 @@ import {
   type LaneGuide,
   laneCall,
   laneCardAhead,
+  laneCardOnReturn,
   laneCardVisible,
   stepGuide,
   stepLaneCard,
@@ -1401,6 +1402,8 @@ export class Hud {
   private readonly range: boolean;
   private guide: LaneGuide | null = null;
   private laneCard: LaneCardState = LANE_CARD_START;
+  // The lane card's close button was pressed: no card after a fall.
+  private laneCardClosed = false;
   private readonly laneCardEl: HTMLElement;
   private readonly laneTitleEl: HTMLElement;
   private readonly laneLineEl: HTMLElement;
@@ -2083,6 +2086,7 @@ export class Hud {
     laneClose.setAttribute('aria-label', 'Close');
     laneClose.addEventListener('click', (e) => {
       e.stopPropagation();
+      this.laneCardClosed = true;
       this.endLaneCard();
     });
     this.laneCardEl.append(laneWords, laneClose);
@@ -2605,6 +2609,12 @@ export class Hud {
       this.world.units.values(),
     );
     if (prev !== null && prev.lane !== self.lane) this.laneCard = LANE_CARD_START;
+    this.laneCard = laneCardOnReturn(
+      this.laneCard,
+      this.guide,
+      this.guideMode,
+      this.laneCardClosed,
+    );
     const blocked = this.nudgeBlocked();
     this.laneCard = stepLaneCard(this.laneCard, this.world.time, blocked, this.guide.arrived);
     const visible = laneCardVisible(this.laneCard, blocked);
@@ -2613,6 +2623,7 @@ export class Hud {
         touch: this.coarsePointer,
         time: this.world.time,
         arrived: this.guide.arrived,
+        again: this.laneCard.again === true,
       });
       if (this.laneTitleEl.textContent !== call.title) this.laneTitleEl.textContent = call.title;
       if (this.laneLineEl.textContent !== call.line) this.laneLineEl.textContent = call.line;

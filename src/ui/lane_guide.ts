@@ -37,7 +37,7 @@ function clockOf(seconds: number): string {
 export function laneCall(
   lane: LaneId | null,
   mode: 'play' | 'coach',
-  at: { touch: boolean; time: number; arrived: boolean },
+  at: { touch: boolean; time: number; arrived: boolean; again?: boolean },
 ): LaneCall {
   const where = lane ?? 'jungle';
   if (mode === 'coach') {
@@ -49,6 +49,14 @@ export function laneCall(
   }
   const tap = at.touch ? 'Tap here' : 'Click here';
   const campsUp = at.time >= CAMP_FIRST_SPAWN_S;
+  // Back at the fountain after a fall: the way back, whatever the clock.
+  if (at.again && !at.arrived) {
+    return {
+      title: laneTitle(where),
+      line: `${tap} to walk back to ${lane === null ? 'your camps' : 'your lane'}.`,
+      walk: true,
+    };
+  }
   if (lane === null) {
     const camps = campsUp
       ? 'Your camps are up.'
@@ -135,12 +143,17 @@ export function laneArrived(
 }
 
 // The guidance as it stands: the seat's lane, its target, and whether the
-// player got there, which holds for good once true (a recall later is not
-// a player lost). A lane that changes under the seat starts it over.
+// player got there, which holds once true (a recall later is not a player
+// lost). A lane that changes under the champion starts it over, and so does a
+// fall: the champion comes back at its fountain, far from the lane, and
+// back is true on the one step it rises.
 export interface LaneGuide {
   lane: LaneId | null;
   target: Vec2 | null;
   arrived: boolean;
+  // Dead at this step.
+  down: boolean;
+  back: boolean;
 }
 
 // pos is where the champion stands, null while it is dead.
@@ -153,9 +166,11 @@ export function stepGuide(
   units: Iterable<GuideUnit>,
 ): LaneGuide {
   const target = laneTarget(map, team, lane, units);
-  const kept = prev !== null && prev.lane === lane && prev.arrived;
+  const same = prev !== null && prev.lane === lane;
+  const back = same && prev.down && pos !== null;
+  const kept = same && prev.arrived && !back;
   const arrived = kept || (pos !== null && laneArrived(map, team, lane, pos, target));
-  return { lane, target, arrived };
+  return { lane, target, arrived, down: pos === null, back };
 }
 
 // The card's life, in match seconds. It waits for whatever covers the
@@ -176,9 +191,25 @@ export interface LaneCardState {
   shownAt: number | null;
   // Match time it went at, null while it has not.
   doneAt: number | null;
+  // The card's return after a fall, with the way back to the lane.
+  again?: boolean;
 }
 
 export const LANE_CARD_START: LaneCardState = { shownAt: null, doneAt: null };
+
+// After a fall the card comes back, once the champion stands again at its
+// fountain (and, like the first, once the shop is closed), with a tap
+// that walks it back to the lane. Only when a person plays it, and never
+// again once the player closed it with its button: they know the way.
+export function laneCardOnReturn(
+  state: LaneCardState,
+  guide: LaneGuide,
+  mode: GuideMode,
+  closedByHand: boolean,
+): LaneCardState {
+  if (!guide.back || mode !== 'play' || closedByHand) return state;
+  return { shownAt: null, doneAt: null, again: true };
+}
 
 export function stepLaneCard(
   state: LaneCardState,
@@ -187,7 +218,7 @@ export function stepLaneCard(
   arrived: boolean,
 ): LaneCardState {
   if (state.doneAt !== null) return state;
-  if (state.shownAt === null) return blocked ? state : { shownAt: time, doneAt: null };
+  if (state.shownAt === null) return blocked ? state : { ...state, shownAt: time };
   const up = time - state.shownAt;
   if (up >= LANE_CARD_HOLD || (arrived && up >= LANE_CARD_MIN)) return { ...state, doneAt: time };
   return state;

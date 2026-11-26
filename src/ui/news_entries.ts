@@ -35,6 +35,19 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
+    day: '2026-11-26',
+    title: 'The way back to your lane',
+    body: [
+      'In a 5v5, a champion who falls comes back at the fountain, far from where the fight was. ' +
+        'The lane card now comes back with it: one click, or one tap on a phone, walks you back ' +
+        'to your lane, or to your camps in the forest, and the gold arrow beside your champion ' +
+        'and the lane on the minimap point the way until you are there.',
+      'It waits until you close the shop, and if you close the card with its button it stays ' +
+        'away for the rest of the match.',
+    ],
+    link: { label: 'Play', to: 'play' },
+  },
+  {
     day: '2026-11-25',
     title: 'Smooth from the first seconds on a slower machine',
     body: [
