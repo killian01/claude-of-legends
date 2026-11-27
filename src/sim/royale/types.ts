@@ -131,7 +131,9 @@ export const CLAMOR_S = 3;
 // (content/champions/elowen.ts), on the planet as in a match.
 // 26: Tempest Core carries Firstbolt and 160 ability power, not 175
 // (content/item_passives.ts), on the planet as in a match.
-export const ROYALE_RULES_VERSION = 26;
+// 27: Ysmer joins the pool the house seats are dealt from, with her planet
+// tuning and build.
+export const ROYALE_RULES_VERSION = 27;
 
 // One of the Dusk's caps: a circle on the sphere, its radius a chord.
 export interface DuskCap {

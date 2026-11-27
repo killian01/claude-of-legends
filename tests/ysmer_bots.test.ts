@@ -1,7 +1,7 @@
 // Ysmer, the Turnlamp, played by the house bots (docs/design/ysmer.md,
-// slice 2): a bot seated on her plays her kit behind the release switch,
-// spends In My Stead on a hurt ally under threat before anything else, else
-// on a hurt enemy in a duel it leads, and keeps it otherwise.
+// slices 2 and 4): a bot seated on her spends In My Stead on a hurt ally
+// under threat before anything else, else on a hurt enemy in a duel it
+// leads, and keeps it otherwise; an armed Hung Lantern is held until hurt.
 
 import { describe, expect, it } from 'vitest';
 import { LANER } from '../src/sim/content/bots/laner';
@@ -63,5 +63,20 @@ describe('a Ysmer bot', () => {
       const action = act(sim, y.id);
       if (action.kind === 'cast') expect(action.key).not.toBe('R');
     }
+  });
+
+  it('holds her lantern way back while well, and takes it when hurt', () => {
+    const sim = new Sim(43);
+    const y = seat(sim, 0, C, 'ysmer');
+    seat(sim, 1, { x: 79, z: 75 }, 'torv');
+    y.cooldowns = { Q: 99, E: 99, R: 99 };
+    y.recastArmed = { key: 'W', until: 99, origin: { ...C } };
+    for (let i = 0; i < 10; i++) {
+      const action = act(sim, y.id);
+      if (action.kind === 'cast') expect(action.key).not.toBe('W');
+    }
+    y.hp = y.maxHp * 0.2;
+    const action = act(sim, y.id);
+    expect(action.kind === 'cast' && action.key).toBe('W');
   });
 });

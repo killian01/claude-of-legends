@@ -59,7 +59,8 @@ that question), and an unrated match pays the forty and nothing else. Six champi
 all is about forty matches for the whole roster and about five for the first: soon enough that
 the first purchase lands in an evening, slow enough that the last one is a goal. (Nisk, the
 eleventh champion, joined at the shared-pack price of 500: seven at 4100, about sixty matches.
-Ostrand, the twelfth, joined at the same price: eight at 4600, about sixty-five matches.) The fixed part
+Ostrand, the twelfth, joined at the same price: eight at 4600, about sixty-five matches.
+Ysmer, the thirteenth, joined at the same price: nine at 5100, over seventy matches.) The fixed part
 is deliberately the small one, because it is the part an idle player collects.
 
 Both halves of that are a correction, made the day this shipped and kept here rather than in a

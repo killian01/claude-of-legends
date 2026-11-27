@@ -87,6 +87,12 @@ export const SKINS: Readonly<Record<string, readonly SkinDef[]>> = {
     { name: 'Winterpledge', body: 0x3a4a5e, accent: 0xcfe0f2 },
     { name: 'Gloamglass', body: 0x2a2236, accent: 0xffd8a8 },
   ],
+  ysmer: [
+    { name: 'Default', body: null, accent: 0xf2b24a },
+    { name: 'Ashlantern', body: 0x4a4642, accent: 0xff7a3a },
+    { name: 'Mirelamp', body: 0x2c4034, accent: 0xcfe67a },
+    { name: 'Gloamglass', body: 0x1c2240, accent: 0x9fd4ff },
+  ],
 };
 
 // Resolves a skin index to a valid SkinDef (unknown champion or out-of-range

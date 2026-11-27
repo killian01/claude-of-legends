@@ -1,7 +1,7 @@
 // Ysmer, the Turnlamp. Support (docs/design/ysmer.md): a hooded
 // lamplighter who trades places (combat/swap.ts). Q is a slowing bolt of
-// lamplight; W hangs a lantern at her feet that mends allies and shows
-// enemies, and pressed again she is back beside it; E throws a spark that
+// lamplight; W hangs a lantern just ahead of her that mends allies and
+// shows enemies, and pressed again she is back where she stood; E throws a spark that
 // trades her with the enemy champion it strikes; R, In My Stead, reaches
 // any champion near the aim: an ally is traded out of harm and shielded,
 // an enemy is traded into hers and held. Homeward Glow speeds the
@@ -25,7 +25,6 @@ export const YSMER: ChampionDef = {
   name: 'Ysmer, the Turnlamp',
   role: 'Support',
   blurb: 'A hooded lamplighter who trades places: a friend pulled out, a foe pulled in.',
-  released: false,
   passive: {
     name: 'Homeward Glow',
     description:
@@ -68,18 +67,19 @@ export const YSMER: ChampionDef = {
         radius: 0.6,
         range: 9,
         onHit: [
-          { kind: 'damage', base: 70, apRatio: 0.7, dtype: 'magic' },
+          { kind: 'damage', base: 85, apRatio: 0.7, dtype: 'magic' },
           { kind: 'slow', pct: 0.2, duration: 1.5 },
         ],
       },
     },
     W: {
-      // A lantern hung at her feet: allies under it mend, enemies under it
-      // are seen. Pressed again within its life she is back beside it.
+      // A lantern hung up to 3 ahead of her: allies under it mend, enemies
+      // under it are seen. Pressed again within its life she is back where
+      // she stood when she hung it.
       name: 'Hung Lantern',
       manaCost: 60,
-      cooldown: 14,
-      castRange: 0,
+      cooldown: 11,
+      castRange: 3,
       recast: { window: 5, returnBlink: true },
       spec: {
         kind: 'zone',
@@ -96,7 +96,7 @@ export const YSMER: ChampionDef = {
       // the spark and nobody moves.
       name: 'Changeling Spark',
       manaCost: 70,
-      cooldown: 16,
+      cooldown: 11,
       castRange: 7.5,
       spec: {
         kind: 'skillshot',
@@ -104,7 +104,7 @@ export const YSMER: ChampionDef = {
         radius: 0.55,
         range: 7.5,
         onHit: [
-          { kind: 'damage', base: 55, apRatio: 0.5, dtype: 'magic' },
+          { kind: 'damage', base: 70, apRatio: 0.5, dtype: 'magic' },
           {
             kind: 'conditional',
             when: { kind: 'targetIsChampion' },
@@ -119,7 +119,7 @@ export const YSMER: ChampionDef = {
       // stands where they stood, under a shield of her own.
       name: 'In My Stead',
       manaCost: 100,
-      cooldown: 80,
+      cooldown: 70,
       castRange: 11,
       spec: {
         kind: 'champion_target',

@@ -14,7 +14,8 @@
 // under 21, Ostrand joining the pool; Respawn again under 22, its big
 // creatures rising at 1:40, and under 24, a return with no pick coming back
 // beside a cache; all three again under 25, Elowen's Mist Lance; Respawn's and
-// Trios' again under 26, Tempest Core's Firstbolt.
+// Trios' again under 26, Tempest Core's Firstbolt; all three again under
+// 27, Ysmer joining the pool.
 //
 // A red run means a seam moved the battle royale: a changed order of random
 // draws in the Dusk, the Seedfalls, the caches, the Grafts, the drop or the
@@ -43,9 +44,9 @@ interface Golden {
 }
 
 const GOLDEN = {
-  respawnSolo7: { landed60: 1592744125, end: 1988447578 },
-  oneLifeSolo7: { landed60: 2785591498, end: 2451922693 },
-  oneLifeTrios5: { landed60: 658244077, end: 536994458 },
+  respawnSolo7: { landed60: 3521976963, end: 3369776005 },
+  oneLifeSolo7: { landed60: 205643867, end: 2303277185 },
+  oneLifeTrios5: { landed60: 448249676, end: 1246847706 },
 } satisfies Record<string, Golden>;
 
 const AFTER_LANDING_TICKS = Math.round(60 / DT);

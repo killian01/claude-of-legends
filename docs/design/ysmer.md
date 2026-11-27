@@ -1,7 +1,7 @@
 # Ysmer, the Turnlamp (champion thirteen)
 
-Status: in build. Lands in the slices below behind the `released` switch in its content data
-(`released: false` in `src/sim/content/champions/ysmer.ts`), turned on in the last one.
+Status: released 2026-11-27. Landed in the slices below behind the `released` switch in its
+content data, turned on in the last one.
 
 ## What it is
 
@@ -34,9 +34,9 @@ Role Support, home lane bot. Ranged (attack range 5.5), a lantern on a pole.
 - **Passive, Homeward Glow.** Ysmer and allied champions within 6 of her move 20 percent faster
   while under 35 percent health.
 - **Q, Wick Shot.** A bolt of lamplight (range 9): magic damage and a 20 percent slow for 1.5 s.
-- **W, Hung Lantern.** Hangs a lantern at her feet for 5 s (radius 3): allies under it mend,
-  enemies under it are revealed. Pressed again within those 5 s, Ysmer is back beside the
-  lantern (the recast return blink Fenn's Shadow Flurry already uses).
+- **W, Hung Lantern.** Hangs a lantern up to 3 ahead of her for 5 s (radius 3): allies under
+  it mend, enemies under it are revealed. Pressed again within those 5 s, Ysmer is back where
+  she stood when she hung it (the recast return blink Fenn's Shadow Flurry already uses).
 - **E, Changeling Spark.** A spark skillshot (range 7.5, speed 20): the first enemy hit takes
   magic damage; if it is a champion, it and Ysmer trade places and it is slowed 35 percent for
   1.25 s. A minion in the way takes the spark and nobody moves.
@@ -56,16 +56,16 @@ traded, and a trade breaks a recall's channel as any move does. The champion-tar
 `combat/casting.ts` (`combat/champion_target.ts` picks the champion). Both are roster-only: the
 Forge never offers them. No new system: no ADR.
 
-## Numbers (first pass, tuned on the release night)
+## Numbers (as released)
 
 | | |
 |---|---|
 | Base | hp 560, mana 420, ad 46, armor 24, mr 30, attack speed 0.62, move 3.65, radius 0.6 |
 | Growth | hp 86, mana 40, ad 2.6, armor 2.4, mr 1.5 |
-| Q | 50 mana, cooldown 7, 70 + 0.7 ap |
-| W | 60 mana, cooldown 14, 8 + 0.05 ap healed every 0.5 s |
-| E | 70 mana, cooldown 16, 55 + 0.5 ap |
-| R | 100 mana, cooldown 80, ally shield 150 + 0.6 ap, own shield 100 + 0.4 ap, root 1 s |
+| Q | 50 mana, cooldown 7, 85 + 0.7 ap |
+| W | 60 mana, cooldown 11, cast range 3, 8 + 0.05 ap healed every 0.5 s |
+| E | 70 mana, cooldown 11, 70 + 0.5 ap |
+| R | 100 mana, cooldown 70, ally shield 150 + 0.6 ap, own shield 100 + 0.4 ap, root 1 s |
 
 Balance target: within the roster's band in the 5v5 matrix, `scripts/royale_duel.mjs` and
 `scripts/royale_report.mjs`. The risk is a spark into a waiting team: if Ysmer's side wins too
@@ -126,3 +126,12 @@ Slice 2 (`src/sim/content/bots/hints.ts`, a playbook under `content/playbooks/`)
    `public/`, listed and credited.
 4. Balance with the headless tools, skins and laurel price, the news entry with her portrait,
    phone and desktop checked, and `released: true`.
+   Landed 2026-11-27: her cooldowns brought into the roster's bands (Hung Lantern 11 and hung
+   up to 3 ahead, so its light reaches past her attack; Changeling Spark 11; In My Stead 70),
+   Wick Shot 85 and Changeling Spark 70 base damage, 46 percent of her 5v5 seat games
+   (`champion_matrix --row ysmer`, seeds 1 to 8). On the planet she rides Maera's line (her
+   attack carries her where her ally spells find nobody; on the mages' line she landed 5
+   takedowns a Respawn seat against 11 to 28 for the rest) at a damage share of 1.4: 47 and 58
+   percent of her duels (seeds 1 to 16), about 11 takedowns a Respawn seat (seeds 1 to 8).
+   Four skins (Default, Ashlantern, Mirelamp, Gloamglass), 500 laurels, the crews' rescue gate
+   pinned, an armed Hung Lantern held by both bot brains until she is hurt, a News entry.

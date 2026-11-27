@@ -1,4 +1,4 @@
-// Roster gate: the twelve champions exist, are well formed, and every ability
+// Roster gate: the thirteen champions exist, are well formed, and every ability
 // of every kit executes end to end against a live target.
 
 import { describe, expect, it } from 'vitest';
@@ -11,9 +11,9 @@ import type { AbilityKey } from '../src/sim/types';
 const KEYS: readonly AbilityKey[] = ['Q', 'W', 'E', 'R'];
 
 describe('the roster', () => {
-  it('has exactly twelve champions with unique ids and full kits', () => {
-    expect(CHAMPION_LIST).toHaveLength(12);
-    expect(new Set(CHAMPION_LIST.map((c) => c.id)).size).toBe(12);
+  it('has exactly thirteen champions with unique ids and full kits', () => {
+    expect(CHAMPION_LIST).toHaveLength(13);
+    expect(new Set(CHAMPION_LIST.map((c) => c.id)).size).toBe(13);
     for (const c of CHAMPION_LIST) {
       expect(c.name.length).toBeGreaterThan(0);
       for (const key of KEYS) {

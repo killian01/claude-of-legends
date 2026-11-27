@@ -45,10 +45,10 @@ type Ctx = Parameters<typeof tradePlaces>[0];
 const ctxOf = (sim: Sim): Ctx => (sim as unknown as { ctx(): Ctx }).ctx();
 
 describe('the release switch', () => {
-  it('keeps Ysmer out of every pick while the match registry can still field her', () => {
-    expect(CHAMPION_LIST.some((c) => c.id === 'ysmer')).toBe(false);
-    expect(CHAMPIONS.ysmer).toBeUndefined();
-    expect(UNRELEASED_CHAMPIONS.ysmer?.released).toBe(false);
+  it('deals Ysmer everywhere: she is on the roster and behind no switch', () => {
+    expect(CHAMPION_LIST.some((c) => c.id === 'ysmer')).toBe(true);
+    expect(CHAMPIONS.ysmer?.released).toBeUndefined();
+    expect(UNRELEASED_CHAMPIONS.ysmer).toBeUndefined();
     const { y } = arena();
     expect(y.championId).toBe('ysmer');
   });
@@ -173,10 +173,14 @@ describe('In My Stead', () => {
 });
 
 describe('Hung Lantern', () => {
-  it('brings her back to the lantern when pressed again', () => {
+  it('hangs the lantern up to 3 ahead, and brings her back where she hung it', () => {
     const { sim, y } = arena();
     const at = { ...y.pos };
     expect(sim.castAbility(y.id, 'W', { x: 80, z: 75 })).toBe(true);
+    const lantern = [...sim.zones.values()].find((z) => z.sourceId === y.id);
+    expect(lantern).toBeDefined();
+    expect(dist(lantern!.pos, at)).toBeGreaterThan(2.5);
+    expect(dist(lantern!.pos, at)).toBeLessThanOrEqual(3.01);
     sim.orderMove(y.id, 75, 83);
     ticks(sim, 30);
     expect(dist(y.pos, at)).toBeGreaterThan(3);

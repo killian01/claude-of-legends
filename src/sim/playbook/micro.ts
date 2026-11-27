@@ -214,6 +214,10 @@ export function pickCast(ctx: SlotContext, champ: ObsUnit, engage = true): Actio
     const range = abilityRange(def.abilities[key]);
     const minR = hints.minRange?.[key] ?? 0;
     if (role === 'steroid') {
+      // An armed way back on a steroid (Ysmer's Hung Lantern) is held for
+      // recastHome, not pressed again at once.
+      const back = def.abilities[key].recast;
+      if (s.recastArmed === key && back && 'returnBlink' in back) continue;
       if (dc <= CHAMPION_ATTACK_RANGE) return { kind: 'cast', key, x: s.x, z: s.z };
       continue;
     }

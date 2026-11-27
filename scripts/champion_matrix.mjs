@@ -17,7 +17,9 @@
 // Usage:
 //   node scripts/champion_matrix.mjs [--mode seat|field] [--seeds 4]
 //     [--from 1] [--max-ticks 48000] [--workers N] [--only a,b,c]
-//     [--dist dist-champions]
+//     [--dist dist-champions] [--row ysmer]
+// `--row` plays only the pairings of that one champion: its row of the
+// matrix against the whole roster, read in a fraction of the time.
 
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -35,6 +37,7 @@ const seeds = Number(opt('--seeds', '4'));
 const firstSeed = Number(opt('--from', '1'));
 const maxTicks = Number(opt('--max-ticks', String(20 * 60 * 40)));
 const only = opt('--only', '');
+const row = opt('--row', '');
 const mode = opt('--mode', 'seat');
 const distName = opt('--dist', 'dist-champions');
 const root = process.cwd();
@@ -148,7 +151,10 @@ if (!isMainThread) {
   const ids = roster.map((c) => c.id);
   const allPairs = [];
   for (let i = 0; i < ids.length; i++) {
-    for (let j = i + 1; j < ids.length; j++) allPairs.push([ids[i], ids[j]]);
+    for (let j = i + 1; j < ids.length; j++) {
+      if (row && ids[i] !== row && ids[j] !== row) continue;
+      allPairs.push([ids[i], ids[j]]);
+    }
   }
   const workers = Math.max(
     1,

@@ -76,6 +76,7 @@ const ROSTER = [
   'rhoka',
   'nisk',
   'ostrand',
+  'ysmer',
 ];
 
 // A Thornfray's table for the mock seats: the viewer on seat 0 (unit id

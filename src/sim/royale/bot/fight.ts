@@ -232,6 +232,13 @@ export function pickCast(
     const range = abilityRange(ability);
     const minR = hints.minRange?.[key] ?? 0;
     if (role === 'steroid') {
+      // An armed way back on a steroid (Ysmer's Hung Lantern) is held,
+      // and taken under the hint's line, as the Star Orchard laner does.
+      if (s.recastArmed === key && ability.recast && 'returnBlink' in ability.recast) {
+        const home = hints.recastHomeBelow;
+        if (home !== undefined && s.hpFrac < home) return cast(key, sense.me);
+        continue;
+      }
       if (d <= sense.attackRange + 2) return cast(key, sense.me);
       continue;
     }
