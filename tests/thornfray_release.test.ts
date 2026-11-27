@@ -17,9 +17,19 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (rel: string): string => readFileSync(path.join(ROOT, rel), 'utf8');
 
 describe('the release', () => {
-  it('opens the mode on Lastwick, Starglean and Emberstray, with no knob set', () => {
-    expect(boutPool().map((k) => k.id)).toEqual(['lastwick', 'starglean', 'emberstray']);
-    expect(thornfrayPool({}).map((k) => k.id)).toEqual(['lastwick', 'starglean', 'emberstray']);
+  it('opens the mode on Lastwick, Starglean, Emberstray and Mauldrum, with no knob set', () => {
+    expect(boutPool().map((k) => k.id)).toEqual([
+      'lastwick',
+      'starglean',
+      'emberstray',
+      'mauldrum',
+    ]);
+    expect(thornfrayPool({}).map((k) => k.id)).toEqual([
+      'lastwick',
+      'starglean',
+      'emberstray',
+      'mauldrum',
+    ]);
     expect(BOUT_KINDS.every((k) => k.released)).toBe(true);
   });
 

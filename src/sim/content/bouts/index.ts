@@ -9,10 +9,11 @@
 import { fingerprintOf } from '../fingerprint';
 import { EMBERSTRAY } from './emberstray';
 import { LASTWICK } from './lastwick';
+import { MAULDRUM } from './mauldrum';
 import { STARGLEAN } from './starglean';
 import type { BoutKind, BoutKindId } from './types';
 
-export const BOUT_KINDS: readonly BoutKind[] = [LASTWICK, STARGLEAN, EMBERSTRAY];
+export const BOUT_KINDS: readonly BoutKind[] = [LASTWICK, STARGLEAN, EMBERSTRAY, MAULDRUM];
 
 // The released pool, in registry order.
 export function boutPool(kinds: readonly BoutKind[] = BOUT_KINDS): BoutKind[] {

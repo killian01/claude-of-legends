@@ -35,6 +35,22 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
+    day: '2026-11-28',
+    title: 'Mauldrum, a new Thornfray bout',
+    body: [
+      'A fourth kind of bout joins the Thornfray. Mauldrum is fought in the Cliffs, where the ' +
+        'Voidmaul rises twelve seconds after the landing, and the bout is a race on it: every ' +
+        'blow you land on the Voidmaul counts its damage, and the blow that fells it counts ' +
+        '400 more.',
+      "Everyone else is racing you to it. A takedown takes a fifth of the fallen champion's " +
+        'count, and a fall costs five seconds and the walk back, so the fight around the ' +
+        'creature matters as much as the blows on it. Watch its slam. The most struck when ' +
+        'the clock runs out at 1:40 wins the bout.',
+      'The house bots come for the Voidmaul like everyone else.',
+    ],
+    link: { label: 'Play a Thornfray', to: 'play' },
+  },
+  {
     day: '2026-11-27',
     title: 'The classic 5v5 starts by itself',
     body: [
