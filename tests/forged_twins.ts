@@ -60,12 +60,16 @@ const TWIN_PASSIVES: Record<string, ForgedPassiveRef> = {
   // Sworn has no template (the mark is engine data, src/sim/sworn.ts):
   // priced as the nearest one, more damage on the one enemy he holds.
   ostrand: { template: 'predators_focus', params: { bonusPct: 0.1 }, name: 'Sworn' },
+  // Homeward Glow has no template (a stride for the wounded around her):
+  // priced as the nearest one, a burst of speed.
+  ysmer: { template: 'battle_flow', params: { msPct: 0.1, duration: 2 }, name: 'Homeward Glow' },
 };
 
 // The roster champions whose kits use what the Forge does not offer: Nisk's
 // charges, hidden pods, fumble and lurk, and Ostrand's Sworn, his charge at
-// it and the Oathfield (forge/bounds.ts names none).
-export const OUTSIDE_FORGE: readonly string[] = ['nisk', 'ostrand'];
+// it and the Oathfield, and Ysmer's trades of places and her
+// champion-targeted ultimate (forge/bounds.ts names none).
+export const OUTSIDE_FORGE: readonly string[] = ['nisk', 'ostrand', 'ysmer'];
 
 export function forgedTwin(champion: ChampionDef): ForgedChampionDef {
   const passive = TWIN_PASSIVES[champion.id];

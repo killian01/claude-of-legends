@@ -658,8 +658,10 @@ describe('eight house bots in a bout', () => {
     const bare: BoutKind = { ...LASTWICK, caches: { count: 0, backS: null } };
     const foundBy = (seed: number, bots: BoutBots): number | null => {
       const picks = boutPicks(seed, 2);
+      // The still seat is never Nisk: Lie Low hides a Nisk who stands
+      // still, by design, and no search is meant to find that.
       const { bot: _bot, ...person } = picks[0]!;
-      picks[0] = person;
+      picks[0] = person.championId === 'nisk' ? { ...person, championId: 'korrath' } : person;
       const { sim, unitIds } = buildBout({ ...firstBout(bare, seed), picks });
       const mode = sim.royaleMode!;
       const [idle, bot] = [sim.units.get(unitIds[0]!)!, sim.units.get(unitIds[1]!)!];

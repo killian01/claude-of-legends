@@ -14,7 +14,7 @@ import type { Observation, ObsRoyale, ObsUnit } from '../src/sim/policy';
 import { Rng } from '../src/sim/rng';
 import { decide, REGROUP_M, REGROUP_NEAR_M, regroup } from '../src/sim/royale/bot/brain';
 import { markCall } from '../src/sim/royale/bot/calls';
-import { royaleOdds } from '../src/sim/royale/bot/fight';
+import { pickCast, royaleOdds } from '../src/sim/royale/bot/fight';
 import { buildSense } from '../src/sim/royale/bot/sense';
 import { CREW_LAND_MAX_M } from '../src/sim/royale/crews';
 import { DROP_S, type DuskState } from '../src/sim/royale/types';
@@ -199,5 +199,55 @@ describe('an Arrival in Crews', () => {
     expect(mates.length).toBeGreaterThan(0);
     const nearest = Math.min(...mates.map((u) => dist(u.pos as Vec3, me.pos as Vec3)));
     expect(nearest).toBeLessThanOrEqual(CREW_LAND_MAX_M + 0.1);
+  });
+});
+
+// Ysmer's In My Stead in Crews: a crewmate under the rescue line with an
+// enemy on it is traded out before anything else is cast; a whole crewmate
+// leaves the ultimate to the enemy gates.
+describe('a Ysmer bot in a crew', () => {
+  const ysmerObs = (allyHp: number): Observation => {
+    const o = obs([
+      champion(7, near, true, { hpFrac: allyHp, championId: 'vesk' }),
+      champion(9, sph(1, 0.27, 0.11), false),
+    ]);
+    o.self = {
+      ...o.self,
+      championId: 'ysmer',
+      attackRange: 5.5,
+      abilityReady: { Q: false, W: false, E: false, R: true },
+      abilityRanks: { Q: 1, W: 1, E: 1, R: 1 },
+    };
+    return o;
+  };
+
+  it('trades places with a hurt crewmate an enemy is on', () => {
+    const o = ysmerObs(0.2);
+    const foe = o.units.find((u) => !u.friendly)!;
+    const a = pickCast(sense(o), foe, new Rng(1));
+    expect(a?.kind).toBe('cast');
+    if (a?.kind !== 'cast') return;
+    expect(a.key).toBe('R');
+    expect(dist({ x: a.x, y: a.y ?? 0, z: a.z }, near)).toBeLessThan(0.01);
+  });
+
+  it('keeps In My Stead while the crewmate is whole and the enemy too', () => {
+    const o = ysmerObs(0.9);
+    const foe = o.units.find((u) => !u.friendly)!;
+    expect(pickCast(sense(o), foe, new Rng(1))).toBeNull();
+  });
+
+  it('holds an armed Hung Lantern while well, and takes the way back when hurt', () => {
+    const o = ysmerObs(0.9);
+    o.self = {
+      ...o.self,
+      abilityReady: { Q: false, W: true, E: false, R: false },
+      recastArmed: 'W',
+    };
+    const foe = o.units.find((u) => !u.friendly)!;
+    expect(pickCast(sense(o), foe, new Rng(1))).toBeNull();
+    o.self = { ...o.self, hp: 120, hpFrac: 0.2 };
+    const a = pickCast(sense(o), foe, new Rng(1));
+    expect(a?.kind === 'cast' && a.key).toBe('W');
   });
 });

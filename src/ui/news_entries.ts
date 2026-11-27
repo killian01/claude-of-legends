@@ -35,6 +35,27 @@ export interface NewsEntry {
 
 export const NEWS: readonly NewsEntry[] = [
   {
+    day: '2026-11-27',
+    title: 'Ysmer, the Turnlamp',
+    body: [
+      'A thirteenth champion takes the field: Ysmer, the Turnlamp, a hooded lamplighter ' +
+        'whose lantern trades places. She and another champion stand, in one beat, each ' +
+        'where the other stood, with a thread of amber light between the two spots.',
+      'Wick Shot is a bolt of lamplight that slows. Hung Lantern hangs a lantern just ahead ' +
+        'of her that mends allies and shows enemies under it; press it again and she is back ' +
+        'where she stood when she hung it. Changeling Spark trades her with the first enemy champion it ' +
+        'strikes, so their marksman suddenly stands among her team. And In My Stead reaches ' +
+        'the champion nearest her aim, friend or foe: an ally in trouble is taken out under ' +
+        'a shield while she takes their place, an enemy is pulled in and held. Allies near ' +
+        'her move faster while badly hurt.',
+      'She plays bot lane as a Support, in 5v5 and on the Wanderseed alike, and the house ' +
+        'bots play her too. She costs 500 laurels and comes with four looks: Default, ' +
+        'Ashlantern, Mirelamp and Gloamglass.',
+    ],
+    image: 'ysmer.webp',
+    link: { label: 'See the champions', to: 'champions' },
+  },
+  {
     day: '2026-11-26',
     title: 'Smoother battle royales and Thornfrays online',
     body: [

@@ -108,8 +108,8 @@ export const BOT_HINTS: Record<string, ChampionHints> = {
     keys: { Q: 'poke', W: 'steroid', E: 'engage' },
     ult: { minEnemies: 1, radius: 4.5, whenHealthier: true },
   },
-  // The bolt pokes, the lantern goes down under her in a fight and takes
-  // her home when she is hurt, the spark is an engage from past point
+  // The bolt pokes, the lantern goes down where she stands in a fight and
+  // its way back is held until she is hurt, the spark is an engage from past point
   // blank. The ultimate rescues a hurt ally first; else it brings a hurt
   // enemy into her place in a duel she leads.
   ysmer: {

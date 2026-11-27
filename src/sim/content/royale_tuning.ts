@@ -88,8 +88,12 @@ export const PLANET_TUNING: Readonly<Record<string, PlanetTuning>> = {
   // Behind her release switch: at 1 and 1.3 she won 10% of her landing
   // duels and 12% after the calm, at 1.2 and 1.7 59% and 72%, at 1.1 and
   // 1.55 30% and 28%; 1.15 and 1.65 give 53% and 52% (royale_duel
-  // --with ysmer, seeds 1 to 8, 2026-11-24). Read again in Respawn on release.
-  ysmer: { hp: 1.15, dmg: 1.65 },
+  // --with ysmer, seeds 1 to 8, 2026-11-24). On release, her cooldowns in
+  // the roster's bands (11, 11, 70), Wick Shot 85, Changeling Spark 70 base
+  // and Maera's line (royale_builds.ts): 1.45 won 55% and 71%, 1.35 38% and
+  // 54%; 1.4 gives 47% and 58% (royale_duel --only ysmer, seeds 1 to 16,
+  // 2026-11-27), and about 11 takedowns a Respawn seat, beside Ostrand's.
+  ysmer: { hp: 1.15, dmg: 1.4 },
 };
 
 const NEUTRAL: PlanetTuning = { hp: 1, dmg: 1 };
