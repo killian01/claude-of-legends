@@ -36,6 +36,17 @@ export interface NewsEntry {
 export const NEWS: readonly NewsEntry[] = [
   {
     day: '2026-11-27',
+    title: 'The classic 5v5 starts by itself',
+    body: [
+      'Pressing Classic 5v5 used to leave you on a queue card that read 1 / 10, waiting ' +
+        'until you found Start now with bots. Now the queue starts on its own eight seconds ' +
+        'after you join it, filled with bots, and the card counts the seconds down. Anyone ' +
+        'who queues in those seconds plays in the same match, and Start still skips the wait.',
+    ],
+    link: { label: 'Play the classic 5v5', to: 'play' },
+  },
+  {
+    day: '2026-11-27',
     title: 'Ysmer, the Turnlamp',
     body: [
       'A thirteenth champion takes the field: Ysmer, the Turnlamp, a hooded lamplighter ' +

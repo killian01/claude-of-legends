@@ -25,7 +25,9 @@ match itself is now the meeting place.
   given a Record for that match.
 - **Start takes the whole queue.** Whoever presses Start in the queue now takes everyone queued
   along at once. The countdown that left the others behind unless they answered it is gone:
-  nobody on this server queues to wait for ten people.
+  nobody on this server queues to wait for ten people. Nor does Start have to be found: the
+  queue starts with bots by itself `QUEUE_START_MS` (8 s) after its oldest group queued, taking
+  everyone queued by then along, and its card counts that down (`server/matchmaker.ts`).
 - **Presence on the landing.** `/api/public/presence` answers counts only (people in public matches,
   whether one can still be joined, people queued), and the landing shows one line over its
   gold button when somebody is on, and nothing when nobody is.

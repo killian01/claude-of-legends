@@ -620,7 +620,7 @@ _Avoid_: custom champion, user-generated champion
 
 **Ranked queue**:
 The public matchmaking queue, roster champions only, filled with house bots for any seat
-nobody takes. A match from it is rated when each side holds a seat an account owns, by hand or
+nobody takes; it starts by itself a few seconds after the first person queues, or at once on Start. A match from it is rated when each side holds a seat an account owns, by hand or
 by its bot, and no Guest plays in it (ADR 0024), a Party's match included. Ranked here is the
 same adjective as a ranked bot: in rated play.
 _Avoid_: public queue, standard queue, solo queue, normal queue

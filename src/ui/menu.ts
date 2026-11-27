@@ -78,6 +78,7 @@ import {
   OWN_SAVE,
 } from './own_panel';
 import { NAME_FIELD_MAX } from './points_text';
+import { queueText } from './queue_text';
 import { attachTooltip, hideTooltip } from './tooltips';
 
 const CSS = `
@@ -462,7 +463,7 @@ export function showQueue(
 ): QueueController {
   const { root, card } = screen(container);
   card.append(el('h1', 'menu-title', 'In queue'));
-  const status = el('div', 'menu-status', 'Waiting for players...');
+  const status = el('div', 'menu-status', 'Joining the queue...');
   const startNow = el('button', 'menu-btn primary', 'Start now with bots') as HTMLButtonElement;
   startNow.addEventListener('click', () => {
     // Inside the click gesture, so the match opens already fullscreen.
@@ -476,16 +477,10 @@ export function showQueue(
   });
   card.append(status, startNow, cancel);
   return {
-    setStatus(count, needed, startsIn, ready) {
-      let line = `${count} / ${needed} in queue.`;
-      if (startsIn !== null) {
-        line += ready
-          ? ` Starting with bots in ${startsIn}s; others can still join.`
-          : ` A bot-filled match starts in ${startsIn}s. Join it, or keep waiting for humans.`;
-      }
-      status.textContent = line;
-      startNow.textContent =
-        startsIn !== null && !ready ? `Join the bot match (${startsIn}s)` : 'Start now with bots';
+    setStatus(count, _needed, startsIn, ready) {
+      const text = queueText(count, startsIn, ready);
+      status.textContent = text.status;
+      startNow.textContent = text.button;
       startNow.disabled = ready;
     },
     remove() {
