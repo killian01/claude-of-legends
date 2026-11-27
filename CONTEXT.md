@@ -1452,3 +1452,9 @@ Emberstray's goal: a ring of light twelve meters across that rests twelve second
 a walk to its next stop across the heart of the Thornyard, its route drawn at the landing and
 always inside the light. A champion standing in it counts its seconds.
 _Avoid_: the circle, the zone, the hill, the point, ember, crown
+
+**Mauldrum**:
+The Thornfray bout fought in the Cliffs around a Voidmaul risen early: a fall costs five seconds,
+and the most struck on the Voidmaul when its clock runs out wins. Each blow on it counts its damage, rounded,
+the blow that fells it 400 more, and a takedown takes a fifth of the fallen's struck.
+_Avoid_: boss race, raid, damage meter, maul (the creature's own name is the Voidmaul)

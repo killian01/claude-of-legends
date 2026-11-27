@@ -1,9 +1,10 @@
 # Thornfray, eight champions in six bouts
 
 Status: built, and opened with its first two bouts, Lastwick and Starglean (slice 7 of the
-plan); Emberstray joined them on 2026-11-23 (`docs/design/emberstray.md`). The decision
+plan); Emberstray joined them on 2026-11-23 (`docs/design/emberstray.md`) and Mauldrum on 2026-11-28
+(`docs/design/mauldrum.md`). The decision
 record is ADR 0035; the build is `docs/plan-thornfray.md`; the words are in
-`CONTEXT.md` (Thornfray, Bout, Final, Bushel, Thornyard, Lull, Lastwick, Starglean). Every number
+`CONTEXT.md` (Thornfray, Bout, Final, Bushel, Thornyard, Lull, Lastwick, Starglean, Emberstray, Mauldrum). Every number
 below is a first pass, measured and tuned by the slices that land it.
 
 ## What it is
@@ -389,6 +390,13 @@ The most seconds held in the Glow, a ring that rests and drifts across the Thorn
 Respawn's death. Its design, numbers and measure are `docs/design/emberstray.md`; its data
 `src/sim/content/bouts/emberstray.ts`, its goal `src/sim/royale/bouts/goal_emberstray.ts`, its
 count the shared `heldTimeScorer`.
+
+## Mauldrum
+
+The most struck on the Voidmaul, risen 12 s after the landing at the heart of the Cliffs.
+Respawn's death. Its design, numbers and measure are `docs/design/mauldrum.md`; its data
+`src/sim/content/bouts/mauldrum.ts`, its count `src/sim/royale/bouts/score_mauldrum.ts`, its
+bots' errand `maulCall` (`src/sim/royale/bot/bout_calls.ts`).
 
 ## How a person plays a bout
 

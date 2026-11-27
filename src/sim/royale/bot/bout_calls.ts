@@ -23,6 +23,7 @@ import {
   HUNT_CACHE_M,
   HUNT_LIT_MARGIN_S,
   HUNT_STALE_S,
+  MAUL_WAIT_M,
 } from '../../content/bots/bout_skills';
 import type { BoutBots } from '../../content/bouts/types';
 import { dist, type Vec3 } from '../../geo';
@@ -276,11 +277,31 @@ export function tendCall(sense: Sense, bots: BoutBots): BoutErrand | null {
   return { why: 'tend', action: moveTo(sense, at) };
 }
 
+// Mauldrum's errand: from the kind's health floor, the Voidmaul within
+// `reach`. Standing and in sight, it is struck; called and not yet risen
+// (or out of sight), the bot walks to its ring and waits within
+// MAUL_WAIT_M of it. Null once it has fallen, so the bot goes on to the
+// brain's caches and its roam. Asked after the fight block, so a bot with
+// an enemy in reach has already fought it when its odds say so.
+export function maulCall(sense: Sense, bots: BoutBots): BoutErrand | null {
+  if (sense.s.hpFrac < bots.floor) return null;
+  const rising = (sense.r.risings ?? []).find((r) => r.kind === 'voidmaul');
+  if (!rising) return null;
+  const at = p3(rising);
+  const d = dist(sense.me, at);
+  if (d > bots.reach) return null;
+  const body = rising.up ? sense.neutrals.find((n) => n.kind === 'creature') : undefined;
+  if (body) return { why: 'maul', action: { kind: 'attack', targetId: body.id } };
+  if (d <= MAUL_WAIT_M) return { why: 'maul-wait', action: holdStill(sense) };
+  return { why: 'maul-walk', action: moveTo(sense, at) };
+}
+
 // Every errand a kind may name, by its id.
 export const BOUT_CALLS: Readonly<Record<string, BoutCall>> = {
   glean: gleanCall,
   hunt: huntCall,
   tend: tendCall,
+  maul: maulCall,
 };
 
 // The errand the bout's kind names, asked for this slot; null on the

@@ -202,18 +202,20 @@ places, the fighting share against Lastwick's, its own counts; the numbers go in
 report (`scripts/thornfray_report.ts`, its figures in `scripts/thornfray_measure.ts`) plays six
 whole matches of that kind alone, built as the server builds them, and a battle royale in its
 death rule beside them for the planet's fighting share; `--standin` adds a seat that gives no
-order, `--prize all` keeps the prize all match. Lastwick's, Starglean's and Emberstray's on
+order, `--prize all` keeps the prize all match. Lastwick's, Starglean's, Emberstray's and Mauldrum's on
 seeds 1 to 6, to hold a new kind against:
 
-| | Lastwick | Starglean | Emberstray |
-|---|---|---|---|
-| Ended by | its rule, 36 of 36 | its clock, 36 of 36 | its clock, 36 of 36 |
-| Length | 35 to 71 s, median 51 s | 105 s | 100 s |
-| First fall (median) | 10 s | 9 s | 9 s |
-| A bout | 7 takedowns, 0.53 caches a seat | 19.8 takedowns, 2.26 caches a seat, 8.8 Seedfall caches | 20.1 takedowns, 0.10 caches a seat |
-| The winner's count (median) | 8 left | 11 gleaned | 25.1 s held |
-| Fighting, an enemy in reach | 86.7 percent | 84.7 percent | 85.0 percent |
-| The planet's (seed 1) | 29.7 percent, One life | 63.1 percent, Respawn | 65.0 percent, Respawn |
+| | Lastwick | Starglean | Emberstray | Mauldrum |
+|---|---|---|---|---|
+| Ended by | its rule, 36 of 36 | its clock, 36 of 36 | its clock, 36 of 36 | its clock, 36 of 36 |
+| Length | 35 to 71 s, median 51 s | 105 s | 100 s | 100 s |
+| First fall (median) | 10 s | 9 s | 9 s | 9 s |
+| A bout | 7 takedowns, 0.53 caches a seat | 19.8 takedowns, 2.26 caches a seat, 8.8 Seedfall caches | 20.1 takedowns, 0.10 caches a seat | 17.4 takedowns, 0.78 caches a seat |
+| The winner's count (median) | 8 left | 11 gleaned | 25.1 s held | 1170 struck |
+| Fighting, an enemy in reach | 86.7 percent | 84.7 percent | 85.0 percent | 85.2 percent |
+| The planet's (seed 1) | 29.7 percent, One life | 63.1 percent, Respawn | 65.0 percent, Respawn | 63.8 percent, Respawn |
+
+Mauldrum's column was measured with `--standin` (seven house bots and a seat that gives no order).
 
 ### 9. Release
 

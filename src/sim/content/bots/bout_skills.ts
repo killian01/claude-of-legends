@@ -82,6 +82,24 @@ export const EMBERSTRAY_BOTS: BoutBots = {
   pace: null,
 };
 
+// Mauldrum: the maul errand (bout_calls.ts maulCall) from 40 percent
+// health, to the Voidmaul anywhere in the Thornyard (80 m, its width),
+// struck once it stands, waited for beside its ring before. The rest as
+// Lastwick's.
+export const MAULDRUM_BOTS: BoutBots = {
+  errand: 'maul',
+  floor: 0.4,
+  reach: 80,
+  duskMargin: 0.5,
+  cornered: 8,
+  calm: 0,
+  pace: null,
+};
+
+// The maul errand waits for a Voidmaul not yet risen this far from its
+// ring's heart.
+export const MAUL_WAIT_M = 9;
+
 // The tend errand: a bot this near the glow's heart, as a share of its
 // radius, holds still there; farther, it walks to the heart.
 export const GLOW_SETTLE_SHARE = 0.5;
