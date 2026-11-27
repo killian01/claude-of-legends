@@ -472,8 +472,9 @@ export type ServerMsg =
       t: 'queue_status';
       count: number;
       needed: number;
-      // Seconds until the opt-in bot-filled match starts, null when nobody
-      // has opted in; `ready` is whether THIS client opted in.
+      // Seconds until the queue starts with bots by itself (counted from its
+      // oldest group's arrival, server/matchmaker.ts QUEUE_START_MS), null
+      // with nobody queued; `ready` is whether THIS client pressed Start.
       startsIn: number | null;
       ready: boolean;
     }

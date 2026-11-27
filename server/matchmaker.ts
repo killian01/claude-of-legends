@@ -62,6 +62,11 @@ export {
 export const MATCH_SIZE = 10;
 export const TEAM_CAP = MATCH_SIZE / 2;
 export const SELECT_SECONDS = 45;
+// How long a queue waits for someone to press Start before it
+// starts with bots by itself, counted from when its oldest group queued
+// (ADR 0025: nobody queues here to wait for ten people). Anyone who queues
+// in the meantime rides along.
+export const QUEUE_START_MS = 8_000;
 const DEFAULT_SIGILS: [string, string] = ['riftstep', 'mend'];
 
 interface Pending {
@@ -81,6 +86,9 @@ interface LobbyTag {
 interface QueueGroup {
   members: Pending[];
   botReady: boolean;
+  // When the group queued (the wall clock): the oldest one's starts the
+  // count to the bot fill (QUEUE_START_MS).
+  queuedAt: number;
   lobby?: LobbyTag;
 }
 
@@ -302,9 +310,38 @@ export class Matchmaker {
     return seats;
   }
 
-  private broadcastQueue(): void {
-    // No countdown any more: Start takes the whole queue at once.
-    const startsIn = null;
+  // Whole seconds until the queue starts with bots by itself, from the
+  // oldest group's arrival; null with nobody queued.
+  private queueStartsIn(now: number): number | null {
+    if (this.queue.length === 0) return null;
+    let oldest = Number.POSITIVE_INFINITY;
+    for (const g of this.queue) oldest = Math.min(oldest, g.queuedAt);
+    return Math.max(0, Math.ceil((oldest + QUEUE_START_MS - now) / 1000));
+  }
+
+  // The count's last told value, so a clock tick sends only a new second.
+  private toldStartsIn: number | null = null;
+
+  // The queue's own start: once the count has run out, the whole queue
+  // goes in as if Start had been pressed (startNow); else a new second of
+  // it is told.
+  private tickQueue(now: number): void {
+    if (this.queue.length === 0) return;
+    const left = this.queueStartsIn(now);
+    if (left === 0) {
+      for (const g of this.queue) g.botReady = true;
+      this.startReadyGroups(now);
+      this.broadcastQueue(now);
+    } else if (left !== this.toldStartsIn) {
+      this.broadcastQueue(now);
+    }
+  }
+
+  private broadcastQueue(now: number): void {
+    // Start takes the whole queue at once; with nobody pressing it, the
+    // queue starts by itself when the count runs out (tickQueue).
+    const startsIn = this.queueStartsIn(now);
+    this.toldStartsIn = startsIn;
     const count = this.queuedSeats();
     for (const g of this.queue) {
       for (const p of g.members) {
@@ -328,9 +365,9 @@ export class Matchmaker {
 
   addToQueue(clientId: number, name: string, now: number): void {
     this.removeEverywhere(clientId, now);
-    this.queue.push({ members: [{ clientId, name }], botReady: false });
+    this.queue.push({ members: [{ clientId, name }], botReady: false, queuedAt: now });
     this.tryFormFullMatch(now);
-    this.broadcastQueue();
+    this.broadcastQueue(now);
   }
 
   // A whole lobby enters the public queue as one group on one side, and
@@ -370,10 +407,11 @@ export class Matchmaker {
     this.queue.push({
       members: players.map((p) => ({ clientId: p.clientId, name: p.name })),
       botReady: false,
+      queuedAt: now,
       lobby: { code: lobby.code, round: lobby.round },
     });
     this.tryFormFullMatch(now);
-    this.broadcastQueue();
+    this.broadcastQueue(now);
   }
 
   // Ten seats worth of whole groups: seat them (parties stay together)
@@ -446,7 +484,7 @@ export class Matchmaker {
     if (!this.queue.some((g) => g.members.some((m) => m.clientId === clientId))) return;
     for (const g of this.queue) g.botReady = true;
     this.startReadyGroups(now);
-    this.broadcastQueue();
+    this.broadcastQueue(now);
   }
 
   // Opens a private lobby for this client, who hosts it, and returns its
@@ -985,6 +1023,7 @@ export class Matchmaker {
   // Expires select deadlines and lobbies, and spends the lobbies' graces;
   // call regularly with the current wall clock.
   tickClock(now: number): void {
+    this.tickQueue(now);
     for (const lobby of [...this.lobbies.values()]) {
       const fate = fateOf(lobby, now);
       if (fate === 'drop') this.lobbies.delete(lobby.code);
@@ -1104,7 +1143,7 @@ export class Matchmaker {
         if (lobby?.phase === 'queue') reopen(lobby, now, false);
       }
       if (lobby) this.broadcastLobby(lobby, now);
-      this.broadcastQueue();
+      this.broadcastQueue(now);
     }
     for (const lobby of [...this.lobbies.values()]) {
       if (lobby === except) continue;
