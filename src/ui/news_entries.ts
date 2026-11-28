@@ -36,6 +36,17 @@ export interface NewsEntry {
 export const NEWS: readonly NewsEntry[] = [
   {
     day: '2026-11-28',
+    title: 'The opening shop steps aside after your first item',
+    body: [
+      'A 5v5 match opens with the shop over your base, so the first item is never ' +
+        'forgotten. It used to stay there until you found its Close button. Now, once you ' +
+        'buy an item and the gold left buys nothing but a drink, the shop closes by itself ' +
+        'and the match is in front of you. Press P, or tap Shop on a phone, to open it again.',
+    ],
+    link: { label: 'Play the classic 5v5', to: 'play' },
+  },
+  {
+    day: '2026-11-28',
     title: 'Mauldrum, a new Thornfray bout',
     body: [
       'A fourth kind of bout joins the Thornfray. Mauldrum is fought in the Cliffs, where the ' +

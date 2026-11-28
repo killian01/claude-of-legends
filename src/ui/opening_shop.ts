@@ -1,3 +1,4 @@
+import { effectiveItemCost, ITEMS } from '../sim/content/items';
 import { seatShops } from './coach_bar';
 import type { GuideMode } from './lane_guide';
 
@@ -20,3 +21,17 @@ export function openingShop(at: {
   if (!seatShops(at.guide)) return 'late';
   return at.range ? 'none' : 'open';
 }
+
+// The opening shop closes itself after a buy that leaves the gold short of
+// every item but a drink: the first item is in hand and the match waits
+// behind the shop. `gold` and `owned` are as they stand after the buy.
+export function closesAfterBuy(gold: number, owned: readonly string[]): boolean {
+  for (const def of Object.values(ITEMS)) {
+    if (def.drink) continue;
+    if (effectiveItemCost(def.id, owned) <= gold) return false;
+  }
+  return true;
+}
+
+// What the opening shop's own line says, so the buy reads as the way in.
+export const OPENING_SHOP_LINE = 'Buy the glowing item to start: the shop then closes.';
