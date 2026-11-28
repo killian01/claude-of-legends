@@ -116,7 +116,7 @@ import {
   stepGuide,
   stepLaneCard,
 } from './lane_guide';
-import { openingShop } from './opening_shop';
+import { closesAfterBuy, OPENING_SHOP_LINE, openingShop } from './opening_shop';
 import { HIDE_ARM_S, type HideArm, pressHide, STEPS_HIDE_SURE } from './steps_hide';
 import { thumbClusterCss } from './thumb_cluster';
 
@@ -3090,7 +3090,16 @@ export class Hud {
       this.toast(`Not enough gold: ${cost}g needed.`);
       return;
     }
-    if (this.world.buyItem(this.selfId, itemId)) playSfx('buy');
+    if (this.world.buyItem(this.selfId, itemId)) {
+      playSfx('buy');
+      // The first item bought, the opening shop steps aside for the match
+      // (ui/opening_shop.ts); the shop is one press away all the same.
+      if (this.openingShopUp && closesAfterBuy(u.gold - cost, [...u.items, itemId])) {
+        this.setShopOpen(false);
+        const name = ITEMS[itemId]?.name ?? 'Item';
+        this.toast(`${name} bought. ${this.coarsePointer ? 'Tap Shop' : 'Press P'} to shop again.`);
+      }
+    }
     this.update();
   }
 
@@ -3786,7 +3795,9 @@ export class Hud {
         ? 'Dead, so spend the wait: buying works from here.'
         : shopOk
           ? suggestion !== null
-            ? 'The glowing item suits your champion: Buy, or double-click an item.'
+            ? this.openingShopUp
+              ? OPENING_SHOP_LINE
+              : 'The glowing item suits your champion: Buy, or double-click an item.'
             : 'Click an item to inspect it; Buy or double-click to purchase.'
           : 'Browse anywhere; buying needs your fountain.';
       this.shopGoldText.textContent = `${Math.floor(u.gold)}g`;
